@@ -1,0 +1,55 @@
+:root {
+    --accent: #c9aa70;
+    --page-bg: #080808;
+    --text: #f5f3ef;
+    color-scheme: dark;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { min-height: 100vh; margin: 0; display: grid; grid-template-rows: auto 1fr auto; background: var(--page-bg); color: var(--text); }
+button, input { font: inherit; }
+.transfer-brand { min-height: 92px; padding: 22px clamp(20px, 5vw, 70px); display: flex; align-items: center; gap: 13px; }
+.transfer-brand img { width: 150px; height: 54px; object-fit: contain; object-position: left center; }
+.transfer-brand span { font: 26px Georgia, serif; letter-spacing: -.04em; }
+main { width: min(100% - 28px, 980px); margin: auto; padding: 35px 0 80px; }
+.transfer-card { padding: clamp(28px, 6vw, 66px); border: 1px solid color-mix(in srgb, var(--text) 13%, transparent); border-radius: 30px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: 0 35px 100px rgba(0,0,0,.34); }
+.transfer-card.compact { width: min(100%, 530px); margin: 0 auto; }
+.eyebrow { margin: 0 0 16px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .26em; }
+h1 { max-width: 720px; margin: 0; font: 400 clamp(42px, 7vw, 78px)/.98 Georgia, serif; letter-spacing: -.055em; overflow-wrap: anywhere; }
+.compact h1 { font-size: clamp(36px, 7vw, 52px); }
+.compact > p:not(.eyebrow):not(.error), .transfer-message { color: color-mix(in srgb, var(--text) 62%, transparent); line-height: 1.65; }
+.transfer-heading { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 30px; }
+.transfer-message { max-width: 650px; margin: 22px 0 0; }
+.transfer-summary { min-width: 130px; display: grid; gap: 5px; text-align: right; }
+.transfer-summary strong { color: var(--accent); font-size: 22px; }
+.transfer-summary span { color: color-mix(in srgb, var(--text) 50%, transparent); font-size: 11px; }
+.primary-actions { margin: 42px 0 50px; display: flex; flex-wrap: wrap; gap: 10px; }
+.primary-actions a, .primary-actions button, #unlockForm button { min-height: 52px; padding: 0 21px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: 999px; background: transparent; color: var(--text); font-size: 12px; font-weight: 750; text-decoration: none; cursor: pointer; }
+.primary-actions .download-all, #unlockForm button { border-color: var(--accent); background: var(--accent); color: #111; }
+.download-all span { margin-left: 10px; padding: 3px 6px; border-radius: 5px; background: rgba(0,0,0,.14); font-size: 9px; }
+.file-heading { padding-bottom: 13px; display: flex; justify-content: space-between; border-bottom: 1px solid color-mix(in srgb, var(--text) 13%, transparent); font-size: 12px; }
+.file-heading span { color: color-mix(in srgb, var(--text) 48%, transparent); }
+.file-list { display: grid; }
+.file-row { min-width: 0; padding: 15px 0; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 13px; border-bottom: 1px solid color-mix(in srgb, var(--text) 9%, transparent); }
+.file-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+.file-copy { min-width: 0; display: grid; gap: 3px; }
+.file-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.file-copy span { color: color-mix(in srgb, var(--text) 45%, transparent); font-size: 10px; }
+.file-row a { padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 999px; color: var(--text); font-size: 10px; text-decoration: none; }
+.transfer-footnote { margin: 24px 0 0; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; text-align: center; }
+#unlockForm { margin-top: 25px; display: grid; grid-template-columns: 1fr auto; gap: 9px; }
+#unlockForm input { min-width: 0; padding: 0 16px; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); }
+.error { color: #ff958d; font-size: 12px; }
+footer { padding: 25px; color: color-mix(in srgb, var(--text) 35%, transparent); font-size: 10px; text-align: center; }
+@media (max-width: 650px) {
+    .transfer-brand { min-height: 72px; }
+    main { padding-top: 10px; }
+    .transfer-card { padding: 27px 20px; border-radius: 22px; }
+    .transfer-heading { grid-template-columns: 1fr; }
+    .transfer-summary { text-align: left; }
+    .primary-actions { display: grid; }
+    #unlockForm { grid-template-columns: 1fr; }
+    #unlockForm input { min-height: 50px; }
+    .file-row { grid-template-columns: 38px minmax(0,1fr) auto; gap: 10px; }
+}

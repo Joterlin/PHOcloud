@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHOcloud</title>
+    <link rel="stylesheet" href="/gallery.css">
+</head>
+<body>
+    <header id="galleryHeading" class="gallery-header" hidden>
+        <div id="coverHero" class="cover-hero" hidden>
+            <img id="coverImage" alt="">
+        </div>
+        <div class="cover-shade"></div>
+        <div class="cover-topbar">
+            <a id="brandLink" class="brand" href="#" aria-label="Web del fotógrafo">
+                <span class="brand-plate">
+                    <img id="brandLogo" alt="" hidden>
+                    <span id="brandText">PHOcloud</span>
+                </span>
+            </a>
+            <nav id="socialLinks" class="social-links" aria-label="Redes del fotógrafo" hidden></nav>
+        </div>
+        <div class="cover-copy">
+            <p class="eyebrow">ENTREGA FOTOGRÁFICA</p>
+            <h1 id="clientName"></h1>
+            <p id="galleryMessage" class="gallery-message" hidden></p>
+            <p id="info" class="gallery-info"></p>
+            <div class="gallery-actions">
+                <a id="downloadGalleryOriginal" class="primary-action">Descargar originales</a>
+                <a id="downloadGalleryWeb" class="secondary-action">Descargar versión web</a>
+                <button id="showFavorites" type="button" class="secondary-action" hidden>Ver selección</button>
+            </div>
+        </div>
+        <button id="scrollToGallery" class="scroll-cue" type="button" aria-label="Ver fotografías">
+            <span>VER GALERÍA</span><i>↓</i>
+        </button>
+    </header>
+
+    <main>
+        <section id="unlockPanel" class="state-panel" hidden>
+            <div class="state-icon">⌁</div>
+            <p class="eyebrow">GALERÍA PROTEGIDA</p>
+            <h1>Esta entrega tiene contraseña</h1>
+            <p>Escribe la contraseña facilitada por el fotógrafo.</p>
+            <form id="unlockForm">
+                <label for="galleryPassword">Contraseña</label>
+                <input id="galleryPassword" type="password" minlength="4" maxlength="128" autocomplete="current-password" required>
+                <button id="unlockButton" type="submit">Abrir galería</button>
+            </form>
+            <p id="unlockError" class="state-error" role="alert" hidden></p>
+        </section>
+
+        <section id="galleryState" class="state-panel" hidden>
+            <div class="state-icon">○</div>
+            <h1 id="stateTitle">Galería no disponible</h1>
+            <p id="stateMessage"></p>
+        </section>
+
+        <section id="galleryContent" class="gallery-content" hidden>
+            <div class="collection-heading">
+                <p class="eyebrow">LA COLECCIÓN</p>
+                <h2>Vuelve a cada instante.</h2>
+            </div>
+            <div id="favoriteNotice" class="favorite-notice" hidden>
+                <div><strong id="selectionNoticeTitle">Crea tu selección</strong>
+                    <span id="selectionNoticeText">Pulsa el corazón de tus fotografías preferidas.</span></div>
+                <button id="submitSelection" type="button">Enviar selección final</button>
+            </div>
+            <div class="gallery" id="gallery"></div>
+            <p id="emptySelection" class="empty-selection" hidden>Todavía no has seleccionado ninguna fotografía.</p>
+        </section>
+    </main>
+
+    <footer id="galleryFooter" hidden>
+        <p id="footerBrand"></p>
+        <p>Entrega privada creada con PHOcloud</p>
+    </footer>
+
+    <div id="lightbox" role="dialog" aria-modal="true" aria-label="Visor de fotografía" hidden>
+        <button id="closeLightbox" class="lightbox-close" aria-label="Cerrar">×</button>
+        <button id="prev" class="lightbox-nav" aria-label="Anterior">‹</button>
+        <figure><img id="lightboxImage" alt=""><video id="lightboxVideo" controls playsinline hidden></video><figcaption id="lightboxCounter"></figcaption></figure>
+        <div class="lightbox-actions">
+            <button id="favoritePhoto" type="button" hidden>♡ Seleccionar</button>
+            <button id="openPhotoComment" type="button" hidden>Añadir nota</button>
+            <a id="downloadPhotoOriginal" download>Original</a>
+            <a id="downloadPhotoWeb" download>Versión web</a>
+        </div>
+        <button id="next" class="lightbox-nav" aria-label="Siguiente">›</button>
+    </div>
+
+    <dialog id="photoCommentDialog" class="client-dialog" aria-labelledby="photoCommentTitle">
+        <form id="photoCommentForm">
+            <p class="eyebrow">NOTA PARA EL FOTÓGRAFO</p>
+            <h2 id="photoCommentTitle">Comenta esta fotografía</h2>
+            <textarea id="photoComment" maxlength="500" placeholder="Ej. Me gustaría esta en blanco y negro"></textarea>
+            <p id="photoCommentError" class="dialog-error" hidden></p>
+            <div class="client-dialog-actions">
+                <button id="cancelPhotoComment" type="button">Cancelar</button>
+                <button type="submit">Guardar nota</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="selectionDialog" class="client-dialog" aria-labelledby="selectionDialogTitle">
+        <form id="selectionForm">
+            <p class="eyebrow">SELECCIÓN FINAL</p>
+            <h2 id="selectionDialogTitle">Enviar al fotógrafo</h2>
+            <p id="selectionDialogSummary"></p>
+            <label>Tu nombre<input id="selectionClientName" type="text" maxlength="80" required></label>
+            <label>Tu correo (opcional)<input id="selectionClientEmail" type="email" maxlength="254"></label>
+            <p id="selectionDialogError" class="dialog-error" hidden></p>
+            <div class="client-dialog-actions">
+                <button id="cancelSelectionDialog" type="button">Cancelar</button>
+                <button type="submit">Confirmar y enviar</button>
+            </div>
+        </form>
+    </dialog>
+    <script src="/gallery.js"></script>
+</body>
+</html>

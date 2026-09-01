@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transferencia · PHOcloud</title>
+    <link rel="stylesheet" href="/transfer.css">
+</head>
+<body>
+    <header class="transfer-brand">
+        <img id="transferLogo" alt="" hidden>
+        <span id="transferBrand">PHOcloud</span>
+    </header>
+
+    <main>
+        <section id="unlockPanel" class="transfer-card compact" hidden>
+            <p class="eyebrow">TRANSFERENCIA PRIVADA</p>
+            <h1>Introduce la contraseña</h1>
+            <p>El remitente ha protegido estos archivos.</p>
+            <form id="unlockForm">
+                <input id="transferPassword" type="password" minlength="4" maxlength="128"
+                    autocomplete="current-password" placeholder="Contraseña" required>
+                <button type="submit">Abrir transferencia</button>
+            </form>
+            <p id="unlockError" class="error" hidden></p>
+        </section>
+
+        <section id="errorPanel" class="transfer-card compact" hidden>
+            <p class="eyebrow">PHOCLOUD TRANSFER</p>
+            <h1 id="errorTitle">Transferencia no disponible</h1>
+            <p id="errorText"></p>
+        </section>
+
+        <section id="transferContent" class="transfer-card" hidden>
+            <div class="transfer-heading">
+                <div>
+                    <p class="eyebrow">ARCHIVOS COMPARTIDOS</p>
+                    <h1 id="transferTitle"></h1>
+                    <p id="transferMessage" class="transfer-message" hidden></p>
+                </div>
+                <div class="transfer-summary">
+                    <strong id="transferSize"></strong>
+                    <span id="transferMeta"></span>
+                </div>
+            </div>
+
+            <div class="primary-actions">
+                <a id="downloadAll" class="download-all">Descargar todo <span>ZIP</span></a>
+                <button id="shareTransfer" type="button">Compartir enlace</button>
+            </div>
+
+            <div class="file-heading"><strong>Contenido</strong><span id="fileCount"></span></div>
+            <div id="fileList" class="file-list"></div>
+            <p class="transfer-footnote">Esta transferencia dura 24 horas. Después los archivos se eliminan automáticamente.</p>
+        </section>
+    </main>
+
+    <footer>Envío seguro creado con PHOcloud</footer>
+    <script src="/transfer.js"></script>
+</body>
+</html>

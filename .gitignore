@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.tmp-phocloud-*/
+uploads/
+transfers/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/branding/
+data/backups/
+npm-debug.log*
+.deploy/

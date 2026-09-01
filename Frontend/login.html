@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso · PHOcloud</title>
+    <link rel="stylesheet" href="/login.css">
+</head>
+<body>
+    <main class="auth-shell">
+        <section class="auth-story" aria-label="Presentación">
+            <a class="wordmark" href="/login">PHOcloud</a>
+            <div>
+                <p class="eyebrow">GALERÍAS PARA FOTÓGRAFOS</p>
+                <h1>Entrega tu trabajo como merece ser recordado.</h1>
+                <p>Una experiencia privada, elegante y personalizada para cada cliente.</p>
+            </div>
+            <p class="story-foot">Tu primera galería, con todas las funciones, es gratuita.</p>
+        </section>
+
+        <section class="auth-panel">
+            <div class="auth-card">
+                <div id="authTabs" class="auth-tabs">
+                    <button type="button" data-mode="login" class="active">Entrar</button>
+                    <button type="button" data-mode="register">Crear cuenta</button>
+                </div>
+
+                <p class="eyebrow" id="authEyebrow">ÁREA DEL FOTÓGRAFO</p>
+                <h2 id="authTitle">Bienvenido de nuevo</h2>
+                <p class="intro" id="authIntro">Envía archivos grandes y gestiona tus galerías profesionales.</p>
+
+                <form id="authForm" novalidate>
+                    <div id="displayNameGroup" hidden>
+                        <label for="displayName">Tu nombre</label>
+                        <input id="displayName" type="text" minlength="2" maxlength="80" autocomplete="name">
+                    </div>
+
+                    <div id="usernameGroup">
+                        <label id="usernameLabel" for="username">Usuario o correo</label>
+                        <input id="username" type="text" minlength="3" maxlength="254" autocomplete="username" required>
+                    </div>
+
+                    <div id="emailGroup" hidden>
+                        <label for="email">Correo electrónico</label>
+                        <input id="email" type="email" maxlength="254" autocomplete="email">
+                    </div>
+
+                    <div id="passwordGroup">
+                        <div class="label-row">
+                            <label for="password">Contraseña</label>
+                            <button id="forgotButton" class="text-button" type="button">¿La olvidaste?</button>
+                        </div>
+                        <input id="password" type="password" minlength="10" maxlength="128" autocomplete="current-password" required>
+                    </div>
+
+                    <div id="confirmPasswordGroup" hidden>
+                        <label for="confirmPassword">Repite la contraseña</label>
+                        <input id="confirmPassword" type="password" minlength="10" maxlength="128" autocomplete="new-password">
+                    </div>
+
+                    <button id="authButton" class="primary-button" type="submit">Entrar</button>
+                    <button id="backButton" class="secondary-button" type="button" hidden>Volver al acceso</button>
+                    <p id="authError" class="notice error" role="alert" hidden></p>
+                    <div id="authSuccess" class="notice success" role="status" hidden>
+                        <p id="authSuccessText"></p>
+                        <a id="devLink" href="#" hidden>Continuar con el enlace local</a>
+                    </div>
+                </form>
+
+                <label class="terms" id="termsText" for="acceptTerms" hidden>
+                    <input id="acceptTerms" type="checkbox">
+                    <span>Acepto los <a href="/terminos" target="_blank">términos de uso</a>
+                        y la <a href="/privacidad" target="_blank">política de privacidad</a>.</span>
+                </label>
+            </div>
+        </section>
+    </main>
+    <script src="/login.js"></script>
+    <footer class="legal-links"><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></footer>
+</body>
+</html>

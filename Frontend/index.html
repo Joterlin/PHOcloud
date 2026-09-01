@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHOcloud · Panel</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main>
+        <nav class="top-actions" aria-label="Cuenta">
+            <button id="accountButton" class="account-button" type="button">
+                <span id="accountName">Mi cuenta</span>
+                <small id="accountPlan">Plan gratuito</small>
+            </button>
+            <button id="brandSettingsButton" type="button">Mi marca</button>
+            <button id="logoutButton" type="button">Cerrar sesión</button>
+        </nav>
+
+        <p class="eyebrow">ARCHIVOS Y GALERÍAS PROFESIONALES</p>
+        <h1>PHOcloud</h1>
+        <p class="intro">Envía archivos grandes en segundos. Cuando necesites presentar tu trabajo, crea una galería profesional con tu propia identidad.</p>
+
+        <nav class="product-switch" aria-label="Producto PHOcloud">
+            <button id="showTransfers" class="is-active" type="button">Enviar archivos</button>
+            <button id="showGalleries" type="button">Galerías profesionales</button>
+        </nav>
+
+        <section id="galleryCreator" class="creator-card" hidden aria-labelledby="newDeliveryTitle">
+            <div class="section-heading">
+                <div>
+                    <p class="step-label">NUEVA ENTREGA</p>
+                    <h2 id="newDeliveryTitle">Información del cliente</h2>
+                </div>
+            </div>
+
+            <div id="planLimitNotice" class="plan-limit-notice" hidden>
+                <div>
+                    <strong>Ya tienes tres galerías activas</strong>
+                    <p>Puedes guardar más entregas, pero deberás desactivar la visualización de una para activar otra.</p>
+                </div>
+                <button id="viewPlansFromLimit" type="button">Ver planes</button>
+            </div>
+
+            <div class="delivery-builder">
+                <nav class="builder-sidebar" aria-label="Secciones de la nueva entrega">
+                    <p class="settings-title">NUEVA ENTREGA</p>
+                    <button class="builder-nav-item is-active" type="button"
+                        data-builder-target="details" aria-controls="builderDetails" aria-current="step">
+                        <span>01</span><strong>Detalles</strong><small>Nombre y contacto</small>
+                    </button>
+                    <button class="builder-nav-item" type="button"
+                        data-builder-target="photos" aria-controls="builderPhotos">
+                        <span>02</span><strong>Fotografías</strong><small>Archivos y portada</small>
+                    </button>
+                    <button class="builder-nav-item" type="button"
+                        data-builder-target="access" aria-controls="builderAccess">
+                        <span>03</span><strong>Acceso</strong><small>Privacidad y descargas</small>
+                    </button>
+                    <button class="builder-nav-item" type="button"
+                        data-builder-target="design" aria-controls="builderDesign">
+                        <span>04</span><strong>Diseño</strong><small>Marca y apariencia</small>
+                    </button>
+                </nav>
+
+                <div class="builder-workspace">
+                    <section id="builderDetails" class="builder-panel" data-builder-panel="details">
+                        <div class="builder-panel-heading"><p>PASO 01</p><h3>Información de la entrega</h3>
+                            <span>Identifica la galería y, si quieres, guarda un contacto.</span></div>
+                        <div class="template-toolbar">
+                            <label class="field" for="templateSelect">Partir de una plantilla
+                                <select id="templateSelect"><option value="">Sin plantilla</option></select>
+                            </label>
+                            <button id="applyTemplate" class="secondary small-button" type="button">Aplicar</button>
+                            <button id="openTemplateDialog" class="secondary small-button" type="button">Guardar configuración</button>
+                        </div>
+                        <div class="options-grid create-identity-grid">
+                            <label class="field" for="clientName">Cliente, empresa, evento…
+                                <input id="clientName" type="text"
+                                    placeholder="Ej. Boda de Laura y Daniel"
+                                    maxlength="80" required>
+                            </label>
+                            <label class="field" for="clientEmail">Correo de contacto (opcional)
+                                <input id="clientEmail" type="email" maxlength="254"
+                                    placeholder="contacto@correo.com">
+                            </label>
+                        </div>
+                        <button class="builder-continue primary" type="button" data-builder-next="photos">Continuar a fotografías</button>
+                    </section>
+
+                    <section id="builderPhotos" class="builder-panel" data-builder-panel="photos" hidden>
+                        <div class="builder-panel-heading"><p>PASO 02</p><h3>Fotografías y portada</h3>
+                            <span>Sube la colección y elige la imagen que presentará la galería.</span></div>
+                        <input id="fileInput" type="file"
+                            accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.mp4,.mov,.m4v,.webm"
+                            hidden multiple>
+                        <button id="uploadButton" class="primary select-photos" type="button">
+                            <span>＋</span> Seleccionar fotografías
+                        </button>
+                        <p id="selectionHint">Hasta 500 archivos · 50 MB por foto · 500 MB por vídeo · 10 GB por entrega</p>
+                        <section id="selectionPanel" class="selection-panel" hidden>
+                            <div class="selection-heading">
+                                <div><h3>Fotografías seleccionadas</h3><p id="selectionSummary"></p></div>
+                                <div class="selection-actions">
+                                    <button id="addMorePhotos" type="button" class="secondary small-button">Añadir más</button>
+                                    <button id="clearSelection" type="button" class="danger-quiet small-button">Vaciar</button>
+                                </div>
+                            </div>
+                            <p class="cover-help">Pulsa “Portada” en la imagen que quieras presentar primero.</p>
+                            <div id="selectionPreview" class="selection-preview"></div>
+                        </section>
+                        <div id="uploadStatus" hidden aria-live="polite">
+                            <div class="progress-track"><div id="uploadProgress"></div></div>
+                            <p id="uploadStatusText">Preparando subida…</p>
+                        </div>
+                    </section>
+
+                    <section id="builderAccess" class="builder-panel" data-builder-panel="access" hidden>
+                        <div class="builder-panel-heading"><p>PASO 03</p><h3>Acceso y descargas</h3>
+                            <span>Decide cómo podrán entrar e interactuar con la entrega.</span></div>
+                        <div class="permission-list">
+                            <label class="permission-option"><input id="viewingEnabled" type="checkbox" checked>
+                                <span><strong>Permitir visualización</strong><small>El enlace abre la galería.</small></span></label>
+                            <label class="permission-option"><input id="allowOriginalDownload" type="checkbox" checked>
+                                <span><strong>Calidad original</strong><small>Descarga los archivos a máxima calidad.</small></span></label>
+                            <label class="permission-option"><input id="allowWebDownload" type="checkbox" checked>
+                                <span><strong>Versión web reducida</strong><small>Archivos ligeros para compartir.</small></span></label>
+                        </div>
+                        <div class="sidebar-fields">
+                            <label class="field" for="deliveryMessage">Mensaje
+                                <textarea id="deliveryMessage" maxlength="300"
+                                    placeholder="Ej. Gracias por confiar en mi trabajo"></textarea>
+                            </label>
+                            <label class="field" for="galleryPassword">Contraseña opcional
+                                <input id="galleryPassword" type="password" minlength="4"
+                                    maxlength="128" autocomplete="new-password"
+                                    placeholder="Sin contraseña">
+                            </label>
+                            <label class="field" for="expiresAt">Fecha de caducidad
+                                <input id="expiresAt" type="date">
+                            </label>
+                            <label class="permission-option compact"><input id="favoritesEnabled" type="checkbox" checked>
+                                <span><strong>Selección de favoritas</strong></span></label>
+                            <label class="field" for="selectionLimit">Máximo de fotografías seleccionables
+                                <input id="selectionLimit" type="number" min="0" max="500" value="0">
+                                <small>Usa 0 si el cliente puede elegir sin límite.</small>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section id="builderDesign" class="builder-panel" data-builder-panel="design" hidden>
+                        <div class="builder-panel-heading"><p>PASO 04</p><h3>Diseño de la galería</h3>
+                            <span>Parte de “Mi marca” y personaliza únicamente esta entrega.</span></div>
+                        <div class="options-grid sidebar-grid">
+                    <label class="field" for="brandName">
+                        Nombre comercial
+                        <input id="brandName" type="text" maxlength="80"
+                            placeholder="Ej. Marta Studio">
+                    </label>
+                    <label class="field" for="galleryStyle">
+                        Estilo de galería
+                        <select id="galleryStyle">
+                            <option value="masonry">Mosaico dinámico</option>
+                            <option value="grid">Cuadrícula limpia</option>
+                            <option value="editorial">Editorial amplio</option>
+                        </select>
+                    </label>
+                    <label class="field" for="coverStyle">
+                        Diseño de portada
+                        <select id="coverStyle">
+                            <option value="immersive">Inmersiva</option>
+                            <option value="split">Dividida editorial</option>
+                            <option value="frame">Enmarcada</option>
+                            <option value="minimal">Minimalista</option>
+                            <option value="none">Sin portada</option>
+                        </select>
+                    </label>
+                    <label class="field range-field" for="coverPositionY">
+                        Encuadre vertical de portada
+                        <input id="coverPositionY" type="range" min="0" max="100" value="50">
+                    </label>
+                    <label class="field range-field" for="coverPositionX">
+                        Encuadre horizontal de portada
+                        <input id="coverPositionX" type="range" min="0" max="100" value="50">
+                    </label>
+                    <label class="field color-field" for="accentColor">
+                        Color de textos y botones
+                        <input id="accentColor" type="color" value="#c9aa70">
+                    </label>
+                    <label class="field color-field" for="backgroundColor">
+                        Color de fondo de la galería
+                        <input id="backgroundColor" type="color" value="#080808">
+                    </label>
+                    <section class="field field-wide link-editor" aria-labelledby="brandLinksTitle">
+                        <div class="link-editor-heading">
+                            <div><strong id="brandLinksTitle">Enlaces y redes</strong>
+                                <small>Añade cualquier web o perfil y ordénalos como quieras.</small></div>
+                            <button id="addBrandLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
+                        </div>
+                        <div id="brandLinksList" class="link-list" aria-live="polite"></div>
+                    </section>
+                    <label class="field field-wide" for="brandLogo">
+                        Logotipo específico (opcional)
+                        <input id="brandLogo" type="file"
+                            accept=".jpg,.jpeg,.png,.gif">
+                    </label>
+                            <div id="createLogoPreview" class="logo-preview field-wide" hidden>
+                                <img id="createLogoImage" alt="Vista previa del logotipo">
+                            </div>
+                            <label class="field range-field" for="brandLogoScale">Tamaño del logotipo
+                                <input id="brandLogoScale" type="range" min="50" max="160" value="100">
+                            </label>
+                            <label class="field range-field" for="brandLogoPositionX">Posición horizontal
+                                <input id="brandLogoPositionX" type="range" min="0" max="100" value="50">
+                            </label>
+                            <label class="field range-field" for="brandLogoPositionY">Posición vertical
+                                <input id="brandLogoPositionY" type="range" min="0" max="100" value="50">
+                            </label>
+                        </div>
+                    </section>
+
+                    <footer class="builder-footer">
+                        <span>Podrás editar todos estos ajustes después.</span>
+                        <button id="createDeliveryButton" type="button" class="primary create-button">Crear entrega</button>
+                    </footer>
+                </div>
+            </div>
+        </section>
+
+        <section id="transferCreator" class="creator-card transfer-creator" aria-labelledby="newTransferTitle">
+            <div class="section-heading transfer-title-row">
+                <div><p class="step-label">PHOCLOUD TRANSFER</p><h2 id="newTransferTitle">Nueva transferencia</h2></div>
+                <span>Envía archivos de trabajo sin crear una galería.</span>
+            </div>
+            <div class="transfer-form-grid">
+                <div class="transfer-drop-column">
+                    <input id="transferFilesInput" type="file" multiple hidden>
+                    <button id="selectTransferFiles" class="transfer-dropzone" type="button">
+                        <strong>＋ Añadir archivos</strong>
+                        <span>Documentos, RAW, vídeos, ZIP y otros formatos</span>
+                        <small>Hasta 50 GB por transferencia · Disponible durante 24 horas</small>
+                    </button>
+                    <div id="transferSelection" class="transfer-selection" hidden>
+                        <div class="transfer-selection-heading">
+                            <strong id="transferSelectionSummary"></strong>
+                            <button id="clearTransferFiles" type="button" class="danger-quiet small-button">Vaciar</button>
+                        </div>
+                        <div id="transferFilesList" class="transfer-files-list"></div>
+                    </div>
+                </div>
+                <div class="transfer-fields">
+                    <label class="field" for="transferTitle">Título
+                        <input id="transferTitle" type="text" maxlength="100" placeholder="Ej. Material campaña de verano" required>
+                    </label>
+                    <label class="field" for="transferRecipient">Correo del destinatario (opcional)
+                        <input id="transferRecipient" type="email" maxlength="254" placeholder="persona@correo.com">
+                    </label>
+                    <label class="field" for="transferMessage">Mensaje (opcional)
+                        <textarea id="transferMessage" maxlength="500" placeholder="Información sobre los archivos"></textarea>
+                    </label>
+                    <div class="transfer-retention"><strong>24 horas</strong><span>Después se eliminarán automáticamente los archivos.</span></div>
+                    <label class="field" for="transferPassword">Contraseña opcional
+                        <input id="transferPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password">
+                    </label>
+                    <button id="createTransfer" type="button" class="primary create-button">Crear transferencia</button>
+                    <div id="transferUploadStatus" class="transfer-upload-status" hidden>
+                        <div class="progress-track"><div id="transferUploadProgress"></div></div>
+                        <p id="transferUploadText"></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="result" hidden aria-live="polite">
+            <div class="successIcon">✓</div>
+            <h2>Entrega creada</h2>
+            <p id="photoCount"></p>
+            <input id="linkInput" type="text" readonly aria-label="Enlace de la galería">
+            <div class="actions">
+                <button id="copyButton" class="secondary">Copiar enlace</button>
+                <button id="openButton" class="primary">Abrir galería</button>
+            </div>
+        </section>
+
+        <section id="transferResult" hidden aria-live="polite">
+            <div class="successIcon">✓</div>
+            <h2>Transferencia preparada</h2>
+            <p id="transferResultSummary"></p>
+            <input id="transferLinkInput" type="text" readonly aria-label="Enlace de la transferencia">
+            <div class="actions">
+                <button id="copyTransferLink" class="secondary">Copiar enlace</button>
+                <button id="openTransferLink" class="primary">Abrir transferencia</button>
+            </div>
+        </section>
+
+        <section id="deliveriesPanel" hidden>
+            <div class="deliveries-heading">
+                <div>
+                    <p class="step-label">TU ESPACIO</p>
+                    <h2>Mis entregas</h2>
+                </div>
+                <button id="deleteAllDeliveries" type="button" disabled>Eliminar todas</button>
+            </div>
+            <p id="deliveriesEmpty" hidden>Todavía no has creado ninguna entrega.</p>
+            <div id="deliveriesList" aria-live="polite"></div>
+        </section>
+
+        <section id="transfersPanel">
+            <div class="deliveries-heading">
+                <div><p class="step-label">ARCHIVOS ENVIADOS</p><h2>Mis transferencias</h2></div>
+            </div>
+            <p id="transfersEmpty" hidden>Todavía no has creado ninguna transferencia.</p>
+            <div id="transfersList" aria-live="polite"></div>
+        </section>
+
+        <p id="errorMessage" role="alert" hidden></p>
+        <footer class="panel-footer"><span>PHOcloud</span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></footer>
+    </main>
+
+    <dialog id="accountDialog" aria-labelledby="accountDialogTitle">
+        <div class="edit-dialog-content account-dialog-content">
+            <div class="edit-dialog-heading">
+                <div>
+                    <p class="edit-dialog-eyebrow">CUENTA Y PLAN</p>
+                    <h2 id="accountDialogTitle">Tu espacio PHOcloud</h2>
+                </div>
+                <button id="closeAccountDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
+            </div>
+            <div class="account-identity">
+                <div class="account-avatar" id="accountAvatar">P</div>
+                <div><strong id="accountDisplayName"></strong><p id="accountEmail"></p></div>
+                <span id="accountPlanBadge">Gratis</span>
+            </div>
+            <section class="usage-card">
+                <div class="usage-heading"><strong>Galerías activas</strong><span id="galleryUsageText">0 de 3</span></div>
+                <div class="usage-track"><div id="galleryUsageBar"></div></div>
+                <div class="usage-heading storage-heading"><strong>Almacenamiento</strong><span id="storageUsageText">0 MB</span></div>
+                <div class="usage-track"><div id="storageUsageBar"></div></div>
+                <div class="usage-heading storage-heading"><strong>Transferencias temporales</strong><span id="transferUsageText">0 GB</span></div>
+                <div class="usage-track"><div id="transferUsageBar"></div></div>
+            </section>
+            <section class="plan-card featured-plan">
+                <p class="edit-dialog-eyebrow">PLAN PROFESIONAL</p>
+                <h3>Crece sin detener tus entregas</h3>
+                <ul>
+                    <li>Hasta 100 galerías activas</li>
+                    <li>250 GB de almacenamiento</li>
+                    <li>Todas las funciones de personalización</li>
+                </ul>
+                <button id="upgradeButton" type="button" class="primary">Pagos disponibles al publicar PHOcloud</button>
+                <p class="plan-note">La estructura del plan ya está preparada. El cobro real se conectará al publicar la plataforma.</p>
+            </section>
+        </div>
+    </dialog>
+
+    <dialog id="brandDialog" aria-labelledby="brandDialogTitle">
+        <form id="brandForm" class="edit-dialog-content">
+            <div class="edit-dialog-heading">
+                <div>
+                    <p class="edit-dialog-eyebrow">IDENTIDAD PREDETERMINADA</p>
+                    <h2 id="brandDialogTitle">Mi marca</h2>
+                </div>
+                <button id="closeBrandDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
+            </div>
+            <p class="dialog-intro">Las nuevas galerías comenzarán con estos datos. Después podrás personalizar cada una.</p>
+            <div id="profileLogoPreview" class="logo-preview" hidden>
+                <img id="profileLogoImage" alt="Logotipo actual">
+            </div>
+            <div class="options-grid">
+                <label class="field" for="profileBrandName">Nombre comercial
+                    <input id="profileBrandName" type="text" maxlength="80">
+                </label>
+                <label class="field" for="profileLogo">Logotipo
+                    <input id="profileLogo" type="file"
+                        accept=".jpg,.jpeg,.png,.gif">
+                </label>
+                <label class="field range-field" for="profileLogoScale">Tamaño del logotipo
+                    <input id="profileLogoScale" type="range" min="50" max="160" value="100">
+                </label>
+                <label class="field range-field" for="profileLogoPositionX">Posición horizontal
+                    <input id="profileLogoPositionX" type="range" min="0" max="100" value="50">
+                </label>
+                <label class="field range-field" for="profileLogoPositionY">Posición vertical
+                    <input id="profileLogoPositionY" type="range" min="0" max="100" value="50">
+                </label>
+                <label class="field color-field" for="profileAccentColor">Color de textos y botones
+                    <input id="profileAccentColor" type="color" value="#c9aa70">
+                </label>
+                <label class="field color-field" for="profileBackgroundColor">Color de fondo de la galería
+                    <input id="profileBackgroundColor" type="color" value="#080808">
+                </label>
+                <section class="field field-wide link-editor" aria-labelledby="profileLinksTitle">
+                    <div class="link-editor-heading">
+                        <div><strong id="profileLinksTitle">Enlaces predeterminados</strong>
+                            <small>Se copiarán a cada galería nueva en este orden.</small></div>
+                        <button id="addProfileLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
+                    </div>
+                    <div id="profileLinksList" class="link-list" aria-live="polite"></div>
+                </section>
+            </div>
+            <label id="removeProfileLogoLabel" class="remove-password" hidden>
+                <input id="removeProfileLogo" type="checkbox"> Quitar logotipo actual
+            </label>
+            <p id="brandDialogError" class="delete-dialog-error" role="alert" hidden></p>
+            <div class="edit-dialog-actions">
+                <button id="cancelBrandDialog" type="button" class="secondary">Cancelar</button>
+                <button id="saveBrand" type="submit" class="primary">Guardar marca</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="deleteDialog" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogMessage">
+        <div class="delete-dialog-content">
+            <p class="delete-dialog-eyebrow">ACCIÓN PERMANENTE</p>
+            <h2 id="deleteDialogTitle"></h2>
+            <p id="deleteDialogMessage"></p>
+            <p id="deleteDialogError" class="delete-dialog-error" role="alert" hidden></p>
+            <div class="delete-dialog-actions">
+                <button id="cancelDeleteDialog" type="button" class="secondary">Cancelar</button>
+                <button id="confirmDelete" type="button" disabled>Eliminar</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="editDialog" aria-labelledby="editDialogTitle">
+        <form id="editDeliveryForm" class="edit-dialog-content">
+            <div class="edit-dialog-heading">
+                <div>
+                    <p class="edit-dialog-eyebrow">CONFIGURAR ENTREGA</p>
+                    <h2 id="editDialogTitle">Editar galería</h2>
+                </div>
+                <button id="closeEditDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
+            </div>
+            <input id="editDeliveryId" type="hidden">
+            <div class="options-grid">
+                <label class="field" for="editClientName">Cliente, empresa, evento…
+                    <input id="editClientName" type="text" maxlength="80" required>
+                </label>
+                <label class="field" for="editClientEmail">Correo de contacto
+                    <input id="editClientEmail" type="email" maxlength="254">
+                </label>
+                <label class="field" for="editExpiresAt">Fecha de caducidad
+                    <input id="editExpiresAt" type="date">
+                </label>
+                <label class="field field-wide" for="editMessage">Mensaje
+                    <textarea id="editMessage" maxlength="300"></textarea>
+                </label>
+                <label class="field field-wide" for="editPassword">Nueva contraseña
+                    <input id="editPassword" type="password" minlength="4"
+                        maxlength="128" autocomplete="new-password"
+                        placeholder="Vacío para conservar la actual">
+                </label>
+            </div>
+            <label id="removePasswordLabel" class="remove-password">
+                <input id="removePassword" type="checkbox"> Quitar contraseña actual
+            </label>
+            <div class="permission-list edit-permission-list">
+                <label class="permission-option"><input id="editViewingEnabled" type="checkbox">
+                    <span><strong>Permitir visualización</strong><small>El enlace abre la galería.</small></span></label>
+                <label class="permission-option"><input id="editAllowOriginalDownload" type="checkbox">
+                    <span><strong>Calidad original</strong><small>Archivos a máxima calidad.</small></span></label>
+                <label class="permission-option"><input id="editAllowWebDownload" type="checkbox">
+                    <span><strong>Versión web reducida</strong><small>Archivos ligeros para compartir.</small></span></label>
+                <label class="permission-option"><input id="editFavoritesEnabled" type="checkbox">
+                    <span><strong>Selección de favoritas</strong></span></label>
+            </div>
+            <section class="selection-admin">
+                <div class="selection-admin-heading">
+                    <div><p class="edit-dialog-eyebrow">SELECCIÓN DEL CLIENTE</p><h3 id="editSelectionStatus">Abierta</h3></div>
+                    <button id="reopenSelection" class="secondary small-button" type="button" hidden>Reabrir selección</button>
+                </div>
+                <label class="field" for="editSelectionLimit">Máximo de fotografías seleccionables
+                    <input id="editSelectionLimit" type="number" min="0" max="500" value="0">
+                    <small>0 permite seleccionar sin límite.</small>
+                </label>
+                <p id="editSelectionSummary" class="selection-admin-summary"></p>
+                <div class="selection-insights">
+                    <div><strong>Notas del cliente</strong><div id="editSelectionComments" class="compact-feed"></div></div>
+                    <div><strong>Actividad reciente</strong><div id="editActivity" class="compact-feed"></div></div>
+                </div>
+            </section>
+
+            <section class="edit-brand-section">
+                <h3>Aspecto de esta galería</h3>
+                <div id="editCoverPreview" class="cover-config-preview">
+                    <img id="editCoverPreviewImage" alt="Previsualización de portada">
+                    <div><small>ENTREGA FOTOGRÁFICA</small><strong id="editCoverPreviewTitle"></strong></div>
+                </div>
+                <div id="editLogoPreview" class="logo-preview" hidden>
+                    <img id="editLogoImage" alt="Logotipo de la galería">
+                </div>
+                <div class="options-grid">
+                    <label class="field" for="editBrandName">Nombre comercial
+                        <input id="editBrandName" type="text" maxlength="80">
+                    </label>
+                    <label class="field" for="editGalleryStyle">Estilo
+                        <select id="editGalleryStyle">
+                            <option value="masonry">Mosaico dinámico</option>
+                            <option value="grid">Cuadrícula limpia</option>
+                            <option value="editorial">Editorial amplio</option>
+                        </select>
+                    </label>
+                    <label class="field" for="editCoverStyle">Diseño de portada
+                        <select id="editCoverStyle">
+                            <option value="immersive">Inmersiva</option>
+                            <option value="split">Dividida editorial</option>
+                            <option value="frame">Enmarcada</option>
+                            <option value="minimal">Minimalista</option>
+                            <option value="none">Sin portada</option>
+                        </select>
+                    </label>
+                    <label class="field range-field" for="editCoverPositionY">Encuadre vertical
+                        <input id="editCoverPositionY" type="range" min="0" max="100" value="50">
+                    </label>
+                    <label class="field range-field" for="editCoverPositionX">Encuadre horizontal
+                        <input id="editCoverPositionX" type="range" min="0" max="100" value="50">
+                    </label>
+                    <label class="field color-field" for="editAccentColor">Color de textos y botones
+                        <input id="editAccentColor" type="color">
+                    </label>
+                    <label class="field color-field" for="editBackgroundColor">Color de fondo de la galería
+                        <input id="editBackgroundColor" type="color">
+                    </label>
+                    <section class="field field-wide link-editor" aria-labelledby="editLinksTitle">
+                        <div class="link-editor-heading">
+                            <div><strong id="editLinksTitle">Enlaces de esta galería</strong>
+                                <small>El primero también será el destino al pulsar tu marca.</small></div>
+                            <button id="addEditLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
+                        </div>
+                        <div id="editLinksList" class="link-list" aria-live="polite"></div>
+                    </section>
+                    <label class="field field-wide" for="editLogo">Cambiar logotipo
+                        <input id="editLogo" type="file"
+                            accept=".jpg,.jpeg,.png,.gif">
+                    </label>
+                    <label class="field range-field" for="editLogoScale">Tamaño del logotipo
+                        <input id="editLogoScale" type="range" min="50" max="160" value="100">
+                    </label>
+                    <label class="field range-field" for="editLogoPositionX">Posición horizontal
+                        <input id="editLogoPositionX" type="range" min="0" max="100" value="50">
+                    </label>
+                    <label class="field range-field" for="editLogoPositionY">Posición vertical
+                        <input id="editLogoPositionY" type="range" min="0" max="100" value="50">
+                    </label>
+                </div>
+                <label id="removeEditLogoLabel" class="remove-password" hidden>
+                    <input id="removeEditLogo" type="checkbox"> Quitar logotipo de esta galería
+                </label>
+            </section>
+
+            <section class="photo-manager">
+                <div class="photo-manager-heading">
+                    <div><h3>Fotografías y portada</h3><p id="editPhotoSummary"></p></div>
+                    <button id="addPhotosButton" type="button" class="secondary">Añadir fotos</button>
+                    <input id="addPhotosInput" type="file"
+                        accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.mp4,.mov,.m4v,.webm"
+                        multiple hidden>
+                </div>
+                <div class="section-manager">
+                    <div>
+                        <strong>Secciones de la galería</strong>
+                        <small>Agrupa las fotografías, por ejemplo Preparativos, Ceremonia o Fiesta.</small>
+                    </div>
+                    <div class="section-create">
+                        <input id="newSectionName" type="text" maxlength="60" placeholder="Nombre de la sección">
+                        <button id="addSection" type="button" class="secondary small-button">Añadir</button>
+                    </div>
+                    <div id="sectionsList" class="section-list"></div>
+                </div>
+                <div id="editPhotos" class="edit-photos"></div>
+            </section>
+            <p id="editDialogError" class="delete-dialog-error" role="alert" hidden></p>
+            <div class="edit-dialog-actions">
+                <button id="cancelEditDialog" type="button" class="secondary">Cancelar</button>
+                <button id="saveDelivery" type="submit" class="primary">Guardar cambios</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="templateDialog" aria-labelledby="templateDialogTitle">
+        <form id="templateForm" class="delete-dialog-content">
+            <p class="edit-dialog-eyebrow">PLANTILLA REUTILIZABLE</p>
+            <h2 id="templateDialogTitle">Guardar configuración</h2>
+            <p class="dialog-intro">Guardará el diseño, permisos y mensaje actuales para futuras entregas.</p>
+            <label class="field" for="templateName">Nombre de la plantilla
+                <input id="templateName" type="text" maxlength="60" placeholder="Ej. Bodas elegante" required>
+            </label>
+            <p id="templateDialogError" class="delete-dialog-error" role="alert" hidden></p>
+            <div class="delete-dialog-actions">
+                <button id="cancelTemplateDialog" type="button" class="secondary">Cancelar</button>
+                <button type="submit" class="primary">Guardar plantilla</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="/script.js"></script>
+</body>
+</html>

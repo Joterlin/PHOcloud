@@ -1,0 +1,12 @@
+node_modules
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+data
+uploads
+transfers
+.tmp-phocloud-*
+npm-debug.log*
+public/*.codex-backup

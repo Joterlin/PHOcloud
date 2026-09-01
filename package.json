@@ -1,0 +1,34 @@
+{
+  "name": "phocloud",
+  "version": "1.0.0",
+  "description": "Plataforma privada de galerías fotográficas y transferencia de archivos",
+  "main": "index.js",
+  "scripts": {
+    "start": "node Backend/server.js",
+    "start:production": "node scripts/preflight.js && node Backend/server.js",
+    "check": "node --check Backend/server.js && node --check Backend/database.js && node --check Backend/mailer.js && node --check Backend/object-storage.js && node --check Frontend/script.js && node --check Frontend/login.js && node --check public/gallery.js && node --check public/transfer.js && node --check scripts/preflight.js && node --check scripts/backup.js && node --check scripts/configure-r2.js",
+    "test": "node --test Backend/*.test.js",
+    "validate": "npm run check && npm test",
+    "preflight": "node scripts/preflight.js",
+    "backup": "node scripts/backup.js",
+    "configure:r2": "node scripts/configure-r2.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1123.0",
+    "@aws-sdk/s3-request-presigner": "^3.1123.0",
+    "archiver": "^8.0.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jimp": "^1.6.1",
+    "multer": "^2.2.0",
+    "nodemailer": "^9.0.5",
+    "uuid": "^14.0.1"
+  }
+}
