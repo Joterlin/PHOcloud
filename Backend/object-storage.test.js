@@ -137,10 +137,10 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
     try {
         assert.equal(await storage.healthcheck(), true);
         const bucketConfiguration = await storage.configureBucket(
-            "https://app.photarea.studio/ruta-ignorada"
+            "https://app.phocloud.example/ruta-ignorada"
         );
-        assert.equal(bucketConfiguration.origin, "https://app.photarea.studio");
-        assert.match(corsConfiguration, /https:\/\/app\.photarea\.studio/);
+        assert.equal(bucketConfiguration.origin, "https://app.phocloud.example");
+        assert.match(corsConfiguration, /https:\/\/app\.phocloud\.example/);
         assert.match(corsConfiguration, /<AllowedMethod>PUT<\/AllowedMethod>/);
         assert.match(lifecycleConfiguration, /<Expiration><Days>1<\/Days><\/Expiration>/);
         assert.match(lifecycleConfiguration, /<DaysAfterInitiation>1<\/DaysAfterInitiation>/);

@@ -37,13 +37,13 @@ solo pueda leer y escribir objetos en ese bucket. Configura:
 - `PHOCLOUD_R2_SECRET_ACCESS_KEY`
 - `PHOCLOUD_R2_BUCKET`
 
-En el bucket, permite CORS desde el dominio exacto de PHOcloud. Para la beta en
-`https://app.photarea.studio`, una configuración válida es:
+En el bucket, permite CORS desde el dominio exacto que elijas para PHOcloud. Para
+una instalación de ejemplo en `https://app.tudominio.com`:
 
 ```json
 [
   {
-    "AllowedOrigins": ["https://app.photarea.studio"],
+    "AllowedOrigins": ["https://app.tudominio.com"],
     "AllowedMethods": ["GET", "PUT", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag"],
@@ -89,12 +89,12 @@ El archivo `railway.json` hace que Railway construya el `Dockerfile`, espere a
 
 1. Crea un servicio desde este repositorio.
 2. Añade un volumen y móntalo exactamente en `/app/storage`.
-3. Copia las variables de `.env.example` en Railway, usando
-   `PHOCLOUD_PUBLIC_URL=https://app.photarea.studio`.
+3. Copia las variables de `.env.example` en Railway, usando como
+   `PHOCLOUD_PUBLIC_URL` el dominio que elijas para PHOcloud.
 4. Configura R2 y SMTP antes de cambiar `NODE_ENV` a `production`.
 5. Genera primero el dominio temporal de Railway y completa todas las pruebas.
-6. Añade `app.photarea.studio` como dominio personalizado y copia en Cloudflare
-   los registros CNAME y TXT que Railway muestre.
+6. Añade el dominio de PHOcloud como dominio personalizado y copia en tu proveedor
+   DNS los registros CNAME y TXT que Railway muestre.
 
 No aumentes el número de réplicas: PHOcloud usa SQLite y debe ejecutar una sola
 instancia. El volumen guarda la base de datos y las galerías; R2 guarda únicamente

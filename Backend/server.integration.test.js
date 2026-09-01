@@ -175,7 +175,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         form.append("clientEmail", "cliente@example.com");
         form.append("viewingEnabled", "false");
         form.append("socialLinks", JSON.stringify([
-            { label: "Mi web", url: "photarea.studio" },
+            { label: "Mi web", url: "estudio-ejemplo.com" },
             { label: "Reservas", url: "booking.example.com/fotografo" }
         ]));
         form.append("photos", new File([png], "foto.png", { type: "image/png" }));
@@ -195,7 +195,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal(ownerGalleryResponse.status, 200);
         const ownerGallery = await ownerGalleryResponse.json();
         assert.deepEqual(ownerGallery.socialLinks, [
-            { label: "Mi web", url: "https://photarea.studio/" },
+            { label: "Mi web", url: "https://estudio-ejemplo.com/" },
             { label: "Reservas", url: "https://booking.example.com/fotografo" }
         ]);
 
@@ -343,7 +343,7 @@ test("producción no expone la configuración privilegiada inicial", async () =>
     const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phocloud-production-"));
     const port = 42_000 + (process.pid % 5_000);
     const baseUrl = `http://127.0.0.1:${port}`;
-    const publicUrl = "https://app.photarea.studio";
+    const publicUrl = "https://app.phocloud.example";
     const child = spawn(process.execPath, [path.join(__dirname, "server.js")], {
         cwd: rootDirectory,
         env: {
@@ -357,9 +357,9 @@ test("producción no expone la configuración privilegiada inicial", async () =>
             SMTP_HOST: "smtp.example.test",
             SMTP_USER: "user",
             SMTP_PASS: "secret",
-            PHOCLOUD_FROM_EMAIL: "PHOcloud <hola@photarea.studio>",
+            PHOCLOUD_FROM_EMAIL: "PHOcloud <hola@phocloud.example>",
             PHOCLOUD_LEGAL_NAME: "Titular de prueba",
-            PHOCLOUD_LEGAL_EMAIL: "privacidad@photarea.studio",
+            PHOCLOUD_LEGAL_EMAIL: "privacidad@phocloud.example",
             PHOCLOUD_LEGAL_COUNTRY: "España",
             PHOCLOUD_TRANSFER_STORAGE: "local"
         },

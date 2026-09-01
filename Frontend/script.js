@@ -420,7 +420,7 @@ function addLinkRow(prefix = "", link = {}) {
     url.type = "text";
     url.inputMode = "url";
     url.maxLength = 240;
-    url.placeholder = "photarea.studio";
+    url.placeholder = "tuweb.com";
     url.setAttribute("aria-label", "Dirección del enlace");
     url.value = link.url || "";
     url.addEventListener("blur", () => {
