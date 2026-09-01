@@ -105,6 +105,10 @@ desde el registro normal y debe confirmar su correo.
 
 ## Comprobación posterior
 
+Ejecuta `npm run smoke:public` con `PHOCLOUD_PUBLIC_URL` apuntando al dominio
+final. Es una comprobación de solo lectura de disponibilidad, R2, login, páginas
+legales y cabeceras de seguridad.
+
 - `/healthz` responde `200`.
 - Registro, confirmación de correo y recuperación funcionan con un correo real.
 - Una galería borrador devuelve `404` para un visitante y permite vista previa a su dueño.
