@@ -1,8 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const http = require("node:http");
 const { once } = require("node:events");
-const { createObjectStorage } = require("./object-storage");
+const os = require("node:os");
+const path = require("node:path");
+const {
+    createGalleryStorage,
+    createObjectStorage
+} = require("./object-storage");
 
 async function requestBody(req) {
     const chunks = [];
@@ -169,5 +175,93 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
     } finally {
         mock.close();
         await once(mock, "close");
+    }
+});
+
+test("guarda, visualiza, descarga y elimina un original de galería en R2", async () => {
+    let storedObject = null;
+    let storedContentType = "";
+    const mock = http.createServer(async (req, res) => {
+        const url = new URL(req.url, "http://127.0.0.1");
+        if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
+            return xml(res, 200, [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">',
+                '<Name>gallery-media-production</Name><KeyCount>0</KeyCount>',
+                '<MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated>',
+                '</ListBucketResult>'
+            ].join(""));
+        }
+        if (req.method === "PUT") {
+            storedObject = await requestBody(req);
+            storedContentType = req.headers["content-type"];
+            res.writeHead(200, { ETag: '"gallery-etag"' });
+            return res.end();
+        }
+        if (req.method === "GET") {
+            if (!storedObject) {
+                return xml(res, 404, '<Error><Code>NoSuchKey</Code></Error>');
+            }
+            res.writeHead(200, {
+                "Content-Type": storedContentType,
+                "Content-Length": storedObject.length
+            });
+            return res.end(storedObject);
+        }
+        if (req.method === "POST" && url.searchParams.has("delete")) {
+            await requestBody(req);
+            storedObject = null;
+            return xml(res, 200, [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>'
+            ].join(""));
+        }
+        res.writeHead(500);
+        res.end(`Ruta de galería simulada no implementada: ${req.method} ${req.url}`);
+    });
+    mock.listen(0, "127.0.0.1");
+    await once(mock, "listening");
+    const address = mock.address();
+    const endpoint = `http://127.0.0.1:${address.port}`;
+    const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phocloud-gallery-r2-"));
+    const sourcePath = path.join(temporaryRoot, "foto.jpg");
+    fs.writeFileSync(sourcePath, "contenido de fotografía");
+    const storage = createGalleryStorage({
+        PHOCLOUD_GALLERY_STORAGE: "r2",
+        PHOCLOUD_R2_ACCOUNT_ID: "cuenta",
+        PHOCLOUD_GALLERY_R2_ACCESS_KEY_ID: "access",
+        PHOCLOUD_GALLERY_R2_SECRET_ACCESS_KEY: "secret",
+        PHOCLOUD_GALLERY_R2_BUCKET: "gallery-media-production",
+        PHOCLOUD_R2_ENDPOINT: endpoint
+    });
+
+    try {
+        assert.equal(await storage.healthcheck(), true);
+        const key = await storage.uploadFile({
+            deliveryId: "00000000-0000-4000-8000-000000000030",
+            filename: "foto de boda.jpg",
+            filePath: sourcePath,
+            contentType: "image/jpeg",
+            size: fs.statSync(sourcePath).size
+        });
+        assert.equal(
+            key,
+            "galleries/00000000-0000-4000-8000-000000000030/originals/foto de boda.jpg"
+        );
+        assert.equal(storedContentType, "image/jpeg");
+
+        const inlineUrl = await storage.inlineUrl(key, "foto de boda.jpg");
+        assert.match(inlineUrl, /response-content-disposition=inline/);
+        assert.equal(await (await fetch(inlineUrl)).text(), "contenido de fotografía");
+
+        const stream = await storage.getObjectStream(key);
+        assert.equal(await stream.transformToString(), "contenido de fotografía");
+
+        await storage.deleteKeys([key]);
+        assert.equal((await fetch(inlineUrl)).status, 404);
+    } finally {
+        mock.close();
+        await once(mock, "close");
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
     }
 });

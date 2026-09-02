@@ -7,7 +7,10 @@ const fs = require("fs");
 const { ZipArchive } = require("archiver");
 const { v4: uuidv4 } = require("uuid");
 const { createDeliveryStore } = require("./database");
-const { createObjectStorage } = require("./object-storage");
+const {
+    createObjectStorage,
+    createGalleryStorage
+} = require("./object-storage");
 const {
     sendAccountLink,
     sendGalleryDelivery,
@@ -51,6 +54,7 @@ const brandingDirectory = path.join(path.dirname(databasePath), "branding");
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production";
 const objectStorage = createObjectStorage();
+const galleryStorage = createGalleryStorage();
 const secureCookies = isProduction;
 const GALLERY_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 const MAX_PHOTOS_PER_DELIVERY = 500;
@@ -102,6 +106,25 @@ function validateRuntimeConfig() {
         throw new Error(
             "Configura RESEND_API_KEY o SMTP_HOST, SMTP_USER y SMTP_PASS para enviar correos"
         );
+    }
+    const galleryStorageMode = (process.env.PHOCLOUD_GALLERY_STORAGE || "local")
+        .trim().toLowerCase();
+    if (!["local", "r2"].includes(galleryStorageMode)) {
+        throw new Error("PHOCLOUD_GALLERY_STORAGE debe ser local o r2");
+    }
+    if (galleryStorageMode === "r2") {
+        const galleryRequired = [
+            "PHOCLOUD_R2_ACCOUNT_ID",
+            "PHOCLOUD_GALLERY_R2_ACCESS_KEY_ID",
+            "PHOCLOUD_GALLERY_R2_SECRET_ACCESS_KEY",
+            "PHOCLOUD_GALLERY_R2_BUCKET"
+        ];
+        const missingGallery = galleryRequired.filter((key) => !process.env[key]);
+        if (missingGallery.length) {
+            throw new Error(
+                `Configuración R2 de galerías incompleta: ${missingGallery.join(", ")}`
+            );
+        }
     }
 
     let publicUrl;
@@ -172,9 +195,12 @@ if (secureCookies) {
 app.use((req, res, next) => {
     const requestId = req.get("X-Request-ID") || uuidv4();
     req.requestId = requestId;
-    const storageOrigin = objectStorage.enabled ? ` ${objectStorage.endpointOrigin}` : "";
+    const storageOrigins = [...new Set([
+        objectStorage.enabled ? objectStorage.endpointOrigin : "",
+        galleryStorage.enabled ? galleryStorage.endpointOrigin : ""
+    ].filter(Boolean))].map((origin) => ` ${origin}`).join("");
     res.set({
-        "Content-Security-Policy": `default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'${storageOrigin}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
+        "Content-Security-Policy": `default-src 'self'; img-src 'self' data: blob:${storageOrigins}; media-src 'self' blob:${storageOrigins}; style-src 'self'; script-src 'self'; connect-src 'self'${storageOrigins}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
         "Referrer-Policy": "no-referrer",
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
@@ -229,20 +255,195 @@ function transferFilePath(transferId, filename) {
     return path.dirname(resolved) === folderPath ? resolved : null;
 }
 
-function listGalleryFiles(folderPath) {
-    return fs.readdirSync(folderPath, {
-        withFileTypes: true
-    })
+const GALLERY_MANIFEST_FILENAME = ".gallery-files.json";
+
+function galleryManifestPath(folderPath) {
+    return path.join(folderPath, GALLERY_MANIFEST_FILENAME);
+}
+
+function readGalleryManifest(folderPath) {
+    const manifestPath = galleryManifestPath(folderPath);
+    if (!fs.existsSync(manifestPath)) return null;
+    try {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        if (manifest?.provider !== "r2" || !Array.isArray(manifest.files)) {
+            throw new Error("formato no válido");
+        }
+        return {
+            provider: "r2",
+            files: manifest.files.filter((file) => {
+                return file
+                    && typeof file.name === "string"
+                    && path.basename(file.name) === file.name
+                    && typeof file.objectKey === "string"
+                    && file.objectKey
+                    && Number.isFinite(Number(file.size));
+            }).map((file) => ({
+                name: file.name,
+                objectKey: file.objectKey,
+                size: Number(file.size),
+                mimeType: file.mimeType || "application/octet-stream"
+            }))
+        };
+    } catch (error) {
+        throw new Error(`Manifiesto de galería dañado: ${error.message}`);
+    }
+}
+
+function writeGalleryManifest(folderPath, files) {
+    const manifestPath = galleryManifestPath(folderPath);
+    const temporaryPath = `${manifestPath}.tmp`;
+    const orderedFiles = [...files].sort((a, b) => a.name.localeCompare(
+        b.name, "es", { numeric: true, sensitivity: "base" }
+    ));
+    fs.writeFileSync(temporaryPath, JSON.stringify({
+        version: 1,
+        provider: "r2",
+        files: orderedFiles
+    }, null, 2));
+    fs.renameSync(temporaryPath, manifestPath);
+}
+
+function mimeTypeForGalleryFile(filename) {
+    const extension = path.extname(filename).toLowerCase();
+    return {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".avif": "image/avif",
+        ".heic": "image/heic",
+        ".heif": "image/heif",
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".m4v": "video/x-m4v",
+        ".webm": "video/webm"
+    }[extension] || "application/octet-stream";
+}
+
+function listGalleryFileRecords(folderPath) {
+    const manifest = readGalleryManifest(folderPath);
+    if (manifest) return manifest.files;
+    return fs.readdirSync(folderPath, { withFileTypes: true })
         .filter((item) => {
             return item.isFile()
                 && item.name !== "metadata.json"
                 && !item.name.startsWith(".");
         })
-        .map((item) => item.name)
+        .map((item) => {
+            const stats = fs.statSync(path.join(folderPath, item.name));
+            return {
+                name: item.name,
+                objectKey: null,
+                size: stats.size,
+                mimeType: mimeTypeForGalleryFile(item.name)
+            };
+        });
+}
+
+function listGalleryFiles(folderPath) {
+    return listGalleryFileRecords(folderPath)
+        .map((file) => file.name)
         .sort((a, b) => a.localeCompare(b, "es", {
             numeric: true,
             sensitivity: "base"
         }));
+}
+
+function galleryFileRecord(folderPath, filename) {
+    if (typeof filename !== "string" || path.basename(filename) !== filename) {
+        return null;
+    }
+    return listGalleryFileRecords(folderPath)
+        .find((file) => file.name === filename) || null;
+}
+
+function galleryStoredInR2(folderPath) {
+    return Boolean(readGalleryManifest(folderPath));
+}
+
+async function persistGalleryFilesToR2(
+    folderId, folderPath, uploadedFiles, previousRecords = []
+) {
+    const createdRecords = [];
+    try {
+        for (const file of uploadedFiles) {
+            const objectKey = await galleryStorage.uploadFile({
+                deliveryId: folderId,
+                filename: file.filename,
+                filePath: file.path,
+                contentType: file.mimetype,
+                size: file.size
+            });
+            createdRecords.push({
+                name: file.filename,
+                objectKey,
+                size: file.size,
+                mimeType: file.mimetype || mimeTypeForGalleryFile(file.filename)
+            });
+        }
+        writeGalleryManifest(folderPath, [...previousRecords, ...createdRecords]);
+        for (const file of uploadedFiles) {
+            fs.rmSync(file.path, { force: true });
+        }
+        return createdRecords;
+    } catch (error) {
+        await galleryStorage.deleteKeys(
+            createdRecords.map((file) => file.objectKey)
+        ).catch(() => {});
+        throw error;
+    }
+}
+
+async function removeGalleryRemoteObjects(folderPath) {
+    const manifest = readGalleryManifest(folderPath);
+    if (!manifest) return;
+    if (!galleryStorage.enabled) {
+        throw new Error("R2 de galerías no está configurado");
+    }
+    await galleryStorage.deleteKeys(manifest.files.map((file) => file.objectKey));
+}
+
+async function migrateLocalGalleriesToR2() {
+    if (!galleryStorage.enabled) return;
+    const folders = fs.readdirSync(uploadsDirectory, { withFileTypes: true })
+        .filter((item) => item.isDirectory() && validFolderId.test(item.name));
+    for (const folder of folders) {
+        const folderPath = galleryFolderPath(folder.name);
+        if (!folderPath || readGalleryManifest(folderPath)
+            || !deliveryStore.getDelivery(folder.name)) {
+            continue;
+        }
+        const records = listGalleryFileRecords(folderPath);
+        if (!records.length) continue;
+        try {
+            const imageNames = records.map((file) => file.name)
+                .filter((filename) => !isVideoFilename(filename));
+            const failures = await createPreviews(folderPath, imageNames);
+            if (failures.length) {
+                throw new Error(
+                    `no se pudieron preparar ${failures.length} miniaturas`
+                );
+            }
+            await persistGalleryFilesToR2(
+                folder.name,
+                folderPath,
+                records.map((file) => ({
+                    filename: file.name,
+                    path: path.join(folderPath, file.name),
+                    size: file.size,
+                    mimetype: file.mimeType
+                }))
+            );
+            console.log(`Galería ${folder.name} migrada a R2 (${records.length} archivos)`);
+        } catch (error) {
+            console.error(
+                `No se pudo migrar la galería ${folder.name}; se conserva en disco local`,
+                error
+            );
+        }
+    }
 }
 
 const videoExtensions = new Set([".mp4", ".mov", ".m4v", ".webm"]);
@@ -596,14 +797,8 @@ function planLimits(plan) {
 function deliveryStorageBytes(delivery) {
     const folderPath = galleryFolderPath(delivery.id);
     if (!folderPath || !fs.existsSync(folderPath)) return 0;
-
-    return listGalleryFiles(folderPath).reduce((total, filename) => {
-        try {
-            return total + fs.statSync(path.join(folderPath, filename)).size;
-        } catch {
-            return total;
-        }
-    }, 0);
+    return listGalleryFileRecords(folderPath)
+        .reduce((total, file) => total + file.size, 0);
 }
 
 function accountUsage(userId, plan = "free") {
@@ -999,7 +1194,15 @@ const storage = multer.diskStorage({
         let filename = `${safeBase}${safeExtension}`;
         let copyNumber = 2;
 
-        while (folderPath && fs.existsSync(path.join(folderPath, filename))) {
+        const existingNames = new Set(
+            folderPath && fs.existsSync(folderPath)
+                ? listGalleryFiles(folderPath)
+                : []
+        );
+        while (folderPath && (
+            existingNames.has(filename)
+            || fs.existsSync(path.join(folderPath, filename))
+        )) {
             filename = `${safeBase}-${copyNumber}${safeExtension}`;
             copyNumber += 1;
         }
@@ -1117,10 +1320,19 @@ app.get("/readyz", async (req, res) => {
                 ))
             ]);
         }
+        if (galleryStorage.enabled) {
+            await Promise.race([
+                galleryStorage.healthcheck(),
+                new Promise((_, reject) => setTimeout(
+                    () => reject(new Error("R2 de galerías no respondió a tiempo")), 5000
+                ))
+            ]);
+        }
         res.set("Cache-Control", "no-store");
         res.json({
             status: "ready",
-            transferStorage: objectStorage.provider
+            transferStorage: objectStorage.provider,
+            galleryStorage: galleryStorage.provider
         });
     } catch (error) {
         console.error(`[${req.requestId}] Readiness error`, error);
@@ -2239,6 +2451,12 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
     if (!delivery || !folderPath || !fs.existsSync(folderPath)) {
         return res.status(404).json({ error: "Entrega no encontrada" });
     }
+    const existingRecords = listGalleryFileRecords(folderPath);
+    const remoteGallery = galleryStoredInR2(folderPath);
+    const account = deliveryStore.getUserById(req.auth.userId);
+    const usageBeforeUpload = accountUsage(
+        req.auth.userId, account?.plan || "free"
+    );
 
     req.folderId = req.params.folderId;
     upload.array("photos", MAX_PHOTOS_PER_DELIVERY)(req, res, async (error) => {
@@ -2255,7 +2473,10 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
             });
         }
 
-        const files = listGalleryFiles(folderPath);
+        const files = [
+            ...existingRecords.map((file) => file.name),
+            ...req.files.map((file) => file.filename)
+        ];
         if (files.length > MAX_PHOTOS_PER_DELIVERY) {
             for (const file of req.files) {
                 fs.rmSync(file.path, { force: true });
@@ -2264,9 +2485,10 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
                 error: `Cada entrega admite como máximo ${MAX_PHOTOS_PER_DELIVERY} fotografías`
             });
         }
-        const totalSize = files.reduce((sum, filename) => {
-            return sum + fs.statSync(path.join(folderPath, filename)).size;
-        }, 0);
+        const newBytes = req.files.reduce((sum, file) => sum + file.size, 0);
+        const totalSize = existingRecords.reduce(
+            (sum, file) => sum + file.size, newBytes
+        );
         if (totalSize > MAX_DELIVERY_SIZE_BYTES) {
             for (const file of req.files) {
                 fs.rmSync(file.path, { force: true });
@@ -2275,9 +2497,8 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
                 error: "La entrega no puede superar 10 GB"
             });
         }
-        const account = deliveryStore.getUserById(req.auth.userId);
-        const usage = accountUsage(req.auth.userId, account?.plan || "free");
-        if (usage.storageBytes > usage.storageLimitBytes) {
+        if (usageBeforeUpload.storageBytes + newBytes
+            > usageBeforeUpload.storageLimitBytes) {
             for (const file of req.files) {
                 fs.rmSync(file.path, { force: true });
             }
@@ -2293,6 +2514,11 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
                 req.files.map((file) => file.filename)
                     .filter((filename) => !isVideoFilename(filename))
             );
+            if (remoteGallery) {
+                await persistGalleryFilesToR2(
+                    delivery.id, folderPath, req.files, existingRecords
+                );
+            }
         } catch (processingError) {
             console.error(processingError);
             for (const file of req.files) {
@@ -2308,32 +2534,56 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
             delivery.id, files.length, new Date().toISOString()
         );
         res.status(201).json({
-            files,
+            files: listGalleryFiles(folderPath),
             photoCount: files.length,
             mediaTypes: mediaTypesForFiles(files)
         });
     });
 });
 
-app.delete("/deliveries/:folderId/photos/:filename", requireAuth, requireSameOrigin, (req, res) => {
+app.delete("/deliveries/:folderId/photos/:filename", requireAuth, requireSameOrigin, async (req, res) => {
     const folderPath = galleryFolderPath(req.params.folderId);
     const targetPath = photoPath(req.params.folderId, req.params.filename);
     const delivery = deliveryStore.getOwnedDeliveryAccess(
         req.params.folderId, req.auth.userId
     );
+    const record = folderPath && fs.existsSync(folderPath)
+        ? galleryFileRecord(folderPath, req.params.filename)
+        : null;
 
-    if (!folderPath || !targetPath || !delivery || !fs.existsSync(targetPath)) {
+    if (!folderPath || !targetPath || !delivery || !record) {
         return res.status(404).json({ error: "Fotografía no encontrada" });
     }
 
-    const files = listGalleryFiles(folderPath);
-    if (files.length <= 1) {
+    const records = listGalleryFileRecords(folderPath);
+    const files = records.map((file) => file.name);
+    if (records.length <= 1) {
         return res.status(409).json({
             error: "Una entrega debe conservar al menos una fotografía"
         });
     }
 
-    fs.rmSync(targetPath);
+    try {
+        if (record.objectKey) {
+            if (!galleryStorage.enabled) {
+                return res.status(503).json({
+                    error: "El almacenamiento de la galería no está disponible"
+                });
+            }
+            await galleryStorage.deleteKeys([record.objectKey]);
+            writeGalleryManifest(
+                folderPath,
+                records.filter((file) => file.name !== req.params.filename)
+            );
+        } else {
+            fs.rmSync(targetPath);
+        }
+    } catch (error) {
+        console.error(`[${req.requestId}] Gallery file delete error`, error);
+        return res.status(502).json({
+            error: "No se pudo eliminar la fotografía del almacenamiento"
+        });
+    }
     removePreview(folderPath, req.params.filename);
     deliveryStore.deleteFavoritesForFile(delivery.id, req.params.filename);
     if (delivery.coverFilename === req.params.filename) {
@@ -2349,13 +2599,26 @@ app.delete("/deliveries/:folderId/photos/:filename", requireAuth, requireSameOri
     res.json({ photoCount: files.length - 1 });
 });
 
-app.delete("/deliveries", requireAuth, requireSameOrigin, (req, res) => {
+app.delete("/deliveries", requireAuth, requireSameOrigin, async (req, res) => {
     const deliveries = deliveryStore.listDeliveries(req.auth.userId);
-    for (const delivery of deliveries) {
-        const folderPath = galleryFolderPath(delivery.id);
-        if (folderPath && fs.existsSync(folderPath)) {
-            fs.rmSync(folderPath, { recursive: true });
+    try {
+        for (const delivery of deliveries) {
+            const folderPath = galleryFolderPath(delivery.id);
+            if (folderPath && fs.existsSync(folderPath)) {
+                await removeGalleryRemoteObjects(folderPath);
+            }
         }
+        for (const delivery of deliveries) {
+            const folderPath = galleryFolderPath(delivery.id);
+            if (folderPath && fs.existsSync(folderPath)) {
+                fs.rmSync(folderPath, { recursive: true });
+            }
+        }
+    } catch (error) {
+        console.error(`[${req.requestId}] Gallery bulk delete error`, error);
+        return res.status(502).json({
+            error: "No se pudieron eliminar todas las entregas del almacenamiento"
+        });
     }
 
     const deletedCount = deliveryStore.deleteAllDeliveries(req.auth.userId);
@@ -2366,7 +2629,7 @@ app.delete("/deliveries", requireAuth, requireSameOrigin, (req, res) => {
     });
 });
 
-app.delete("/deliveries/:folderId", requireAuth, requireSameOrigin, (req, res) => {
+app.delete("/deliveries/:folderId", requireAuth, requireSameOrigin, async (req, res) => {
     const folderPath = galleryFolderPath(req.params.folderId);
     const delivery = deliveryStore.getOwnedDelivery(
         req.params.folderId, req.auth.userId
@@ -2381,7 +2644,15 @@ app.delete("/deliveries/:folderId", requireAuth, requireSameOrigin, (req, res) =
         return res.status(404).json({ error: "Entrega no encontrada" });
     }
 
-    fs.rmSync(folderPath, { recursive: true });
+    try {
+        await removeGalleryRemoteObjects(folderPath);
+        fs.rmSync(folderPath, { recursive: true });
+    } catch (error) {
+        console.error(`[${req.requestId}] Gallery delete error`, error);
+        return res.status(502).json({
+            error: "No se pudo eliminar la entrega del almacenamiento"
+        });
+    }
     deliveryStore.deleteDelivery(req.params.folderId, req.auth.userId);
 
     res.json({ message: "Entrega eliminada correctamente" });
@@ -2477,6 +2748,7 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
             });
         }
 
+        let remoteRecords = [];
         try {
             await createPreviews(
                 folderPath,
@@ -2501,6 +2773,12 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
                 }
             }
 
+            if (galleryStorage.enabled) {
+                remoteRecords = await persistGalleryFilesToR2(
+                    folderId, folderPath, photos
+                );
+            }
+
             deliveryStore.createDelivery({
                 id: folderId,
                 ownerId: req.auth.userId,
@@ -2521,6 +2799,11 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
                 updatedAt: createdAt
             });
         } catch (databaseError) {
+            if (remoteRecords.length) {
+                await galleryStorage.deleteKeys(
+                    remoteRecords.map((file) => file.objectKey)
+                ).catch(() => {});
+            }
             fs.rmSync(folderPath, { recursive: true, force: true });
             console.error(databaseError);
             return res.status(500).json({
@@ -2589,7 +2872,7 @@ app.post("/gallery/:folderId/unlock", requireSameOrigin, (req, res) => {
     res.status(204).end();
 });
 
-app.get("/gallery/:folderId/download", (req, res) => {
+app.get("/gallery/:folderId/download", async (req, res) => {
     const context = getPublicGallery(req, res);
     if (!context) return;
     if (!context.delivery.allowOriginalDownload) {
@@ -2598,7 +2881,8 @@ app.get("/gallery/:folderId/download", (req, res) => {
         });
     }
 
-    const files = listGalleryFiles(context.folderPath);
+    const records = listGalleryFileRecords(context.folderPath);
+    const files = records.map((file) => file.name);
     const archiveName = safeDownloadName(context.delivery.clientName);
     deliveryStore.logActivity(context.delivery.id, "download_gallery_original", {
         details: { fileCount: files.length }
@@ -2615,14 +2899,27 @@ app.get("/gallery/:folderId/download", (req, res) => {
 
     archive.pipe(res);
 
-    for (const file of files) {
-        archive.file(path.join(context.folderPath, file), { name: file });
-    }
-
-    archive.finalize().catch((error) => {
+    try {
+        for (const file of records) {
+            if (file.objectKey) {
+                if (!galleryStorage.enabled) {
+                    throw new Error("R2 de galerías no está disponible");
+                }
+                archive.append(
+                    await galleryStorage.getObjectStream(file.objectKey),
+                    { name: file.name }
+                );
+            } else {
+                archive.file(path.join(context.folderPath, file.name), {
+                    name: file.name
+                });
+            }
+        }
+        await archive.finalize();
+    } catch (error) {
         console.error(error);
         if (!res.destroyed) res.destroy(error);
-    });
+    }
 });
 
 app.get("/gallery/:folderId/download/web", async (req, res) => {
@@ -2634,14 +2931,19 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
         });
     }
 
-    const files = listGalleryFiles(context.folderPath)
-        .filter((filename) => !isVideoFilename(filename));
+    const records = listGalleryFileRecords(context.folderPath)
+        .filter((file) => !isVideoFilename(file.name));
+    const files = records.map((file) => file.name);
     if (!files.length) {
         return res.status(400).json({
             error: "Esta galería no contiene fotografías para preparar en versión web"
         });
     }
-    const failures = await createPreviews(context.folderPath, files);
+    const failures = galleryStoredInR2(context.folderPath)
+        ? files.filter((filename) => !fs.existsSync(
+            previewPath(context.folderPath, filename)
+        ))
+        : await createPreviews(context.folderPath, files);
     if (failures.length) {
         console.error("No se pudieron generar miniaturas para la descarga web", failures);
         return res.status(500).json({
@@ -2742,7 +3044,8 @@ app.get("/gallery/:folderId/previews/:filename", async (req, res) => {
     const context = getPublicGallery(req, res);
     if (!context) return;
     const sourcePath = photoPath(req.params.folderId, req.params.filename);
-    if (!sourcePath || !fs.existsSync(sourcePath)) {
+    const record = galleryFileRecord(context.folderPath, req.params.filename);
+    if (!sourcePath || !record) {
         return res.status(404).json({ error: "Fotografía no encontrada" });
     }
     if (isVideoFilename(req.params.filename)) {
@@ -2754,6 +3057,15 @@ app.get("/gallery/:folderId/previews/:filename", async (req, res) => {
             context.folderPath,
             req.params.filename
         );
+        if (!fs.existsSync(targetPath) && record.objectKey) {
+            if (!galleryStorage.enabled) {
+                throw new Error("R2 de galerías no está disponible");
+            }
+            res.set("Cache-Control", "private, max-age=300");
+            return res.redirect(
+                await galleryStorage.inlineUrl(record.objectKey, record.name)
+            );
+        }
         if (!fs.existsSync(targetPath)) {
             targetPath = await createPreview(
                 context.folderPath,
@@ -2764,25 +3076,42 @@ app.get("/gallery/:folderId/previews/:filename", async (req, res) => {
         res.sendFile(targetPath, { dotfiles: "allow" });
     } catch (processingError) {
         console.error(processingError);
+        if (record.objectKey && galleryStorage.enabled) {
+            res.set("Cache-Control", "private, max-age=300");
+            return res.redirect(
+                await galleryStorage.inlineUrl(record.objectKey, record.name)
+            );
+        }
         res.set("Cache-Control", "private, max-age=300");
         res.sendFile(sourcePath, { dotfiles: "allow" });
     }
 });
 
-app.get("/gallery/:folderId/photos/:filename", (req, res) => {
+app.get("/gallery/:folderId/photos/:filename", async (req, res) => {
     const context = getPublicGallery(req, res);
     if (!context) return;
     const targetPath = photoPath(req.params.folderId, req.params.filename);
+    const record = galleryFileRecord(context.folderPath, req.params.filename);
 
-    if (!targetPath || !fs.existsSync(targetPath)) {
+    if (!targetPath || !record) {
         return res.status(404).json({ error: "Fotografía no encontrada" });
     }
 
     res.set("Cache-Control", "private, max-age=3600");
+    if (record.objectKey) {
+        if (!galleryStorage.enabled) {
+            return res.status(503).json({
+                error: "El almacenamiento de la galería no está disponible"
+            });
+        }
+        return res.redirect(
+            await galleryStorage.inlineUrl(record.objectKey, record.name)
+        );
+    }
     res.sendFile(targetPath, { dotfiles: "allow" });
 });
 
-app.get("/gallery/:folderId/photos/:filename/download", (req, res) => {
+app.get("/gallery/:folderId/photos/:filename/download", async (req, res) => {
     const context = getPublicGallery(req, res);
     if (!context) return;
     if (!context.delivery.allowOriginalDownload) {
@@ -2792,13 +3121,24 @@ app.get("/gallery/:folderId/photos/:filename/download", (req, res) => {
     }
 
     const targetPath = photoPath(req.params.folderId, req.params.filename);
-    if (!targetPath || !fs.existsSync(targetPath)) {
+    const record = galleryFileRecord(context.folderPath, req.params.filename);
+    if (!targetPath || !record) {
         return res.status(404).json({ error: "Fotografía no encontrada" });
     }
 
     deliveryStore.logActivity(context.delivery.id, "download_photo_original", {
         filename: req.params.filename
     });
+    if (record.objectKey) {
+        if (!galleryStorage.enabled) {
+            return res.status(503).json({
+                error: "El almacenamiento de la galería no está disponible"
+            });
+        }
+        return res.redirect(
+            await galleryStorage.downloadUrl(record.objectKey, record.name)
+        );
+    }
     res.download(targetPath, req.params.filename);
 });
 
@@ -2811,7 +3151,8 @@ app.get("/gallery/:folderId/photos/:filename/download/web", async (req, res) => 
         });
     }
     const sourcePath = photoPath(req.params.folderId, req.params.filename);
-    if (!sourcePath || !fs.existsSync(sourcePath)) {
+    const record = galleryFileRecord(context.folderPath, req.params.filename);
+    if (!sourcePath || !record) {
         return res.status(404).json({ error: "Fotografía no encontrada" });
     }
     if (isVideoFilename(req.params.filename)) {
@@ -2820,10 +3161,12 @@ app.get("/gallery/:folderId/photos/:filename/download/web", async (req, res) => 
         });
     }
     try {
-        const targetPath = await createPreview(
-            context.folderPath,
-            req.params.filename
-        );
+        const targetPath = record.objectKey
+            ? previewPath(context.folderPath, req.params.filename)
+            : await createPreview(context.folderPath, req.params.filename);
+        if (!fs.existsSync(targetPath)) {
+            throw new Error("La versión web no está disponible");
+        }
         deliveryStore.logActivity(context.delivery.id, "download_photo_web", {
             filename: req.params.filename
         });
@@ -2851,7 +3194,7 @@ app.post("/gallery/:folderId/favorites", requireSameOrigin, (req, res) => {
 
     const filename = req.body?.filename;
     const targetPath = photoPath(req.params.folderId, filename);
-    if (!targetPath || !fs.existsSync(targetPath)) {
+    if (!targetPath || !galleryFileRecord(context.folderPath, filename)) {
         return res.status(404).json({ error: "Fotografía no encontrada" });
     }
     const currentFavorites = deliveryStore.listFavorites(context.delivery.id);
@@ -3151,6 +3494,9 @@ app.use((error, req, res, next) => {
 
 const server = app.listen(PORT, () => {
     console.log(`PHOcloud iniciado en ${process.env.PHOCLOUD_PUBLIC_URL || `http://localhost:${PORT}`}`);
+    migrateLocalGalleriesToR2().catch((error) => {
+        console.error("No se pudo completar la migración de galerías a R2", error);
+    });
 });
 
 server.requestTimeout = Number(process.env.PHOCLOUD_REQUEST_TIMEOUT_MS)

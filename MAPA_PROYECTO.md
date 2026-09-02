@@ -149,7 +149,7 @@ Backend/server.js    → coordina fotos, datos, descargas y enlaces
 Backend/database.js  → guarda y consulta entregas con SQLite
 Backend/auth.js      → contraseñas, sesiones y cookies
 Backend/media.js     → crea miniaturas y adapta logotipos
-Backend/mailer.js    → envía verificaciones y recuperaciones por SMTP
+Backend/mailer.js    → envía verificaciones y recuperaciones por HTTPS o SMTP
 scripts/preflight.js → comprueba que producción esté configurada
 scripts/backup.js    → crea copias de datos y fotografías
 data/phocloud.db     → base de datos local

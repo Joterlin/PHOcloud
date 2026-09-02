@@ -53,6 +53,20 @@ const transferStorage = (process.env.PHOCLOUD_TRANSFER_STORAGE || "local")
 if (!["local", "r2"].includes(transferStorage)) {
     errors.push("PHOCLOUD_TRANSFER_STORAGE debe ser local o r2");
 }
+
+const galleryStorage = (process.env.PHOCLOUD_GALLERY_STORAGE || "local")
+    .trim().toLowerCase();
+if (!["local", "r2"].includes(galleryStorage)) {
+    errors.push("PHOCLOUD_GALLERY_STORAGE debe ser local o r2");
+}
+if (galleryStorage === "r2") {
+    required("PHOCLOUD_R2_ACCOUNT_ID");
+    required("PHOCLOUD_GALLERY_R2_ACCESS_KEY_ID");
+    required("PHOCLOUD_GALLERY_R2_SECRET_ACCESS_KEY");
+    required("PHOCLOUD_GALLERY_R2_BUCKET");
+} else {
+    warnings.push("Las galerías usan disco local; configura R2 para ampliar el espacio permanente");
+}
 if (transferStorage === "r2") {
     required("PHOCLOUD_R2_ACCOUNT_ID");
     required("PHOCLOUD_R2_ACCESS_KEY_ID");

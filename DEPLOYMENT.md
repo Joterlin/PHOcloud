@@ -28,6 +28,10 @@ En producción son obligatorias:
   variables `SMTP_*` y `PHOCLOUD_FROM_EMAIL`
 - `PHOCLOUD_LEGAL_NAME`, `PHOCLOUD_LEGAL_EMAIL` y `PHOCLOUD_LEGAL_COUNTRY`
 - `PHOCLOUD_TRANSFER_STORAGE=r2` y las variables `PHOCLOUD_R2_*`
+- `PHOCLOUD_GALLERY_STORAGE=r2`,
+  `PHOCLOUD_GALLERY_R2_ACCESS_KEY_ID`,
+  `PHOCLOUD_GALLERY_R2_SECRET_ACCESS_KEY` y
+  `PHOCLOUD_GALLERY_R2_BUCKET`
 
 ## Transferencias grandes con R2
 
@@ -64,6 +68,16 @@ comprueba el acceso a objetos usando el mismo token restringido que PHOcloud.
 La política CORS se aplica con `deployment/r2-cors.json` mediante Wrangler y
 la eliminación tras un día se configura en el panel o con Wrangler. `/readyz`
 también comprueba el bucket cuando R2 está activo.
+
+## Galerías permanentes con R2
+
+Usa un segundo bucket privado sin regla de caducidad y una credencial
+`Object Read & Write` limitada únicamente a ese bucket. Al activar
+`PHOCLOUD_GALLERY_STORAGE=r2`, los originales de las nuevas galerías se
+guardan allí. Durante el arranque, las galerías locales existentes se copian a
+R2; cada original local se elimina solo después de guardar correctamente el
+objeto remoto y su manifiesto. La base de datos, miniaturas y logotipos siguen
+en el volumen persistente y deben incluirse en las copias de seguridad.
 
 Ejecuta `npm run preflight` antes de iniciar. El proceso se detendrá si falta una
 configuración crítica o si la URL pública no usa HTTPS.

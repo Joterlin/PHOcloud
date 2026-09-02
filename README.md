@@ -55,7 +55,10 @@ npm run validate
 
 - `data/phocloud.db`: usuarios, sesiones, entregas, configuración y favoritas.
 - `data/branding/`: logotipo global de cada fotógrafo.
-- `uploads/<id>/`: archivos originales, miniaturas y marca específica de cada galería.
+- `uploads/<id>/`: miniaturas, manifiesto y marca específica de cada galería.
+  En modo local también contiene los originales; con R2, los originales se
+  guardan en el bucket permanente y las galerías existentes se migran sin
+  cambiar sus enlaces.
 - `transfers/<id>/`: archivos originales de cada transferencia temporal.
 
 Las contraseñas se guardan como hashes `scrypt`, nunca como texto legible.
@@ -75,6 +78,16 @@ del cliente. Las contraseñas de galerías nunca se incluyen en el mensaje porqu
 PHOcloud no conserva una versión legible de ellas.
 
 El archivo `.env` contiene secretos y está excluido del control de versiones.
+
+## Almacenamiento de galerías
+
+Las transferencias temporales y las galerías usan buckets separados. El bucket
+de transferencias elimina los objetos tras 24 horas. El bucket de galerías no
+debe tener una regla de caducidad. Para activarlo configura
+`PHOCLOUD_GALLERY_STORAGE=r2`, `PHOCLOUD_GALLERY_R2_ACCESS_KEY_ID`,
+`PHOCLOUD_GALLERY_R2_SECRET_ACCESS_KEY` y
+`PHOCLOUD_GALLERY_R2_BUCKET`. Las miniaturas y los logotipos permanecen en el
+volumen de la aplicación para responder rápidamente.
 
 ## Planes
 
