@@ -805,12 +805,9 @@ function accountUsage(userId, plan = "free") {
     const deliveries = deliveryStore.listDeliveries(userId);
     const transfers = deliveryStore.listTransfers(userId);
     const limits = planLimits(plan);
-    const activeDeliveries = deliveries.filter(
-        (delivery) => delivery.viewingEnabled
-    );
     return {
         plan,
-        galleryCount: activeDeliveries.length,
+        galleryCount: deliveries.length,
         totalGalleryCount: deliveries.length,
         galleryLimit: limits.galleries,
         transferCount: transfers.length,
@@ -2293,17 +2290,6 @@ app.put("/deliveries/:folderId", requireAuth, requireSameOrigin, (req, res) => {
     }
 
     const settings = validation.value;
-    if (settings.viewingEnabled && !current.viewingEnabled) {
-        const account = deliveryStore.getUserById(req.auth.userId);
-        const usage = accountUsage(req.auth.userId, account?.plan || "free");
-        if (usage.galleryCount >= usage.galleryLimit) {
-            return res.status(403).json({
-                error: "Ya tienes el máximo de galerías activas de tu plan. Desactiva la visualización de otra galería para activar esta.",
-                code: "PLAN_ACTIVE_GALLERY_LIMIT",
-                usage
-            });
-        }
-    }
     const folderPath = galleryFolderPath(current.id);
     const files = folderPath && fs.existsSync(folderPath)
         ? listGalleryFiles(folderPath)
@@ -2668,6 +2654,13 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
     const usageBeforeUpload = accountUsage(
         req.auth.userId, account?.plan || "free"
     );
+    if (usageBeforeUpload.galleryCount >= usageBeforeUpload.galleryLimit) {
+        return res.status(403).json({
+            error: `Ya tienes ${usageBeforeUpload.galleryLimit} galerías. Elimina una antes de crear otra.`,
+            code: "PLAN_GALLERY_LIMIT",
+            usage: usageBeforeUpload
+        });
+    }
     const folderId = uuidv4();
     req.folderId = folderId;
 
@@ -2714,15 +2707,6 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
 
         const createdAt = new Date().toISOString();
         const settings = validation.value;
-        if (settings.viewingEnabled
-            && usageBeforeUpload.galleryCount >= usageBeforeUpload.galleryLimit) {
-            fs.rmSync(folderPath, { recursive: true, force: true });
-            return res.status(403).json({
-                error: "Ya tienes el máximo de galerías activas. Crea esta entrega con la visualización desactivada o desactiva otra galería.",
-                code: "PLAN_ACTIVE_GALLERY_LIMIT",
-                usage: usageBeforeUpload
-            });
-        }
         const coverIndex = Math.max(
             0,
             Math.min(Number(req.body.coverIndex) || 0, photos.length - 1)
@@ -2782,6 +2766,23 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
                 remoteRecords = await persistGalleryFilesToR2(
                     folderId, folderPath, photos
                 );
+            }
+
+            const usageAtSave = accountUsage(
+                req.auth.userId, account?.plan || "free"
+            );
+            if (usageAtSave.galleryCount >= usageAtSave.galleryLimit) {
+                if (remoteRecords.length) {
+                    await galleryStorage.deleteKeys(
+                        remoteRecords.map((file) => file.objectKey)
+                    ).catch(() => {});
+                }
+                fs.rmSync(folderPath, { recursive: true, force: true });
+                return res.status(403).json({
+                    error: `Ya tienes ${usageAtSave.galleryLimit} galerías. Elimina una antes de crear otra.`,
+                    code: "PLAN_GALLERY_LIMIT",
+                    usage: usageAtSave
+                });
             }
 
             deliveryStore.createDelivery({

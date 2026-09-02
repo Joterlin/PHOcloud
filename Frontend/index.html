@@ -39,10 +39,10 @@
 
             <div id="planLimitNotice" class="plan-limit-notice" hidden>
                 <div>
-                    <strong>Ya tienes tres galerías activas</strong>
-                    <p>Puedes guardar más entregas, pero deberás desactivar la visualización de una para activar otra.</p>
+                    <strong>Has alcanzado el límite de galerías</strong>
+                    <p>Elimina una de tus galerías para poder crear una nueva.</p>
                 </div>
-                <button id="viewPlansFromLimit" type="button">Ver planes</button>
+                <button id="viewPlansFromLimit" type="button">Ver mis galerías</button>
             </div>
 
             <div class="delivery-builder quick-gallery-builder">
@@ -329,23 +329,51 @@
                 <span id="accountPlanBadge">Gratis</span>
             </div>
             <section class="usage-card">
-                <div class="usage-heading"><strong>Galerías activas</strong><span id="galleryUsageText">0 de 3</span></div>
+                <div class="usage-heading"><strong>Galerías utilizadas</strong><span id="galleryUsageText">0/3 galerías</span></div>
                 <div class="usage-track"><div id="galleryUsageBar"></div></div>
                 <div class="usage-heading storage-heading"><strong>Almacenamiento</strong><span id="storageUsageText">0 MB</span></div>
                 <div class="usage-track"><div id="storageUsageBar"></div></div>
                 <div class="usage-heading storage-heading"><strong>Transferencias temporales</strong><span id="transferUsageText">0 GB</span></div>
                 <div class="usage-track"><div id="transferUsageBar"></div></div>
             </section>
-            <section class="plan-card featured-plan">
-                <p class="edit-dialog-eyebrow">PLAN PROFESIONAL</p>
-                <h3>Crece sin detener tus entregas</h3>
-                <ul>
-                    <li>Hasta 100 galerías activas</li>
-                    <li>250 GB de almacenamiento</li>
-                    <li>Todas las funciones de personalización</li>
-                </ul>
-                <button id="upgradeButton" type="button" class="primary">Pagos disponibles al publicar PHOcloud</button>
-                <p class="plan-note">La estructura del plan ya está preparada. El cobro real se conectará al publicar la plataforma.</p>
+            <section class="pricing-preview" aria-labelledby="pricingPreviewTitle">
+                <div class="pricing-preview-heading">
+                    <div>
+                        <p class="edit-dialog-eyebrow">PRÓXIMOS PLANES</p>
+                        <h3 id="pricingPreviewTitle">Más espacio cuando lo necesites</h3>
+                    </div>
+                    <span>Vista previa</span>
+                </div>
+                <div class="plan-grid">
+                    <article class="plan-card featured-plan">
+                        <span class="plan-recommended">RECOMENDADO</span>
+                        <p class="plan-name">CREADOR</p>
+                        <div class="plan-price"><strong>4,99 €</strong><span>/ mes</span></div>
+                        <p class="plan-description">Para fotógrafos que entregan trabajos de forma habitual.</p>
+                        <ul>
+                            <li>Hasta 25 galerías</li>
+                            <li>100 GB para fotografías y vídeos</li>
+                            <li>Transferencias temporales de hasta 250 GB</li>
+                            <li>Marca, logotipo, enlaces y descargas completas</li>
+                            <li>Galerías sin la firma de PHOcloud</li>
+                        </ul>
+                        <button type="button" class="primary" disabled>Próximamente</button>
+                    </article>
+                    <article class="plan-card pro-plan">
+                        <p class="plan-name">PRO</p>
+                        <div class="plan-price"><strong>9,99 €</strong><span>/ mes</span></div>
+                        <p class="plan-description">Para profesionales con más volumen y varias entregas abiertas.</p>
+                        <ul>
+                            <li>Hasta 100 galerías</li>
+                            <li>300 GB para fotografías y vídeos</li>
+                            <li>Transferencias temporales de hasta 1 TB</li>
+                            <li>Dominio propio y varias identidades de marca</li>
+                            <li>Estadísticas avanzadas y soporte prioritario</li>
+                        </ul>
+                        <button type="button" class="secondary" disabled>Próximamente</button>
+                    </article>
+                </div>
+                <p class="plan-note">Estos planes son una vista previa. Todavía no se realizará ningún cobro.</p>
             </section>
         </div>
     </dialog>

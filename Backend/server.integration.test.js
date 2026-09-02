@@ -326,11 +326,22 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal((await uploadSimpleGallery("Activa tres", true)).response.status, 201);
         const fourthActive = await uploadSimpleGallery("Activa cuatro", true);
         assert.equal(fourthActive.response.status, 403);
-        assert.equal(fourthActive.data.code, "PLAN_ACTIVE_GALLERY_LIMIT");
-        assert.equal((await uploadSimpleGallery("Entrega guardada", false)).response.status, 201);
+        assert.equal(fourthActive.data.code, "PLAN_GALLERY_LIMIT");
+        const fourthHidden = await uploadSimpleGallery("Entrega oculta", false);
+        assert.equal(fourthHidden.response.status, 403);
+        assert.equal(fourthHidden.data.code, "PLAN_GALLERY_LIMIT");
+        const deletedForReplacement = await jsonRequest(
+            `${baseUrl}/deliveries/${uploadData.galleryId}`,
+            { method: "DELETE", cookie }
+        );
+        assert.equal(deletedForReplacement.response.status, 200);
+        assert.equal(
+            (await uploadSimpleGallery("Galería de reemplazo", true)).response.status,
+            201
+        );
         const finalAccount = await jsonRequest(`${baseUrl}/account`, { cookie });
         assert.equal(finalAccount.data.account.usage.galleryCount, 3);
-        assert.equal(finalAccount.data.account.usage.totalGalleryCount, 4);
+        assert.equal(finalAccount.data.account.usage.totalGalleryCount, 3);
         assert.equal((await fetch(`${baseUrl}/readyz`)).status, 200);
     } finally {
         child.kill("SIGTERM");

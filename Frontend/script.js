@@ -560,7 +560,11 @@ function uploadWithProgress(url, formData) {
 }
 
 function setUploading(uploading) {
-    createDeliveryButton.disabled = uploading;
+    const galleryLimitReached = Boolean(
+        accountData?.usage
+        && accountData.usage.galleryCount >= accountData.usage.galleryLimit
+    );
+    createDeliveryButton.disabled = uploading || galleryLimitReached;
     addMorePhotos.disabled = uploading;
     clearSelectionButton.disabled = uploading;
     uploadStatus.hidden = !uploading;
@@ -590,7 +594,7 @@ logoutButton.addEventListener("click", async () => {
 });
 
 function planLabel(plan) {
-    return ({ free: "Plan gratuito", professional: "Plan profesional", studio: "Plan estudio" })[plan]
+    return ({ free: "Plan gratuito", professional: "Plan Creador", studio: "Plan Pro" })[plan]
         || "Plan gratuito";
 }
 
@@ -611,12 +615,12 @@ async function loadAccount() {
             : 0
     );
     byId("accountName").textContent = accountData.displayName || accountData.username;
-    byId("accountPlan").textContent = `${planLabel(accountData.plan)} · ${usage.galleryCount}/${usage.galleryLimit}`;
+    byId("accountPlan").textContent = `${planLabel(accountData.plan)} · ${usage.galleryCount}/${usage.galleryLimit} galerías`;
     byId("accountDisplayName").textContent = accountData.displayName || accountData.username;
     byId("accountEmail").textContent = accountData.email || `@${accountData.username}`;
     byId("accountAvatar").textContent = (accountData.displayName || accountData.username).slice(0, 1).toUpperCase();
     byId("accountPlanBadge").textContent = planLabel(accountData.plan).replace("Plan ", "");
-    byId("galleryUsageText").textContent = `${usage.galleryCount} de ${usage.galleryLimit}`;
+    byId("galleryUsageText").textContent = `${usage.galleryCount}/${usage.galleryLimit} galerías`;
     byId("galleryUsageBar").style.width = `${galleryPercent}%`;
     byId("storageUsageText").textContent = `${formatBytes(usage.storageBytes)} de ${formatBytes(usage.storageLimitBytes)}`;
     byId("storageUsageBar").style.width = `${storagePercent}%`;
@@ -625,20 +629,20 @@ async function loadAccount() {
 
     const limitReached = usage.galleryCount >= usage.galleryLimit;
     byId("planLimitNotice").hidden = !limitReached;
-    uploadButton.disabled = false;
+    uploadButton.disabled = limitReached;
+    createDeliveryButton.disabled = limitReached;
     uploadButton.title = limitReached
-        ? "La nueva entrega se guardará con la visualización desactivada"
+        ? "Elimina una galería antes de crear otra"
         : "";
     const viewingControl = byId("viewingEnabled");
-    viewingControl.disabled = limitReached;
-    if (limitReached) viewingControl.checked = false;
+    viewingControl.disabled = false;
 }
 
 accountButton.addEventListener("click", () => accountDialog.showModal());
 byId("closeAccountDialog").addEventListener("click", () => accountDialog.close());
-byId("viewPlansFromLimit").addEventListener("click", () => accountDialog.showModal());
-byId("upgradeButton").addEventListener("click", () => {
-    byId("upgradeButton").textContent = "Se activará al publicar la plataforma";
+byId("viewPlansFromLimit").addEventListener("click", () => {
+    showProduct("galleries");
+    byId("deliveriesPanel").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 async function loadBrandProfile() {

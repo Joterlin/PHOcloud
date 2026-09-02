@@ -77,7 +77,7 @@ function configureMode(nextMode) {
 
     const content = {
         login: ["TU ESPACIO PHOCLOUD", "Bienvenido de nuevo", "Envía archivos grandes y gestiona tus galerías profesionales.", "Entrar"],
-        register: ["EMPIEZA GRATIS", "Crea tu cuenta", "Transfiere hasta 50 GB durante 24 horas y publica tres galerías activas.", "Crear cuenta"],
+        register: ["EMPIEZA GRATIS", "Crea tu cuenta", "Transfiere hasta 50 GB durante 24 horas y crea hasta tres galerías.", "Crear cuenta"],
         setup: ["PRIMERA CONFIGURACIÓN", "Crea la cuenta inicial", "Administra transferencias, galerías y marca desde un único espacio.", "Crear cuenta"],
         forgot: ["RECUPERAR ACCESO", "¿Olvidaste tu contraseña?", "Te enviaremos un enlace seguro para crear una nueva.", "Enviar enlace"],
         resend: ["CONFIRMAR CORREO", "Solicita otro enlace", "Escribe el correo con el que creaste tu cuenta.", "Reenviar verificación"],
