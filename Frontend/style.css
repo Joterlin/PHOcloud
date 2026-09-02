@@ -160,6 +160,7 @@ h1 {
 .transfer-dropzone.is-dragover { border-color: #c9aa70; background-color: #15130f; }
 .transfer-fields { padding: 21px; display: grid; gap: 15px; border: 1px solid #302e2a; border-radius: 18px; background: #0c0c0b; }
 .transfer-fields .create-button { margin-top: 2px; }
+.transfer-error { margin: -3px 0 0; padding: 11px 13px; border: 1px solid rgba(220, 80, 70, .3); border-radius: 10px; background: rgba(220, 80, 70, .08); color: #ff9b94; font-size: 12px; line-height: 1.45; }
 .transfer-retention { padding: 13px 15px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(201,170,112,.28); border-radius: 12px; background: rgba(201,170,112,.065); text-align: left; }
 .transfer-retention strong { color: #c9aa70; font-size: 13px; }
 .transfer-retention span { color: #85827c; font-size: 10px; }
@@ -663,6 +664,8 @@ input:focus, textarea:focus, select:focus { border-color: #756443; }
 .transfer-stats { display: grid; gap: 4px; text-align: right; }
 .transfer-stats strong { color: #c9aa70; font-size: 17px; }
 .transfer-stats span { color: #77746e; font-size: 10px; }
+.transfer-stats.transfer-incomplete strong { color: #e3847d; }
+.transfer-stats.transfer-incomplete span { max-width: 120px; color: #a67c78; }
 
 .deliveries-heading {
     margin-bottom: 20px;
@@ -781,6 +784,7 @@ html[data-theme="light"] .selection-heading p,
 html[data-theme="light"] .photo-manager p,
 html[data-theme="light"] .dialog-intro,
 html[data-theme="light"] .options-help { color: #6f6b64; }
+html[data-theme="light"] .transfer-error { background: #fff3f1; color: #9b3029; }
 html[data-theme="light"] .top-actions button {
     border-color: #d7d2c9;
     background: rgba(255, 255, 255, .86);

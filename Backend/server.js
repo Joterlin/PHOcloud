@@ -634,7 +634,7 @@ function validateBrandSettings(input) {
     }
 
     const accentColor = input.accentColor || "#c9aa70";
-    const backgroundColor = input.backgroundColor || "#080808";
+    const backgroundColor = input.backgroundColor || "#ffffff";
     if (!/^#[0-9a-f]{6}$/i.test(accentColor)
         || !/^#[0-9a-f]{6}$/i.test(backgroundColor)) {
         return { error: "Los colores seleccionados no son válidos" };
@@ -3363,7 +3363,7 @@ app.get("/transfer/:transferId", (req, res) => {
         files,
         brandName: profile.brandName || "PHOcloud",
         accentColor: profile.accentColor || "#c9aa70",
-        backgroundColor: profile.backgroundColor || "#080808",
+        backgroundColor: profile.backgroundColor || "#ffffff",
         hasLogo: fs.existsSync(logoPath),
         logoUrl: fs.existsSync(logoPath)
             ? `/transfer/${context.transfer.id}/logo`

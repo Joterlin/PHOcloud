@@ -59,11 +59,12 @@ async function loadTransfer() {
 
 function renderTransfer(data) {
     document.documentElement.style.setProperty("--accent", data.accentColor || "#c9aa70");
-    document.documentElement.style.setProperty("--page-bg", data.backgroundColor || "#080808");
-    const background = data.backgroundColor || "#080808";
+    document.documentElement.style.setProperty("--page-bg", data.backgroundColor || "#ffffff");
+    const background = data.backgroundColor || "#ffffff";
     const rgb = background.slice(1).match(/.{2}/g)?.map((part) => parseInt(part, 16)) || [8,8,8];
     const light = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 > 150;
     document.documentElement.style.setProperty("--text", light ? "#171717" : "#f5f3ef");
+    document.documentElement.style.colorScheme = light ? "light" : "dark";
     byId("transferBrand").textContent = data.brandName || "PHOcloud";
     byId("transferLogo").hidden = !data.logoUrl;
     byId("transferBrand").hidden = Boolean(data.logoUrl);

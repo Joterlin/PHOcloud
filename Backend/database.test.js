@@ -48,7 +48,7 @@ test("crea, consulta y elimina entregas", () => {
                 favoritesEnabled: true,
                 brandName: "",
                 accentColor: "#c9aa70",
-                backgroundColor: "#080808",
+                backgroundColor: "#ffffff",
                 websiteUrl: "",
                 instagramUrl: "",
                 facebookUrl: "",

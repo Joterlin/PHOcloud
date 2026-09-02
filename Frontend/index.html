@@ -185,7 +185,7 @@
                     </label>
                     <label class="field color-field" for="backgroundColor">
                         Color de fondo de la galería
-                        <input id="backgroundColor" type="color" value="#080808">
+                        <input id="backgroundColor" type="color" value="#ffffff">
                     </label>
                     <section class="field field-wide link-editor" aria-labelledby="brandLinksTitle">
                         <div class="link-editor-heading">
@@ -245,8 +245,8 @@
                     </div>
                 </div>
                 <div class="transfer-fields">
-                    <label class="field" for="transferTitle">Título
-                        <input id="transferTitle" type="text" maxlength="100" placeholder="Ej. Material campaña de verano" required>
+                    <label class="field" for="transferTitle">Título (opcional)
+                        <input id="transferTitle" type="text" maxlength="100" placeholder="Si lo dejas vacío, lo creamos por ti">
                     </label>
                     <label class="field" for="transferRecipient">Correo del destinatario (opcional)
                         <input id="transferRecipient" type="email" maxlength="254" placeholder="persona@correo.com">
@@ -259,6 +259,7 @@
                         <input id="transferPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password">
                     </label>
                     <button id="createTransfer" type="button" class="primary create-button">Crear transferencia</button>
+                    <p id="transferError" class="transfer-error" role="alert" hidden></p>
                     <div id="transferUploadStatus" class="transfer-upload-status" hidden>
                         <div class="progress-track"><div id="transferUploadProgress"></div></div>
                         <p id="transferUploadText"></p>
@@ -384,7 +385,7 @@
                     <input id="profileAccentColor" type="color" value="#c9aa70">
                 </label>
                 <label class="field color-field" for="profileBackgroundColor">Color de fondo de la galería
-                    <input id="profileBackgroundColor" type="color" value="#080808">
+                    <input id="profileBackgroundColor" type="color" value="#ffffff">
                 </label>
                 <section class="field field-wide link-editor" aria-labelledby="profileLinksTitle">
                     <div class="link-editor-heading">

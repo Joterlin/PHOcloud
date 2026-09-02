@@ -652,7 +652,7 @@ function applyProfileToCreate() {
     if (!brandProfile) return;
     byId("brandName").value = brandProfile.brandName || "";
     byId("accentColor").value = brandProfile.accentColor || "#c9aa70";
-    byId("backgroundColor").value = brandProfile.backgroundColor || "#080808";
+    byId("backgroundColor").value = brandProfile.backgroundColor || "#ffffff";
     byId("brandLogoScale").value = brandProfile.logoScale ?? 100;
     byId("brandLogoPositionX").value = brandProfile.logoPositionX ?? 50;
     byId("brandLogoPositionY").value = brandProfile.logoPositionY ?? 50;
@@ -671,7 +671,7 @@ function openBrandDialog() {
     if (!brandProfile) return;
     byId("profileBrandName").value = brandProfile.brandName || "";
     byId("profileAccentColor").value = brandProfile.accentColor || "#c9aa70";
-    byId("profileBackgroundColor").value = brandProfile.backgroundColor || "#080808";
+    byId("profileBackgroundColor").value = brandProfile.backgroundColor || "#ffffff";
     byId("profileLogoScale").value = brandProfile.logoScale ?? 100;
     byId("profileLogoPositionX").value = brandProfile.logoPositionX ?? 50;
     byId("profileLogoPositionY").value = brandProfile.logoPositionY ?? 50;
@@ -890,7 +890,7 @@ function fillEditForm() {
     byId("editSelectionLimit").value = delivery.selection?.selectionLimit || 0;
     byId("editBrandName").value = delivery.brandName || "";
     byId("editAccentColor").value = delivery.accentColor || "#c9aa70";
-    byId("editBackgroundColor").value = delivery.backgroundColor || "#080808";
+    byId("editBackgroundColor").value = delivery.backgroundColor || "#ffffff";
     renderLinkRows("edit", delivery.socialLinks || []);
     const galleryStyle = delivery.galleryStyle || "masonry";
     const galleryStyleOption = document.querySelector(
@@ -1403,67 +1403,93 @@ async function runTransferPool(items, concurrency, worker) {
 }
 
 async function createMultipartTransfer(metadata, sourceFiles) {
-    const prepared = await readResponse(await fetch("/transfers/multipart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            ...metadata,
-            files: sourceFiles.map((file) => ({
-                name: file.name,
-                size: file.size,
-                type: file.type
-            }))
-        })
-    }));
-    let uploadedBytes = 0;
-    const totalBytes = prepared.totalBytes || 1;
-
-    for (let fileIndex = 0; fileIndex < prepared.files.length; fileIndex += 1) {
-        const remoteFile = prepared.files[fileIndex];
-        const sourceFile = sourceFiles[fileIndex];
-        const endpoint = `/transfers/${encodeURIComponent(prepared.transferId)}/files/${encodeURIComponent(remoteFile.id)}`;
-        const start = await readResponse(await fetch(`${endpoint}/start`, {
-            method: "POST"
+    let prepared;
+    try {
+        prepared = await readResponse(await fetch("/transfers/multipart", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                ...metadata,
+                files: sourceFiles.map((file) => ({
+                    name: file.name,
+                    size: file.size,
+                    type: file.type
+                }))
+            })
         }));
-        if (!start.ready) {
-            const partNumbers = Array.from(
-                { length: start.partCount },
-                (_, index) => index + 1
-            );
-            for (let batchIndex = 0; batchIndex < partNumbers.length; batchIndex += 9) {
-                const batch = partNumbers.slice(batchIndex, batchIndex + 9);
-                const signed = await readResponse(await fetch(`${endpoint}/parts`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ partNumbers: batch })
-                }));
-                await runTransferPool(signed.urls, 3, async ({ partNumber, url }) => {
-                    const startByte = (partNumber - 1) * start.partSize;
-                    const endByte = Math.min(sourceFile.size, startByte + start.partSize);
-                    const blob = sourceFile.slice(startByte, endByte);
-                    await retryTransferPart(url, blob);
-                    uploadedBytes += blob.size;
-                    const percent = Math.min(100, Math.round(uploadedBytes / totalBytes * 100));
-                    byId("transferUploadProgress").style.width = `${percent}%`;
-                    byId("transferUploadText").textContent = `Subiendo ${remoteFile.name}… ${percent}%`;
-                });
-            }
-            await readResponse(await fetch(`${endpoint}/complete`, {
+        let uploadedBytes = 0;
+        const totalBytes = prepared.totalBytes || 1;
+
+        for (let fileIndex = 0; fileIndex < prepared.files.length; fileIndex += 1) {
+            const remoteFile = prepared.files[fileIndex];
+            const sourceFile = sourceFiles[fileIndex];
+            const endpoint = `/transfers/${encodeURIComponent(prepared.transferId)}/files/${encodeURIComponent(remoteFile.id)}`;
+            const start = await readResponse(await fetch(`${endpoint}/start`, {
                 method: "POST"
             }));
+            if (!start.ready) {
+                const partNumbers = Array.from(
+                    { length: start.partCount },
+                    (_, index) => index + 1
+                );
+                for (let batchIndex = 0; batchIndex < partNumbers.length; batchIndex += 9) {
+                    const batch = partNumbers.slice(batchIndex, batchIndex + 9);
+                    const signed = await readResponse(await fetch(`${endpoint}/parts`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ partNumbers: batch })
+                    }));
+                    await runTransferPool(signed.urls, 3, async ({ partNumber, url }) => {
+                        const startByte = (partNumber - 1) * start.partSize;
+                        const endByte = Math.min(sourceFile.size, startByte + start.partSize);
+                        const blob = sourceFile.slice(startByte, endByte);
+                        await retryTransferPart(url, blob);
+                        uploadedBytes += blob.size;
+                        const percent = Math.min(100, Math.round(uploadedBytes / totalBytes * 100));
+                        byId("transferUploadProgress").style.width = `${percent}%`;
+                        byId("transferUploadText").textContent = `Subiendo ${remoteFile.name}… ${percent}%`;
+                    });
+                }
+                await readResponse(await fetch(`${endpoint}/complete`, {
+                    method: "POST"
+                }));
+            }
         }
+        return await readResponse(await fetch(
+            `/transfers/${encodeURIComponent(prepared.transferId)}/complete`,
+            { method: "POST" }
+        ));
+    } catch (error) {
+        if (prepared?.transferId) {
+            await fetch(`/transfers/${encodeURIComponent(prepared.transferId)}`, {
+                method: "DELETE"
+            }).catch(() => {});
+        }
+        throw error;
     }
-    return readResponse(await fetch(
-        `/transfers/${encodeURIComponent(prepared.transferId)}/complete`,
-        { method: "POST" }
-    ));
+}
+
+function defaultTransferTitle(files) {
+    const firstName = files[0]?.name?.replace(/\.[^.]+$/, "").trim();
+    if (firstName) return firstName.slice(0, 100);
+    return `Transferencia ${new Intl.DateTimeFormat("es-ES").format(new Date())}`;
+}
+
+function showTransferError(message) {
+    const element = byId("transferError");
+    element.textContent = message || "No se pudo crear la transferencia. Inténtalo de nuevo.";
+    element.hidden = false;
+}
+
+function hideTransferError() {
+    byId("transferError").hidden = true;
 }
 
 byId("createTransfer").addEventListener("click", async () => {
-    const title = byId("transferTitle").value.trim();
-    if (!title) return showError("Escribe un título para la transferencia");
-    if (!selectedTransferFiles.length) return showError("Añade al menos un archivo");
+    hideTransferError();
+    if (!selectedTransferFiles.length) return showTransferError("Añade al menos un archivo para continuar.");
     const sourceFiles = [...selectedTransferFiles];
+    const title = byId("transferTitle").value.trim() || defaultTransferTitle(sourceFiles);
     const metadata = {
         title,
         recipientEmail: byId("transferRecipient").value.trim(),
@@ -1495,7 +1521,7 @@ byId("createTransfer").addEventListener("click", async () => {
         for (const id of ["transferTitle", "transferRecipient", "transferMessage", "transferPassword"]) byId(id).value = "";
         await Promise.all([loadTransfers(), loadAccount()]);
     } catch (error) {
-        showError(error.message);
+        showTransferError(`${error.message || "No se pudo completar la subida"} Puedes volver a intentarlo con los mismos archivos.`);
     } finally {
         byId("createTransfer").disabled = false;
         byId("transferUploadStatus").hidden = true;
@@ -1529,7 +1555,10 @@ function createTransferCard(transfer) {
     const title = document.createElement("h3");
     title.textContent = transfer.title;
     const meta = document.createElement("p");
-    meta.textContent = `${transfer.fileCount} archivo${transfer.fileCount === 1 ? "" : "s"} · ${formatBytes(transfer.totalBytes)} · ${transfer.expired ? "Caducada" : `Caduca ${formatDate(transfer.expiresAt)}`}`;
+    const incomplete = transfer.status !== "ready";
+    meta.textContent = incomplete
+        ? `${transfer.fileCount} archivo${transfer.fileCount === 1 ? "" : "s"} · Subida incompleta`
+        : `${transfer.fileCount} archivo${transfer.fileCount === 1 ? "" : "s"} · ${formatBytes(transfer.totalBytes)} · ${transfer.expired ? "Caducada" : `Caduca ${formatDate(transfer.expiresAt)}`}`;
     const actions = document.createElement("div");
     actions.className = "delivery-actions";
     const open = document.createElement("a");
@@ -1541,8 +1570,10 @@ function createTransferCard(transfer) {
     const copy = actionButton("Copiar enlace", "delivery-copy", () => copyDeliveryLink(transfer.link, copy));
     const send = actionButton("Enviar", "delivery-send", () => sendTransfer(transfer, send));
     const remove = actionButton("Eliminar", "delivery-delete", () => openDeleteTransferDialog(transfer));
-    actions.append(open, copy);
-    if (transfer.recipientEmail) actions.append(send);
+    if (!incomplete) {
+        actions.append(open, copy);
+        if (transfer.recipientEmail) actions.append(send);
+    }
     actions.append(remove);
     body.append(title, meta, actions);
     const stats = document.createElement("div");
@@ -1551,6 +1582,11 @@ function createTransferCard(transfer) {
     count.textContent = String(transfer.downloadCount);
     const label = document.createElement("span");
     label.textContent = transfer.downloadCount === 1 ? "descarga" : "descargas";
+    if (incomplete) {
+        stats.classList.add("transfer-incomplete");
+        count.textContent = "!";
+        label.textContent = "elimina y vuelve a intentarlo";
+    }
     stats.append(count, label);
     card.append(body, stats);
     return card;

@@ -29,7 +29,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             owner_id INTEGER,
             brand_name TEXT NOT NULL DEFAULT '',
             accent_color TEXT NOT NULL DEFAULT '#c9aa70',
-            background_color TEXT NOT NULL DEFAULT '#080808',
+            background_color TEXT NOT NULL DEFAULT '#ffffff',
             website_url TEXT NOT NULL DEFAULT '',
             instagram_url TEXT NOT NULL DEFAULT '',
             facebook_url TEXT NOT NULL DEFAULT '',
@@ -78,7 +78,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             user_id INTEGER PRIMARY KEY,
             brand_name TEXT NOT NULL DEFAULT '',
             accent_color TEXT NOT NULL DEFAULT '#c9aa70',
-            background_color TEXT NOT NULL DEFAULT '#080808',
+            background_color TEXT NOT NULL DEFAULT '#ffffff',
             website_url TEXT NOT NULL DEFAULT '',
             instagram_url TEXT NOT NULL DEFAULT '',
             facebook_url TEXT NOT NULL DEFAULT '',
@@ -107,7 +107,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         ["owner_id", "ALTER TABLE deliveries ADD COLUMN owner_id INTEGER"],
         ["brand_name", "ALTER TABLE deliveries ADD COLUMN brand_name TEXT NOT NULL DEFAULT ''"],
         ["accent_color", "ALTER TABLE deliveries ADD COLUMN accent_color TEXT NOT NULL DEFAULT '#c9aa70'"],
-        ["background_color", "ALTER TABLE deliveries ADD COLUMN background_color TEXT NOT NULL DEFAULT '#080808'"],
+        ["background_color", "ALTER TABLE deliveries ADD COLUMN background_color TEXT NOT NULL DEFAULT '#ffffff'"],
         ["website_url", "ALTER TABLE deliveries ADD COLUMN website_url TEXT NOT NULL DEFAULT ''"],
         ["instagram_url", "ALTER TABLE deliveries ADD COLUMN instagram_url TEXT NOT NULL DEFAULT ''"],
         ["facebook_url", "ALTER TABLE deliveries ADD COLUMN facebook_url TEXT NOT NULL DEFAULT ''"],
@@ -321,6 +321,35 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     ];
     for (const [column, statement] of transferMigrations) {
         if (!transferColumns.has(column)) database.exec(statement);
+    }
+
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS app_migrations (
+            name TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        ) STRICT;
+    `);
+    const whiteGalleryMigration = "white-gallery-background-v1";
+    const backgroundAlreadyMigrated = database.prepare(
+        "SELECT 1 FROM app_migrations WHERE name = ?"
+    ).get(whiteGalleryMigration);
+    if (!backgroundAlreadyMigrated) {
+        database.exec("BEGIN IMMEDIATE");
+        try {
+            database.prepare(
+                "UPDATE deliveries SET background_color = '#ffffff' WHERE background_color = '#080808'"
+            ).run();
+            database.prepare(
+                "UPDATE brand_profiles SET background_color = '#ffffff' WHERE background_color = '#080808'"
+            ).run();
+            database.prepare(
+                "INSERT INTO app_migrations (name, applied_at) VALUES (?, ?)"
+            ).run(whiteGalleryMigration, new Date().toISOString());
+            database.exec("COMMIT");
+        } catch (error) {
+            database.exec("ROLLBACK");
+            throw error;
+        }
     }
 
     const projection = `
@@ -822,7 +851,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 delivery.ownerId || null,
                 delivery.brandName || "",
                 delivery.accentColor || "#c9aa70",
-                delivery.backgroundColor || "#080808",
+                delivery.backgroundColor || "#ffffff",
                 delivery.websiteUrl || "",
                 delivery.instagramUrl || "",
                 delivery.facebookUrl || "",
@@ -854,7 +883,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 delivery.favoritesEnabled ? 1 : 0,
                 delivery.brandName || "",
                 delivery.accentColor || "#c9aa70",
-                delivery.backgroundColor || "#080808",
+                delivery.backgroundColor || "#ffffff",
                 delivery.websiteUrl || "",
                 delivery.instagramUrl || "",
                 delivery.facebookUrl || "",
@@ -921,7 +950,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 userId,
                 brandName: "",
                 accentColor: "#c9aa70",
-                backgroundColor: "#080808",
+                backgroundColor: "#ffffff",
                 websiteUrl: "",
                 instagramUrl: "",
                 facebookUrl: "",
@@ -937,7 +966,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             upsertBrandProfileStatement.run(
                 profile.userId, profile.brandName || "",
                 profile.accentColor || "#c9aa70",
-                profile.backgroundColor || "#080808",
+                profile.backgroundColor || "#ffffff",
                 profile.websiteUrl || "", profile.instagramUrl || "",
                 profile.facebookUrl || "", profile.tiktokUrl || "",
                 Array.isArray(profile.socialLinks)

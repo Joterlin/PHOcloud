@@ -21,6 +21,10 @@ const selectionNoticeTitle = document.getElementById("selectionNoticeTitle");
 const selectionNoticeText = document.getElementById("selectionNoticeText");
 const submitSelection = document.getElementById("submitSelection");
 const emptySelection = document.getElementById("emptySelection");
+const collectionInfo = document.getElementById("collectionInfo");
+const quickShowFavorites = document.getElementById("quickShowFavorites");
+const quickDownloadOriginal = document.getElementById("quickDownloadOriginal");
+const quickDownloadWeb = document.getElementById("quickDownloadWeb");
 const unlockPanel = document.getElementById("unlockPanel");
 const unlockForm = document.getElementById("unlockForm");
 const galleryPassword = document.getElementById("galleryPassword");
@@ -115,12 +119,17 @@ async function loadGallery() {
         updateInfo();
 
         downloadGalleryOriginal.href = galleryUrl("/download");
+        quickDownloadOriginal.href = galleryUrl("/download");
         downloadGalleryOriginal.hidden = !data.allowOriginalDownload;
+        quickDownloadOriginal.hidden = !data.allowOriginalDownload;
         downloadGalleryWeb.href = galleryUrl("/download/web");
+        quickDownloadWeb.href = galleryUrl("/download/web");
         downloadGalleryWeb.hidden = !data.allowWebDownload;
+        quickDownloadWeb.hidden = !data.allowWebDownload;
         downloadPhotoOriginal.hidden = !data.allowOriginalDownload;
         downloadPhotoWeb.hidden = !data.allowWebDownload;
         showFavorites.hidden = !data.favoritesEnabled;
+        quickShowFavorites.hidden = !data.favoritesEnabled;
         galleryHeading.hidden = false;
         galleryContent.hidden = false;
         galleryFooter.hidden = false;
@@ -133,7 +142,7 @@ async function loadGallery() {
 }
 
 function applyBrand(data) {
-    const background = data.backgroundColor || "#080808";
+    const background = data.backgroundColor || "#ffffff";
     document.documentElement.style.setProperty(
         "--accent",
         data.accentColor || "#c9aa70"
@@ -149,6 +158,7 @@ function applyBrand(data) {
     const luminance = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
     const tone = luminance > 150 ? "light" : "dark";
     document.body.dataset.tone = tone;
+    document.documentElement.style.colorScheme = tone;
     document.documentElement.style.setProperty(
         "--gallery-text", tone === "light" ? "#171717" : "#f5f3ef"
     );
@@ -239,6 +249,12 @@ function updateInfo() {
         parts.push(`${favorites.size} seleccionada${favorites.size === 1 ? "" : "s"}`);
     }
     info.textContent = parts.join(" · ");
+    collectionInfo.textContent = parts.join(" · ");
+    const selectionLabel = favoritesOnly
+        ? "Ver todas"
+        : `Mi selección${favorites.size ? ` (${favorites.size})` : ""}`;
+    showFavorites.textContent = selectionLabel;
+    quickShowFavorites.textContent = selectionLabel;
 }
 
 function updateSelectionUi(message = "") {
@@ -326,7 +342,16 @@ function createPhotoCard(filename, index) {
             img.src = previewUrl(filename);
             img.loading = "lazy";
             img.alt = `Fotografía ${index + 1}`;
+            img.tabIndex = 0;
+            img.setAttribute("role", "button");
+            img.setAttribute("aria-label", `Abrir fotografía ${index + 1} a pantalla completa`);
             img.addEventListener("click", () => openLightbox(index));
+            img.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openLightbox(index);
+                }
+            });
             card.appendChild(img);
         }
 
@@ -383,12 +408,20 @@ async function toggleFavorite(filename, button) {
 }
 
 showFavorites.addEventListener("click", () => {
-    favoritesOnly = !favoritesOnly;
-    showFavorites.textContent = favoritesOnly
-        ? "Ver todas"
-        : "Ver selección";
-    renderGallery();
+    toggleFavoritesView();
 });
+
+quickShowFavorites.addEventListener("click", () => {
+    toggleFavoritesView();
+});
+
+function toggleFavoritesView() {
+    favoritesOnly = !favoritesOnly;
+    const label = favoritesOnly ? "Ver todas" : `Mi selección${favorites.size ? ` (${favorites.size})` : ""}`;
+    showFavorites.textContent = label;
+    quickShowFavorites.textContent = label;
+    renderGallery();
+}
 
 unlockForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -420,6 +453,7 @@ function openLightbox(index) {
     lightbox.hidden = false;
     document.body.classList.add("no-scroll");
     updateLightbox();
+    closeLightbox.focus();
 }
 
 function updateLightbox() {
@@ -456,6 +490,10 @@ function updateLightbox() {
     openPhotoComment.textContent = selectionComments.get(filename)
         ? "Editar nota"
         : "Añadir nota";
+    for (const adjacentIndex of [current - 1, current + 1]) {
+        const adjacent = files[(adjacentIndex + files.length) % files.length];
+        if (adjacent && !isVideo(adjacent)) new Image().src = previewUrl(adjacent);
+    }
 }
 
 function closeViewer() {
@@ -566,5 +604,15 @@ document.addEventListener("keydown", (event) => {
     if (event.key === "ArrowLeft") prev.click();
     if (event.key === "ArrowRight") next.click();
 });
+
+let lightboxTouchStartX = 0;
+lightbox.addEventListener("touchstart", (event) => {
+    lightboxTouchStartX = event.changedTouches[0]?.clientX || 0;
+}, { passive: true });
+lightbox.addEventListener("touchend", (event) => {
+    const distance = (event.changedTouches[0]?.clientX || 0) - lightboxTouchStartX;
+    if (Math.abs(distance) < 55) return;
+    (distance > 0 ? prev : next).click();
+}, { passive: true });
 
 loadGallery();
