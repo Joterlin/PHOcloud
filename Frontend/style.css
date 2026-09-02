@@ -47,6 +47,7 @@ button,
 button:hover:not(:disabled),
 .delivery-action:hover { transform: translateY(-2px); }
 button:disabled { cursor: wait; opacity: .52; }
+.select-photos:disabled { cursor: not-allowed; }
 
 .top-actions button {
     min-height: 38px;
