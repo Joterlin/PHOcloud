@@ -35,10 +35,15 @@ body { min-height: 100vh; margin: 0; background: #090909; }
 .auth-story p:not(.eyebrow) { max-width: 520px; color: #aaa69e; font-size: 18px; line-height: 1.6; }
 .story-foot { font-size: 13px !important; }
 
-.auth-panel { padding: 30px; display: grid; place-items: center; }
+.auth-panel {
+    padding: clamp(40px, 8vh, 86px) 30px 60px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
 .auth-card { width: min(100%, 470px); }
 .auth-tabs { margin-bottom: 54px; padding: 5px; display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #292825; border-radius: 999px; }
-.auth-tabs button { height: 42px; border: 0; border-radius: 999px; background: transparent; color: #8f8c86; cursor: pointer; }
+.auth-tabs button { height: 42px; min-height: 42px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: #8f8c86; line-height: 1; cursor: pointer; }
 .auth-tabs button.active { background: #f1ede5; color: #111; }
 h2 { margin: 0; font: 400 42px/1.05 Georgia, serif; letter-spacing: -.04em; }
 .intro { margin: 13px 0 30px; color: #918f8a; line-height: 1.6; }
@@ -48,7 +53,7 @@ label { margin: 17px 0 8px; display: block; color: #d0cbc2; font-size: 13px; }
 input { width: 100%; height: 52px; padding: 0 16px; border: 1px solid #343330; border-radius: 12px; outline: 0; background: #111; color: #f5f3ef; }
 input:focus { border-color: #c9aa70; box-shadow: 0 0 0 3px rgba(201, 170, 112, .11); }
 .text-button { margin-bottom: 7px; border: 0; background: none; color: #a89067; font-size: 12px; cursor: pointer; }
-.primary-button, .secondary-button { width: 100%; min-height: 52px; margin-top: 27px; border: 0; border-radius: 999px; background: #f4f0e8; color: #111; font-weight: 750; cursor: pointer; }
+.primary-button, .secondary-button { width: 100%; height: 52px; min-height: 52px; padding: 0 18px; margin-top: 27px; border: 0; border-radius: 999px; background: #f4f0e8; color: #111; font-weight: 750; line-height: 1; cursor: pointer; }
 .secondary-button { margin-top: 11px; border: 1px solid #343330; background: transparent; color: #ddd8ce; }
 button:disabled { opacity: .55; cursor: wait; }
 .notice { margin: 18px 0 0; padding: 14px 16px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
