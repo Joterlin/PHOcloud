@@ -598,6 +598,40 @@ function planLabel(plan) {
         || "Plan gratuito";
 }
 
+async function openBillingDestination(path, body, button) {
+    const previousText = button.textContent;
+    const billingMessage = byId("billingMessage");
+    button.disabled = true;
+    button.textContent = "Abriendo Stripe…";
+    billingMessage.textContent = "Preparando una conexión segura con Stripe…";
+    try {
+        const response = await fetch(path, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {})
+        });
+        const data = await readResponse(response);
+        if (!data.url) throw new Error("Stripe no devolvió un enlace válido");
+        window.location.assign(data.url);
+    } catch (error) {
+        billingMessage.textContent = error.message;
+        button.disabled = false;
+        button.textContent = previousText;
+    }
+}
+
+for (const button of document.querySelectorAll("[data-billing-plan]")) {
+    button.addEventListener("click", () => openBillingDestination(
+        "/billing/checkout-session",
+        { plan: button.dataset.billingPlan },
+        button
+    ));
+}
+
+byId("manageBillingButton").addEventListener("click", (event) => {
+    openBillingDestination("/billing/portal-session", {}, event.currentTarget);
+});
+
 async function loadAccount() {
     const response = await fetch("/account");
     const data = await readResponse(response);
@@ -626,6 +660,37 @@ async function loadAccount() {
     byId("storageUsageBar").style.width = `${storagePercent}%`;
     byId("transferUsageText").textContent = `${formatBytes(usage.transferStorageBytes)} de ${formatBytes(usage.transferStorageLimitBytes)}`;
     byId("transferUsageBar").style.width = `${transferPercent}%`;
+    const backupStatus = accountData.backups || { enabled: false };
+    byId("backupStatusText").textContent = backupStatus.enabled
+        ? (backupStatus.lastSuccessAt
+            ? `Última copia ${new Intl.DateTimeFormat("es-ES", {
+                day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+            }).format(new Date(backupStatus.lastSuccessAt))}`
+            : "Automáticas activadas")
+        : "Pendientes de activar";
+
+    const billingConfiguration = accountData.billing || { enabled: false };
+    const billingEnabled = billingConfiguration.enabled === true;
+    byId("billingModeBadge").textContent = billingEnabled
+        ? (billingConfiguration.mode === "live" ? "Disponible" : "Modo de prueba")
+        : "Vista previa";
+    for (const button of document.querySelectorAll("[data-billing-plan]")) {
+        const buttonPlan = button.dataset.billingPlan;
+        const currentPlan = usage.plan === buttonPlan;
+        const available = billingConfiguration.plans?.[buttonPlan]?.available === true;
+        button.disabled = currentPlan || !billingEnabled || !available;
+        button.textContent = currentPlan
+            ? "Tu plan actual"
+            : (billingEnabled && available
+                ? `Elegir ${planLabel(buttonPlan).replace("Plan ", "")}`
+                : "Próximamente");
+    }
+    byId("manageBillingButton").hidden = !billingConfiguration.portalAvailable;
+    byId("billingMessage").textContent = billingEnabled
+        ? (billingConfiguration.mode === "live"
+            ? "El pago y la gestión de la suscripción se realizan de forma segura en Stripe."
+            : "Stripe está conectado en modo de prueba: no se realizará ningún cobro real.")
+        : "Estos planes son una vista previa. Todavía no se realizará ningún cobro.";
 
     const limitReached = usage.galleryCount >= usage.galleryLimit;
     byId("planLimitNotice").hidden = !limitReached;
@@ -1687,6 +1752,17 @@ deleteDialog.addEventListener("close", () => {
 
 Promise.all([
     loadBrandProfile(), loadDeliveries(), loadTransfers(), loadAccount()
-]).catch((error) => {
+]).then(() => {
+    const url = new URL(window.location.href);
+    const billingResult = url.searchParams.get("billing");
+    if (!["success", "cancel"].includes(billingResult)) return;
+    accountDialog.showModal();
+    byId("billingMessage").textContent = billingResult === "success"
+        ? "Pago completado. Stripe está actualizando tu plan; puede tardar unos segundos."
+        : "No se realizó ningún cambio en tu plan.";
+    url.searchParams.delete("billing");
+    url.searchParams.delete("session_id");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}).catch((error) => {
     showError(error.message);
 });

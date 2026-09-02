@@ -11,6 +11,8 @@ const {
     createObjectStorage,
     createGalleryStorage
 } = require("./object-storage");
+const { createBilling } = require("./billing");
+const { createAutomaticBackupService } = require("./automatic-backup");
 const {
     sendAccountLink,
     sendGalleryDelivery,
@@ -55,6 +57,7 @@ const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === "production";
 const objectStorage = createObjectStorage();
 const galleryStorage = createGalleryStorage();
+const billing = createBilling();
 const secureCookies = isProduction;
 const GALLERY_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 const MAX_PHOTOS_PER_DELIVERY = 500;
@@ -74,13 +77,13 @@ const PLAN_LIMITS = {
         transferStorageBytes: 50 * 1024 * 1024 * 1024
     },
     professional: {
-        galleries: 100,
-        storageBytes: 250 * 1024 * 1024 * 1024,
+        galleries: 25,
+        storageBytes: 100 * 1024 * 1024 * 1024,
         transferStorageBytes: 250 * 1024 * 1024 * 1024
     },
     studio: {
-        galleries: 500,
-        storageBytes: 1024 * 1024 * 1024 * 1024,
+        galleries: 100,
+        storageBytes: 300 * 1024 * 1024 * 1024,
         transferStorageBytes: 1024 * 1024 * 1024 * 1024
     }
 };
@@ -147,6 +150,11 @@ const deliveryStore = createDeliveryStore({
     databasePath,
     uploadsDirectory
 });
+const automaticBackups = createAutomaticBackupService({
+    databasePath,
+    uploadsDirectory,
+    brandingDirectory
+});
 
 deliveryStore.deleteExpiredSessions(Date.now());
 deliveryStore.deleteExpiredGallerySessions(Date.now());
@@ -212,6 +220,146 @@ app.use((req, res, next) => {
         res.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
     next();
+});
+
+function stripeReferenceId(value) {
+    if (typeof value === "string") return value;
+    return value && typeof value.id === "string" ? value.id : null;
+}
+
+function stripeTimestamp(value) {
+    return Number.isFinite(Number(value))
+        ? new Date(Number(value) * 1000).toISOString()
+        : null;
+}
+
+function billingUserForObject(object) {
+    const metadataUserId = Number(object?.metadata?.phocloud_user_id);
+    if (Number.isSafeInteger(metadataUserId) && metadataUserId > 0) {
+        const user = deliveryStore.getUserById(metadataUserId);
+        if (user) return user;
+    }
+    const subscriptionId = stripeReferenceId(
+        object?.subscription
+        || object?.parent?.subscription_details?.subscription
+    );
+    if (subscriptionId) {
+        const user = deliveryStore.getUserByStripeSubscriptionId(subscriptionId);
+        if (user) return user;
+    }
+    const customerId = stripeReferenceId(object?.customer);
+    return customerId
+        ? deliveryStore.getUserByStripeCustomerId(customerId)
+        : null;
+}
+
+function updateBillingFromCheckout(session, failed = false) {
+    const user = billingUserForObject(session)
+        || deliveryStore.getUserById(Number(session.client_reference_id));
+    const plan = session.metadata?.phocloud_plan;
+    if (!user || !["professional", "studio"].includes(plan)) return;
+    const paid = !failed && session.payment_status !== "unpaid";
+    deliveryStore.updateUserBilling(user.id, {
+        customerId: stripeReferenceId(session.customer) || user.stripeCustomerId,
+        subscriptionId: stripeReferenceId(session.subscription),
+        plan: paid ? plan : "free",
+        planStatus: paid ? "active" : "incomplete",
+        currentPeriodEnd: user.stripeCurrentPeriodEnd
+    });
+}
+
+function updateBillingFromSubscription(subscription) {
+    const user = billingUserForObject(subscription);
+    if (!user) return;
+    const priceId = subscription.items?.data?.[0]?.price?.id;
+    const selectedPlan = billing.planFromPriceId(priceId)
+        || subscription.metadata?.phocloud_plan
+        || user.plan;
+    const entitled = ["active", "trialing", "past_due"].includes(
+        subscription.status
+    );
+    const deleted = subscription.status === "canceled";
+    const periodEnd = subscription.current_period_end
+        || subscription.items?.data?.[0]?.current_period_end;
+    deliveryStore.updateUserBilling(user.id, {
+        customerId: stripeReferenceId(subscription.customer)
+            || user.stripeCustomerId,
+        subscriptionId: deleted ? null : subscription.id,
+        plan: entitled && ["professional", "studio"].includes(selectedPlan)
+            ? selectedPlan
+            : "free",
+        planStatus: subscription.status || "inactive",
+        currentPeriodEnd: stripeTimestamp(periodEnd)
+    });
+}
+
+function updateBillingFromInvoice(invoice, paid) {
+    const user = billingUserForObject(invoice);
+    if (!user) return;
+    deliveryStore.updateUserBilling(user.id, {
+        customerId: stripeReferenceId(invoice.customer) || user.stripeCustomerId,
+        subscriptionId: stripeReferenceId(
+            invoice.subscription
+            || invoice.parent?.subscription_details?.subscription
+        ) || user.stripeSubscriptionId,
+        plan: user.plan,
+        planStatus: paid ? "active" : "past_due",
+        currentPeriodEnd: user.stripeCurrentPeriodEnd
+    });
+}
+
+function processStripeEvent(event) {
+    if (deliveryStore.hasStripeEvent(event.id)) return;
+    switch (event.type) {
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded":
+        updateBillingFromCheckout(event.data.object);
+        break;
+    case "checkout.session.async_payment_failed":
+        updateBillingFromCheckout(event.data.object, true);
+        break;
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted":
+        updateBillingFromSubscription(event.data.object);
+        break;
+    case "invoice.paid":
+        updateBillingFromInvoice(event.data.object, true);
+        break;
+    case "invoice.payment_failed":
+        updateBillingFromInvoice(event.data.object, false);
+        break;
+    default:
+        break;
+    }
+    deliveryStore.markStripeEventProcessed(
+        event.id, event.type, new Date().toISOString()
+    );
+    deliveryStore.deleteOldStripeEvents(
+        new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString()
+    );
+}
+
+app.post("/billing/webhook", express.raw({ type: "application/json", limit: "1mb" }), (req, res) => {
+    if (!billing.configured) {
+        return res.status(503).json({ error: "Facturación no configurada" });
+    }
+    let event;
+    try {
+        event = billing.constructWebhookEvent(
+            req.body, req.get("Stripe-Signature")
+        );
+    } catch (error) {
+        console.warn(`[${req.requestId}] Stripe webhook rejected: ${error.message}`);
+        return res.status(400).json({ error: "Firma de Stripe no válida" });
+    }
+    try {
+        processStripeEvent(event);
+        return res.json({ received: true });
+    } catch (error) {
+        console.error(`[${req.requestId}] Stripe webhook error`, error);
+        return res.status(500).json({ error: "No se pudo procesar el evento" });
+    }
 });
 
 app.use(express.json({ limit: "1mb" }));
@@ -794,6 +942,13 @@ function planLimits(plan) {
     return PLAN_LIMITS[plan] || PLAN_LIMITS.free;
 }
 
+function effectivePlan(plan, planStatus = "active") {
+    if (plan === "free") return "free";
+    return ["active", "trialing", "past_due"].includes(planStatus)
+        ? plan
+        : "free";
+}
+
 function deliveryStorageBytes(delivery) {
     const folderPath = galleryFolderPath(delivery.id);
     if (!folderPath || !fs.existsSync(folderPath)) return 0;
@@ -801,12 +956,13 @@ function deliveryStorageBytes(delivery) {
         .reduce((total, file) => total + file.size, 0);
 }
 
-function accountUsage(userId, plan = "free") {
+function accountUsage(userId, plan = "free", planStatus = "active") {
     const deliveries = deliveryStore.listDeliveries(userId);
     const transfers = deliveryStore.listTransfers(userId);
-    const limits = planLimits(plan);
+    const entitledPlan = effectivePlan(plan, planStatus);
+    const limits = planLimits(entitledPlan);
     return {
-        plan,
+        plan: entitledPlan,
         galleryCount: deliveries.length,
         totalGalleryCount: deliveries.length,
         galleryLimit: limits.galleries,
@@ -1329,7 +1485,8 @@ app.get("/readyz", async (req, res) => {
         res.json({
             status: "ready",
             transferStorage: objectStorage.provider,
-            galleryStorage: galleryStorage.provider
+            galleryStorage: galleryStorage.provider,
+            automaticBackups: automaticBackups.status().enabled
         });
     } catch (error) {
         console.error(`[${req.requestId}] Readiness error`, error);
@@ -1695,9 +1852,77 @@ app.get("/account", requireAuth, (req, res) => {
             plan: user.plan,
             planStatus: user.planStatus,
             emailDeliveryConfigured: emailConfigured(),
-            usage: accountUsage(user.id, user.plan)
+            billing: {
+                ...billing.publicConfiguration(),
+                portalAvailable: billing.configured
+                    && Boolean(user.stripeCustomerId),
+                currentPeriodEnd: user.stripeCurrentPeriodEnd
+            },
+            backups: automaticBackups.status(),
+            usage: accountUsage(user.id, user.plan, user.planStatus)
         }
     });
+});
+
+app.post("/billing/checkout-session", requireAuth, requireSameOrigin, limitSensitiveAction, async (req, res) => {
+    const user = deliveryStore.getUserById(req.auth.userId);
+    const plan = req.body?.plan;
+    if (!user) return res.status(404).json({ error: "Cuenta no encontrada" });
+    if (!billing.configured) {
+        return res.status(503).json({
+            error: "Los planes de pago todavía no están disponibles",
+            code: "BILLING_NOT_CONFIGURED"
+        });
+    }
+    if (!["professional", "studio"].includes(plan)) {
+        return res.status(400).json({ error: "Selecciona un plan válido" });
+    }
+    if (effectivePlan(user.plan, user.planStatus) === plan) {
+        return res.status(409).json({
+            error: "Ya tienes este plan. Puedes gestionarlo desde tu cuenta."
+        });
+    }
+    try {
+        const session = await billing.createCheckoutSession({
+            user,
+            plan,
+            baseUrl: publicBaseUrl(req)
+        });
+        res.json({ url: session.url });
+    } catch (error) {
+        console.error(`[${req.requestId}] Stripe Checkout error`, error);
+        res.status(error.code === "INVALID_PLAN" ? 400 : 502).json({
+            error: "No se pudo abrir el pago. Inténtalo de nuevo."
+        });
+    }
+});
+
+app.post("/billing/portal-session", requireAuth, requireSameOrigin, limitSensitiveAction, async (req, res) => {
+    const user = deliveryStore.getUserById(req.auth.userId);
+    if (!user) return res.status(404).json({ error: "Cuenta no encontrada" });
+    if (!billing.configured) {
+        return res.status(503).json({
+            error: "La gestión de pagos todavía no está disponible",
+            code: "BILLING_NOT_CONFIGURED"
+        });
+    }
+    try {
+        const session = await billing.createPortalSession({
+            customerId: user.stripeCustomerId,
+            baseUrl: publicBaseUrl(req)
+        });
+        res.json({ url: session.url });
+    } catch (error) {
+        const missingCustomer = error.code === "CUSTOMER_NOT_FOUND";
+        if (!missingCustomer) {
+            console.error(`[${req.requestId}] Stripe portal error`, error);
+        }
+        res.status(missingCustomer ? 409 : 502).json({
+            error: missingCustomer
+                ? "Todavía no tienes una suscripción que gestionar"
+                : "No se pudo abrir la gestión de pagos"
+        });
+    }
 });
 
 app.get("/brand", requireAuth, (req, res) => {
@@ -1837,7 +2062,9 @@ app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveA
         return res.status(400).json({ error: "La transferencia no puede superar 50 GB" });
     }
     const account = deliveryStore.getUserById(req.auth.userId);
-    const usage = accountUsage(req.auth.userId, account?.plan || "free");
+    const usage = accountUsage(
+        req.auth.userId, account?.plan || "free", account?.planStatus
+    );
     if (usage.transferStorageBytes + totalBytes > usage.transferStorageLimitBytes) {
         return res.status(403).json({
             error: "Esta transferencia supera el espacio temporal de tu plan",
@@ -2041,7 +2268,9 @@ app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (re
             return fail(400, "La transferencia no puede superar 50 GB");
         }
         const account = deliveryStore.getUserById(req.auth.userId);
-        const usage = accountUsage(req.auth.userId, account?.plan || "free");
+        const usage = accountUsage(
+            req.auth.userId, account?.plan || "free", account?.planStatus
+        );
         if (usage.transferStorageBytes + totalBytes > usage.transferStorageLimitBytes) {
             return fail(403, "Esta transferencia supera el espacio temporal de tu plan", {
                 code: "PLAN_TRANSFER_STORAGE_LIMIT", usage
@@ -2446,7 +2675,7 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
     const remoteGallery = galleryStoredInR2(folderPath);
     const account = deliveryStore.getUserById(req.auth.userId);
     const usageBeforeUpload = accountUsage(
-        req.auth.userId, account?.plan || "free"
+        req.auth.userId, account?.plan || "free", account?.planStatus
     );
 
     req.folderId = req.params.folderId;
@@ -2652,7 +2881,7 @@ app.delete("/deliveries/:folderId", requireAuth, requireSameOrigin, async (req, 
 app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, res) => {
     const account = deliveryStore.getUserById(req.auth.userId);
     const usageBeforeUpload = accountUsage(
-        req.auth.userId, account?.plan || "free"
+        req.auth.userId, account?.plan || "free", account?.planStatus
     );
     if (usageBeforeUpload.galleryCount >= usageBeforeUpload.galleryLimit) {
         return res.status(403).json({
@@ -2769,7 +2998,7 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
             }
 
             const usageAtSave = accountUsage(
-                req.auth.userId, account?.plan || "free"
+                req.auth.userId, account?.plan || "free", account?.planStatus
             );
             if (usageAtSave.galleryCount >= usageAtSave.galleryLimit) {
                 if (remoteRecords.length) {
@@ -3500,6 +3729,7 @@ app.use((error, req, res, next) => {
 
 const server = app.listen(PORT, () => {
     console.log(`PHOcloud iniciado en ${process.env.PHOCLOUD_PUBLIC_URL || `http://localhost:${PORT}`}`);
+    automaticBackups.start();
     migrateLocalGalleriesToR2().catch((error) => {
         console.error("No se pudo completar la migración de galerías a R2", error);
     });
@@ -3531,6 +3761,7 @@ function shutdown() {
     if (shuttingDown) return;
     shuttingDown = true;
     clearInterval(cleanupTimer);
+    automaticBackups.stop();
 
     server.close(() => {
         deliveryStore.close();

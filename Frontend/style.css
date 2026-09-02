@@ -85,6 +85,8 @@ button:disabled { cursor: wait; opacity: .52; }
 .storage-heading { margin-top: 20px; }
 .usage-track { height: 7px; margin-top: 10px; overflow: hidden; border-radius: 99px; background: #282723; }
 .usage-track div { width: 0; height: 100%; border-radius: inherit; background: #c9aa70; transition: width .35s ease; }
+.account-system-status { margin-top: 16px; padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-top: 1px solid #302f2b; color: #96928a; font-size: 12px; }
+.account-system-status strong { color: #c8c3ba; font-weight: 700; text-align: right; }
 .pricing-preview { margin-top: 18px; }
 .pricing-preview-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; text-align: left; }
 .pricing-preview-heading h3 { margin: 3px 0 0; font: 400 30px Georgia, serif; }
@@ -102,6 +104,7 @@ button:disabled { cursor: wait; opacity: .52; }
 .plan-card ul { min-height: 155px; margin: 18px 0 22px; padding-left: 18px; color: #aaa69e; font-size: 12px; line-height: 1.75; }
 .plan-card button { width: 100%; }
 .plan-card button:disabled { opacity: .62; cursor: not-allowed; }
+.billing-manage { width: 100%; margin-top: 12px; }
 .plan-note { margin: 12px 0 0; color: #706e69; font-size: 11px; line-height: 1.5; text-align: center; }
 .cover-config-preview { height: 260px; margin: 0 0 22px; position: relative; overflow: hidden; border-radius: 14px; background: #111; }
 .cover-config-preview img { width: 100%; height: 100%; display: block; object-fit: cover; }
@@ -889,6 +892,8 @@ html[data-theme="light"] .featured-plan { border-color: #c8a967; background: lin
 html[data-theme="light"] .pro-plan { background: linear-gradient(145deg, #f4f7fb, #fff); }
 html[data-theme="light"] .plan-card ul { color: #615d55; }
 html[data-theme="light"] .pricing-preview-heading > span { border-color: #d9d4cb; color: #6f6b64; }
+html[data-theme="light"] .account-system-status { border-color: #e2ddd5; color: #6f6b64; }
+html[data-theme="light"] .account-system-status strong { color: #302d28; }
 html[data-theme="light"] .usage-heading strong,
 html[data-theme="light"] .style-picker legend { color: #37332d; }
 html[data-theme="light"] .panel-footer,

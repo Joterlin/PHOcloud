@@ -60,6 +60,9 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             email_verified_at TEXT,
             plan TEXT NOT NULL DEFAULT 'free',
             plan_status TEXT NOT NULL DEFAULT 'active',
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            stripe_current_period_end TEXT,
             terms_accepted_at TEXT,
             created_at TEXT NOT NULL
         ) STRICT;
@@ -142,6 +145,9 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         ["email_verified_at", "ALTER TABLE users ADD COLUMN email_verified_at TEXT"],
         ["plan", "ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'"],
         ["plan_status", "ALTER TABLE users ADD COLUMN plan_status TEXT NOT NULL DEFAULT 'active'"],
+        ["stripe_customer_id", "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT"],
+        ["stripe_subscription_id", "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT"],
+        ["stripe_current_period_end", "ALTER TABLE users ADD COLUMN stripe_current_period_end TEXT"],
         ["terms_accepted_at", "ALTER TABLE users ADD COLUMN terms_accepted_at TEXT"]
     ];
     for (const [column, statement] of userMigrations) {
@@ -177,6 +183,21 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
 
         CREATE INDEX IF NOT EXISTS account_tokens_user_purpose
         ON account_tokens(user_id, purpose);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS users_stripe_customer_unique
+        ON users(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS users_stripe_subscription_unique
+        ON users(stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL;
+
+        CREATE TABLE IF NOT EXISTS stripe_events (
+            event_id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            processed_at TEXT NOT NULL
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS stripe_events_processed_at
+        ON stripe_events(processed_at);
     `);
 
     database.exec(`
@@ -460,6 +481,9 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             password_hash AS passwordHash, password_salt AS passwordSalt,
             email_verified_at AS emailVerifiedAt, plan,
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
+            stripe_customer_id AS stripeCustomerId,
+            stripe_subscription_id AS stripeSubscriptionId,
+            stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE username = ? COLLATE NOCASE
     `);
@@ -468,6 +492,9 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             password_hash AS passwordHash, password_salt AS passwordSalt,
             email_verified_at AS emailVerifiedAt, plan,
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
+            stripe_customer_id AS stripeCustomerId,
+            stripe_subscription_id AS stripeSubscriptionId,
+            stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE email = ? COLLATE NOCASE
     `);
@@ -476,6 +503,9 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             password_hash AS passwordHash, password_salt AS passwordSalt,
             email_verified_at AS emailVerifiedAt, plan,
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
+            stripe_customer_id AS stripeCustomerId,
+            stripe_subscription_id AS stripeSubscriptionId,
+            stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE id = ?
     `);
@@ -488,6 +518,43 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     const updateUserPlan = database.prepare(`
         UPDATE users SET plan = ?, plan_status = ? WHERE id = ?
     `);
+    const updateUserBillingStatement = database.prepare(`
+        UPDATE users SET stripe_customer_id = ?, stripe_subscription_id = ?,
+            plan = ?, plan_status = ?, stripe_current_period_end = ?
+        WHERE id = ?
+    `);
+    const selectUserByStripeCustomer = database.prepare(`
+        SELECT id, username, email, display_name AS displayName,
+            password_hash AS passwordHash, password_salt AS passwordSalt,
+            email_verified_at AS emailVerifiedAt, plan,
+            plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
+            stripe_customer_id AS stripeCustomerId,
+            stripe_subscription_id AS stripeSubscriptionId,
+            stripe_current_period_end AS stripeCurrentPeriodEnd,
+            created_at AS createdAt
+        FROM users WHERE stripe_customer_id = ?
+    `);
+    const selectUserByStripeSubscription = database.prepare(`
+        SELECT id, username, email, display_name AS displayName,
+            password_hash AS passwordHash, password_salt AS passwordSalt,
+            email_verified_at AS emailVerifiedAt, plan,
+            plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
+            stripe_customer_id AS stripeCustomerId,
+            stripe_subscription_id AS stripeSubscriptionId,
+            stripe_current_period_end AS stripeCurrentPeriodEnd,
+            created_at AS createdAt
+        FROM users WHERE stripe_subscription_id = ?
+    `);
+    const selectStripeEvent = database.prepare(
+        "SELECT event_id FROM stripe_events WHERE event_id = ?"
+    );
+    const insertStripeEvent = database.prepare(`
+        INSERT OR IGNORE INTO stripe_events (event_id, event_type, processed_at)
+        VALUES (?, ?, ?)
+    `);
+    const removeOldStripeEvents = database.prepare(
+        "DELETE FROM stripe_events WHERE processed_at < ?"
+    );
     const selectBrandProfile = database.prepare(`
         SELECT user_id AS userId, brand_name AS brandName,
             accent_color AS accentColor, background_color AS backgroundColor,
@@ -940,6 +1007,28 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         },
         updateUserPlan(userId, plan, planStatus = "active") {
             return updateUserPlan.run(plan, planStatus, userId).changes > 0;
+        },
+        updateUserBilling(userId, {
+            customerId = null, subscriptionId = null, plan = "free",
+            planStatus = "active", currentPeriodEnd = null
+        }) {
+            return updateUserBillingStatement.run(
+                customerId, subscriptionId, plan, planStatus,
+                currentPeriodEnd, userId
+            ).changes > 0;
+        },
+        getUserByStripeCustomerId: (customerId) => (
+            selectUserByStripeCustomer.get(customerId) || null
+        ),
+        getUserByStripeSubscriptionId: (subscriptionId) => (
+            selectUserByStripeSubscription.get(subscriptionId) || null
+        ),
+        hasStripeEvent: (eventId) => Boolean(selectStripeEvent.get(eventId)),
+        markStripeEventProcessed(eventId, eventType, processedAt) {
+            return insertStripeEvent.run(eventId, eventType, processedAt).changes > 0;
+        },
+        deleteOldStripeEvents(before) {
+            return Number(removeOldStripeEvents.run(before).changes);
         },
         getBrandProfile(userId) {
             const profile = selectBrandProfile.get(userId);

@@ -7,6 +7,12 @@ const production = process.env.NODE_ENV === "production";
 const errors = [];
 const warnings = [];
 
+function enabledValue(value) {
+    return ["1", "true", "yes", "on"].includes(
+        String(value || "").trim().toLowerCase()
+    );
+}
+
 function required(name) {
     const value = process.env[name]?.trim();
     if (!value) errors.push(`Falta ${name}`);
@@ -118,6 +124,41 @@ if (transfersDirectory && backupDirectory) {
 }
 if (!process.env.PHOCLOUD_BACKUP_DIRECTORY) {
     warnings.push("PHOCLOUD_BACKUP_DIRECTORY usa el valor predeterminado; configura una copia externa adicional");
+}
+
+if (enabledValue(process.env.PHOCLOUD_AUTOMATIC_BACKUPS)) {
+    required("PHOCLOUD_R2_ACCOUNT_ID");
+    if (!process.env.PHOCLOUD_BACKUP_R2_ACCESS_KEY_ID?.trim()
+        && !process.env.PHOCLOUD_GALLERY_R2_ACCESS_KEY_ID?.trim()) {
+        errors.push("Falta una clave de acceso R2 para los backups automáticos");
+    }
+    if (!process.env.PHOCLOUD_BACKUP_R2_SECRET_ACCESS_KEY?.trim()
+        && !process.env.PHOCLOUD_GALLERY_R2_SECRET_ACCESS_KEY?.trim()) {
+        errors.push("Falta una clave secreta R2 para los backups automáticos");
+    }
+    if (!process.env.PHOCLOUD_BACKUP_R2_BUCKET?.trim()
+        && !process.env.PHOCLOUD_GALLERY_R2_BUCKET?.trim()) {
+        errors.push("Falta un bucket R2 para los backups automáticos");
+    }
+} else {
+    warnings.push("Los backups externos automáticos no están activados");
+}
+
+if (enabledValue(process.env.PHOCLOUD_BILLING_ENABLED)) {
+    const stripeKey = process.env.STRIPE_RESTRICTED_KEY?.trim()
+        || process.env.STRIPE_SECRET_KEY?.trim();
+    if (!stripeKey) errors.push("Falta STRIPE_RESTRICTED_KEY");
+    required("STRIPE_WEBHOOK_SECRET");
+    required("STRIPE_CREATOR_PRICE_ID");
+    required("STRIPE_PRO_PRICE_ID");
+    if (stripeKey?.startsWith("sk_")) {
+        warnings.push("Stripe usa una clave secreta amplia; se recomienda una clave restringida rk_");
+    }
+    if (stripeKey?.includes("_test_")) {
+        warnings.push("Stripe está configurado en modo de prueba; no habrá cobros reales");
+    }
+} else {
+    warnings.push("La facturación está desactivada; los planes se muestran solo como vista previa");
 }
 
 for (const warning of warnings) console.warn(`AVISO: ${warning}`);

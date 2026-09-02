@@ -331,3 +331,42 @@ test("controla archivos multipart y publica la transferencia al completarlos", (
         fs.rmSync(environment.root, { recursive: true, force: true });
     }
 });
+
+test("persiste la suscripción y evita procesar dos veces un webhook", () => {
+    const environment = createTestEnvironment();
+    const store = createDeliveryStore(environment);
+    try {
+        const userId = store.createUser({
+            username: "facturacion",
+            email: "billing@example.com",
+            passwordHash: "hash",
+            passwordSalt: "salt",
+            createdAt: "2026-09-02T10:00:00.000Z"
+        });
+        assert.equal(store.updateUserBilling(userId, {
+            customerId: "cus_test",
+            subscriptionId: "sub_test",
+            plan: "professional",
+            planStatus: "active",
+            currentPeriodEnd: "2026-10-02T10:00:00.000Z"
+        }), true);
+        const user = store.getUserByStripeCustomerId("cus_test");
+        assert.equal(user.id, userId);
+        assert.equal(user.plan, "professional");
+        assert.equal(
+            store.getUserByStripeSubscriptionId("sub_test").stripeCurrentPeriodEnd,
+            "2026-10-02T10:00:00.000Z"
+        );
+        assert.equal(store.hasStripeEvent("evt_test"), false);
+        assert.equal(store.markStripeEventProcessed(
+            "evt_test", "checkout.session.completed", "2026-09-02T10:01:00.000Z"
+        ), true);
+        assert.equal(store.markStripeEventProcessed(
+            "evt_test", "checkout.session.completed", "2026-09-02T10:02:00.000Z"
+        ), false);
+        assert.equal(store.hasStripeEvent("evt_test"), true);
+    } finally {
+        store.close();
+        fs.rmSync(environment.root, { recursive: true, force: true });
+    }
+});

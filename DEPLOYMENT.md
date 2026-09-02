@@ -99,6 +99,28 @@ Prueba una restauración antes del lanzamiento: detén el servicio, coloca
 `phocloud.db`, `uploads/`, `transfers/` y `branding/` en las rutas configuradas y vuelve a
 iniciar. No sobrescribas datos activos sin conservar antes otra copia.
 
+Para copias diarias externas, activa `PHOCLOUD_AUTOMATIC_BACKUPS=true`. De forma
+predeterminada se reutilizan el bucket y las credenciales R2 de galerías y se
+guardan ZIP privados bajo `_system/backups/`, con 30 días de retención. Para
+aislarlas, configura `PHOCLOUD_BACKUP_R2_ACCESS_KEY_ID`,
+`PHOCLOUD_BACKUP_R2_SECRET_ACCESS_KEY` y `PHOCLOUD_BACKUP_R2_BUCKET`. El ZIP
+incluye una copia consistente de SQLite, miniaturas, metadatos y marcas; los
+originales permanecen en el bucket privado de galerías.
+
+## Suscripciones con Stripe
+
+La facturación permanece apagada mientras `PHOCLOUD_BILLING_ENABLED` no sea
+`true`. Para probarla utiliza una clave restringida de Stripe en modo test y
+configura `STRIPE_CREATOR_PRICE_ID`, `STRIPE_PRO_PRICE_ID` y
+`STRIPE_WEBHOOK_SECRET`. El webhook público es `/billing/webhook` y debe recibir
+los eventos de Checkout, suscripciones e invoices. Checkout y Customer Portal
+se habilitan solo cuando toda la configuración está presente.
+
+No actives `automatic_tax` hasta haber confirmado y configurado los registros
+fiscales correspondientes. Antes de cobrar de verdad, sustituye los precios y
+la clave de prueba por recursos live, prueba el webhook live y conserva las
+claves únicamente como secretos de Railway.
+
 ## Beta económica en Railway
 
 El archivo `railway.json` hace que Railway construya el `Dockerfile`, espere a

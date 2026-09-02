@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("node:child_process");
 const { Jimp } = require("jimp");
+const Stripe = require("stripe");
 
 const rootDirectory = path.join(__dirname, "..");
 
@@ -82,6 +83,15 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal(registered.response.status, 201);
         const verificationToken = new URL(registered.data.devLink)
             .searchParams.get("token");
+        const unverifiedLogin = await jsonRequest(`${baseUrl}/auth/login`, {
+            method: "POST",
+            body: {
+                identifier: registration.email,
+                password: registration.password
+            }
+        });
+        assert.equal(unverifiedLogin.response.status, 403);
+        assert.equal(unverifiedLogin.data.verificationRequired, true);
         const verified = await jsonRequest(`${baseUrl}/auth/verify-email`, {
             method: "POST",
             body: { token: verificationToken }
@@ -96,11 +106,44 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             }
         });
         assert.equal(login.response.status, 200);
-        const cookie = login.response.headers.getSetCookie()
+        let cookie = login.response.headers.getSetCookie()
+            .map((value) => value.split(";", 1)[0])
+            .join("; ");
+        const forgotten = await jsonRequest(`${baseUrl}/auth/forgot-password`, {
+            method: "POST",
+            body: { email: registration.email }
+        });
+        assert.equal(forgotten.response.status, 200);
+        const resetToken = new URL(forgotten.data.devLink).searchParams.get("token");
+        const newPassword = "NuevaContrasenaTemporal123";
+        const reset = await jsonRequest(`${baseUrl}/auth/reset-password`, {
+            method: "POST",
+            body: { token: resetToken, password: newPassword }
+        });
+        assert.equal(reset.response.status, 200);
+        assert.equal((await jsonRequest(`${baseUrl}/account`, { cookie })).response.status, 401);
+        assert.equal((await jsonRequest(`${baseUrl}/auth/reset-password`, {
+            method: "POST",
+            body: { token: resetToken, password: newPassword }
+        })).response.status, 400);
+        assert.equal((await jsonRequest(`${baseUrl}/auth/login`, {
+            method: "POST",
+            body: {
+                identifier: registration.email,
+                password: registration.password
+            }
+        })).response.status, 401);
+        const loginAfterReset = await jsonRequest(`${baseUrl}/auth/login`, {
+            method: "POST",
+            body: { identifier: registration.email, password: newPassword }
+        });
+        assert.equal(loginAfterReset.response.status, 200);
+        cookie = loginAfterReset.response.headers.getSetCookie()
             .map((value) => value.split(";", 1)[0])
             .join("; ");
         const account = await jsonRequest(`${baseUrl}/account`, { cookie });
         assert.equal(account.data.account.usage.galleryLimit, 3);
+        assert.equal(account.data.account.billing.enabled, false);
         const capabilities = await jsonRequest(
             `${baseUrl}/transfers/capabilities`, { cookie }
         );
@@ -343,6 +386,149 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal(finalAccount.data.account.usage.galleryCount, 3);
         assert.equal(finalAccount.data.account.usage.totalGalleryCount, 3);
         assert.equal((await fetch(`${baseUrl}/readyz`)).status, 200);
+    } finally {
+        child.kill("SIGTERM");
+        await new Promise((resolve) => child.once("exit", resolve));
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+});
+
+test("Stripe actualiza las cuotas mediante webhooks firmados e idempotentes", async () => {
+    const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phocloud-billing-"));
+    const port = 37_000 + (process.pid % 2_000);
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const webhookSecret = "whsec_integration_test";
+    const stripe = new Stripe("rk_test_integration");
+    const child = spawn(process.execPath, [path.join(__dirname, "server.js")], {
+        cwd: rootDirectory,
+        env: {
+            ...process.env,
+            NODE_ENV: "test",
+            PORT: String(port),
+            PHOCLOUD_PUBLIC_URL: baseUrl,
+            PHOCLOUD_DATABASE_PATH: path.join(temporaryRoot, "phocloud.db"),
+            PHOCLOUD_UPLOADS_DIRECTORY: path.join(temporaryRoot, "uploads"),
+            PHOCLOUD_TRANSFERS_DIRECTORY: path.join(temporaryRoot, "transfers"),
+            SMTP_HOST: "",
+            SMTP_USER: "",
+            SMTP_PASS: "",
+            PHOCLOUD_FROM_EMAIL: "",
+            PHOCLOUD_BILLING_ENABLED: "true",
+            STRIPE_RESTRICTED_KEY: "rk_test_integration",
+            STRIPE_WEBHOOK_SECRET: webhookSecret,
+            STRIPE_CREATOR_PRICE_ID: "price_creator",
+            STRIPE_PRO_PRICE_ID: "price_pro"
+        },
+        stdio: "ignore"
+    });
+    try {
+        await waitForServer(baseUrl, child);
+        const registration = {
+            displayName: "Estudio Stripe",
+            username: "estudio-stripe",
+            email: "stripe@example.com",
+            password: "ContrasenaTemporal123",
+            acceptTerms: true
+        };
+        const registered = await jsonRequest(`${baseUrl}/auth/register`, {
+            method: "POST", body: registration
+        });
+        const verificationToken = new URL(registered.data.devLink)
+            .searchParams.get("token");
+        await jsonRequest(`${baseUrl}/auth/verify-email`, {
+            method: "POST", body: { token: verificationToken }
+        });
+        const login = await jsonRequest(`${baseUrl}/auth/login`, {
+            method: "POST",
+            body: {
+                identifier: registration.email,
+                password: registration.password
+            }
+        });
+        const cookie = login.response.headers.getSetCookie()
+            .map((value) => value.split(";", 1)[0]).join("; ");
+
+        async function sendEvent(event) {
+            const payload = JSON.stringify(event);
+            const signature = stripe.webhooks.generateTestHeaderString({
+                payload, secret: webhookSecret
+            });
+            return fetch(`${baseUrl}/billing/webhook`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Stripe-Signature": signature
+                },
+                body: payload
+            });
+        }
+
+        const checkoutEvent = {
+            id: "evt_checkout_complete",
+            type: "checkout.session.completed",
+            data: { object: {
+                id: "cs_test",
+                client_reference_id: "1",
+                customer: "cus_test",
+                subscription: "sub_test",
+                payment_status: "paid",
+                metadata: {
+                    phocloud_user_id: "1",
+                    phocloud_plan: "professional"
+                }
+            } }
+        };
+        assert.equal((await sendEvent(checkoutEvent)).status, 200);
+        assert.equal((await sendEvent(checkoutEvent)).status, 200);
+        let account = await jsonRequest(`${baseUrl}/account`, { cookie });
+        assert.equal(account.data.account.billing.enabled, true);
+        assert.equal(account.data.account.plan, "professional");
+        assert.equal(account.data.account.usage.galleryLimit, 25);
+
+        const periodEnd = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+        assert.equal((await sendEvent({
+            id: "evt_subscription_updated",
+            type: "customer.subscription.updated",
+            data: { object: {
+                id: "sub_test",
+                customer: "cus_test",
+                status: "active",
+                current_period_end: periodEnd,
+                metadata: { phocloud_user_id: "1", phocloud_plan: "studio" },
+                items: { data: [{ price: { id: "price_pro" } }] }
+            } }
+        })).status, 200);
+        account = await jsonRequest(`${baseUrl}/account`, { cookie });
+        assert.equal(account.data.account.plan, "studio");
+        assert.equal(account.data.account.usage.galleryLimit, 100);
+
+        assert.equal((await sendEvent({
+            id: "evt_invoice_failed",
+            type: "invoice.payment_failed",
+            data: { object: {
+                id: "in_test",
+                customer: "cus_test",
+                subscription: "sub_test"
+            } }
+        })).status, 200);
+        account = await jsonRequest(`${baseUrl}/account`, { cookie });
+        assert.equal(account.data.account.planStatus, "past_due");
+        assert.equal(account.data.account.usage.galleryLimit, 100);
+
+        assert.equal((await sendEvent({
+            id: "evt_subscription_deleted",
+            type: "customer.subscription.deleted",
+            data: { object: {
+                id: "sub_test",
+                customer: "cus_test",
+                status: "canceled",
+                metadata: { phocloud_user_id: "1", phocloud_plan: "studio" },
+                items: { data: [{ price: { id: "price_pro" } }] }
+            } }
+        })).status, 200);
+        account = await jsonRequest(`${baseUrl}/account`, { cookie });
+        assert.equal(account.data.account.plan, "free");
+        assert.equal(account.data.account.usage.galleryLimit, 3);
     } finally {
         child.kill("SIGTERM");
         await new Promise((resolve) => child.once("exit", resolve));
