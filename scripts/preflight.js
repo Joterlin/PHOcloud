@@ -36,13 +36,17 @@ const publicUrl = required("PHOCLOUD_PUBLIC_URL");
 const databasePath = required("PHOCLOUD_DATABASE_PATH");
 const uploadsDirectory = required("PHOCLOUD_UPLOADS_DIRECTORY");
 const transfersDirectory = required("PHOCLOUD_TRANSFERS_DIRECTORY");
-required("SMTP_HOST");
-required("SMTP_USER");
-required("SMTP_PASS");
 required("PHOCLOUD_FROM_EMAIL");
 required("PHOCLOUD_LEGAL_NAME");
 required("PHOCLOUD_LEGAL_EMAIL");
 required("PHOCLOUD_LEGAL_COUNTRY");
+
+const resendConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
+const smtpFields = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"];
+const smtpConfigured = smtpFields.every((name) => process.env[name]?.trim());
+if (!resendConfigured && !smtpConfigured) {
+    errors.push("Configura RESEND_API_KEY o SMTP_HOST, SMTP_USER y SMTP_PASS");
+}
 
 const transferStorage = (process.env.PHOCLOUD_TRANSFER_STORAGE || "local")
     .trim().toLowerCase();
@@ -66,9 +70,11 @@ try {
     errors.push("PHOCLOUD_PUBLIC_URL no es una URL válida");
 }
 
-const smtpPort = Number(process.env.SMTP_PORT || 587);
-if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
-    errors.push("SMTP_PORT no es válido");
+if (smtpConfigured) {
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+        errors.push("SMTP_PORT no es válido");
+    }
 }
 
 if (databasePath) {

@@ -9,7 +9,8 @@ servidor cuyo disco se borre al reiniciar.
 
 1. Un servidor o plataforma de contenedores con volumen persistente.
 2. Un dominio con HTTPS terminado por el proveedor o por un proxy inverso.
-3. Un proveedor SMTP para verificación, recuperación y envío de galerías.
+3. Un proveedor de correo por API HTTPS (o SMTP donde esté permitido) para
+   verificación, recuperación y envío de galerías.
 4. Una ubicación externa para copiar periódicamente los backups.
 5. Monitorización HTTP de `/healthz` y, para disponibilidad interna, `/readyz`.
 6. Un bucket Cloudflare R2 para transferencias grandes por bloques.
@@ -23,7 +24,8 @@ En producción son obligatorias:
 - `PHOCLOUD_PUBLIC_URL=https://tu-dominio.com`
 - `PHOCLOUD_DATABASE_PATH`, `PHOCLOUD_UPLOADS_DIRECTORY` y
   `PHOCLOUD_TRANSFERS_DIRECTORY` dentro del volumen
-- todas las variables `SMTP_*` y `PHOCLOUD_FROM_EMAIL`
+- `RESEND_API_KEY` y `PHOCLOUD_FROM_EMAIL`; como alternativa, todas las
+  variables `SMTP_*` y `PHOCLOUD_FROM_EMAIL`
 - `PHOCLOUD_LEGAL_NAME`, `PHOCLOUD_LEGAL_EMAIL` y `PHOCLOUD_LEGAL_COUNTRY`
 - `PHOCLOUD_TRANSFER_STORAGE=r2` y las variables `PHOCLOUD_R2_*`
 

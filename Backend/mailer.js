@@ -1,5 +1,12 @@
 const nodemailer = require("nodemailer");
 
+function resendConfigured() {
+    return Boolean(
+        process.env.RESEND_API_KEY
+        && process.env.PHOCLOUD_FROM_EMAIL
+    );
+}
+
 function smtpConfigured() {
     return Boolean(
         process.env.SMTP_HOST
@@ -7,6 +14,10 @@ function smtpConfigured() {
         && process.env.SMTP_PASS
         && process.env.PHOCLOUD_FROM_EMAIL
     );
+}
+
+function emailConfigured() {
+    return resendConfigured() || smtpConfigured();
 }
 
 function createTransport() {
@@ -32,23 +43,62 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
-async function sendAccountLink({ to, displayName, purpose, link }) {
+async function sendEmail({ to, subject, text, html }) {
+    if (resendConfigured()) {
+        const response = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                from: process.env.PHOCLOUD_FROM_EMAIL,
+                to: [to],
+                subject,
+                text,
+                html
+            }),
+            signal: AbortSignal.timeout(15_000)
+        });
+
+        if (!response.ok) {
+            let detail = "";
+            try {
+                const payload = await response.json();
+                detail = payload?.message ? `: ${payload.message}` : "";
+            } catch {
+                // La respuesta puede no contener JSON. Nunca mostramos la clave.
+            }
+            throw new Error(`Resend rechazó el correo (${response.status})${detail}`);
+        }
+        return;
+    }
+
     const transporter = createTransport();
+    await transporter.sendMail({
+        from: process.env.PHOCLOUD_FROM_EMAIL,
+        to,
+        subject,
+        text,
+        html
+    });
+}
+
+async function sendAccountLink({ to, displayName, purpose, link }) {
     const isVerification = purpose === "verify_email";
     const action = isVerification ? "Verificar mi correo" : "Crear nueva contraseña";
     const subject = isVerification
         ? "Confirma tu cuenta de PHOcloud"
         : "Recupera tu cuenta de PHOcloud";
 
-    if (!transporter) {
+    if (!emailConfigured()) {
         if (process.env.NODE_ENV !== "test") {
             console.info(`[PHOcloud correo local] ${subject}: ${link}`);
         }
         return { delivered: false, devLink: link };
     }
 
-    await transporter.sendMail({
-        from: process.env.PHOCLOUD_FROM_EMAIL,
+    await sendEmail({
         to,
         subject,
         text: `Hola ${displayName || "fotógrafo"}. ${action}: ${link}`,
@@ -74,21 +124,19 @@ async function sendAccountLink({ to, displayName, purpose, link }) {
 async function sendGalleryDelivery({
     to, clientName, photographerName, galleryName, link, protectedGallery
 }) {
-    const transporter = createTransport();
     const subject = `${photographerName || "Tu fotógrafo"} ha publicado tu galería`;
     const accessNote = protectedGallery
         ? "La galería está protegida. Tu fotógrafo te facilitará la contraseña por separado."
         : "Puedes abrirla directamente desde este enlace.";
 
-    if (!transporter) {
+    if (!emailConfigured()) {
         if (process.env.NODE_ENV !== "test") {
             console.info(`[PHOcloud correo local] ${subject}: ${link}`);
         }
         return { delivered: false, devLink: link };
     }
 
-    await transporter.sendMail({
-        from: process.env.PHOCLOUD_FROM_EMAIL,
+    await sendEmail({
         to,
         subject,
         text: `Hola ${clientName}. Tu galería ${galleryName} ya está disponible: ${link}. ${accessNote}`,
@@ -112,7 +160,6 @@ async function sendGalleryDelivery({
 async function sendTransferDelivery({
     to, senderName, title, message, link, protectedTransfer, expiresAt
 }) {
-    const transporter = createTransport();
     const subject = `${senderName || "PHOcloud"} te ha enviado archivos`;
     const protection = protectedTransfer
         ? "La transferencia está protegida; pide la contraseña al remitente por separado."
@@ -120,14 +167,13 @@ async function sendTransferDelivery({
     const expiry = new Intl.DateTimeFormat("es-ES", {
         day: "numeric", month: "long", year: "numeric"
     }).format(new Date(expiresAt));
-    if (!transporter) {
+    if (!emailConfigured()) {
         if (process.env.NODE_ENV !== "test") {
             console.info(`[PHOcloud correo local] ${subject}: ${link}`);
         }
         return { delivered: false, devLink: link };
     }
-    await transporter.sendMail({
-        from: process.env.PHOCLOUD_FROM_EMAIL,
+    await sendEmail({
         to,
         subject,
         text: `${senderName || "PHOcloud"} te ha enviado “${title}”: ${link}. Disponible hasta el ${expiry}. ${protection}`,
@@ -146,5 +192,10 @@ async function sendTransferDelivery({
 }
 
 module.exports = {
-    sendAccountLink, sendGalleryDelivery, sendTransferDelivery, smtpConfigured
+    sendAccountLink,
+    sendGalleryDelivery,
+    sendTransferDelivery,
+    emailConfigured,
+    resendConfigured,
+    smtpConfigured
 };

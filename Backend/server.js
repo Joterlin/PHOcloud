@@ -12,7 +12,7 @@ const {
     sendAccountLink,
     sendGalleryDelivery,
     sendTransferDelivery,
-    smtpConfigured
+    emailConfigured
 } = require("./mailer");
 const {
     BRAND_FOLDER,
@@ -91,13 +91,17 @@ function validateRuntimeConfig() {
     const required = [
         "PHOCLOUD_PUBLIC_URL", "PHOCLOUD_DATABASE_PATH",
         "PHOCLOUD_UPLOADS_DIRECTORY", "PHOCLOUD_TRANSFERS_DIRECTORY",
-        "SMTP_HOST", "SMTP_USER",
-        "SMTP_PASS", "PHOCLOUD_FROM_EMAIL", "PHOCLOUD_LEGAL_NAME",
+        "PHOCLOUD_FROM_EMAIL", "PHOCLOUD_LEGAL_NAME",
         "PHOCLOUD_LEGAL_EMAIL", "PHOCLOUD_LEGAL_COUNTRY"
     ];
     const missing = required.filter((key) => !process.env[key]);
     if (missing.length) {
         throw new Error(`Configuración de producción incompleta: ${missing.join(", ")}`);
+    }
+    if (!emailConfigured()) {
+        throw new Error(
+            "Configura RESEND_API_KEY o SMTP_HOST, SMTP_USER y SMTP_PASS para enviar correos"
+        );
     }
 
     let publicUrl;
@@ -1476,7 +1480,7 @@ app.get("/account", requireAuth, (req, res) => {
             emailVerified: !user.email || Boolean(user.emailVerifiedAt),
             plan: user.plan,
             planStatus: user.planStatus,
-            emailDeliveryConfigured: smtpConfigured(),
+            emailDeliveryConfigured: emailConfigured(),
             usage: accountUsage(user.id, user.plan)
         }
     });
