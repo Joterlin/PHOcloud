@@ -12,9 +12,9 @@ async function main() {
         throw new Error("Configura PHOCLOUD_TRANSFER_STORAGE=r2");
     }
     await storage.healthcheck();
-    const configured = await storage.configureBucket(publicUrl);
+    const origin = new URL(publicUrl).origin;
     console.log(
-        `R2 configurado: ${configured.bucket} acepta subidas desde ${configured.origin} y elimina transferencias tras 24 horas.`
+        `R2 validado: ${storage.bucket} acepta las credenciales de PHOcloud. CORS debe permitir ${origin} y la regla de ciclo de vida debe eliminar objetos tras 24 horas.`
     );
 }
 

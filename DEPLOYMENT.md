@@ -60,9 +60,10 @@ segunda protección si el proceso estuviera apagado en ese momento. No hagas
 público el bucket: las subidas y descargas usan enlaces firmados de corta duración.
 
 Con las variables R2 guardadas, ejecuta `npm run configure:r2`. Este comando
-comprueba el acceso al bucket, limita CORS al origen de `PHOCLOUD_PUBLIC_URL` y
-aplica automáticamente la eliminación de objetos y subidas multipart incompletas
-tras un día. `/readyz` también comprueba el bucket cuando R2 está activo.
+comprueba el acceso a objetos usando el mismo token restringido que PHOcloud.
+La política CORS se aplica con `deployment/r2-cors.json` mediante Wrangler y
+la eliminación tras un día se configura en el panel o con Wrangler. `/readyz`
+también comprueba el bucket cuando R2 está activo.
 
 Ejecuta `npm run preflight` antes de iniciar. El proceso se detendrá si falta una
 configuración crítica o si la URL pública no usa HTTPS.

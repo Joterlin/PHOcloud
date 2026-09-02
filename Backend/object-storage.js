@@ -4,10 +4,8 @@ const {
     CreateMultipartUploadCommand,
     DeleteObjectsCommand,
     GetObjectCommand,
-    HeadBucketCommand,
+    ListObjectsV2Command,
     ListPartsCommand,
-    PutBucketCorsCommand,
-    PutBucketLifecycleConfigurationCommand,
     S3Client,
     UploadPartCommand
 } = require("@aws-sdk/client-s3");
@@ -151,44 +149,17 @@ function createObjectStorage(env = process.env) {
     }
 
     async function healthcheck() {
-        await client.send(new HeadBucketCommand({ Bucket: bucket }));
+        await client.send(new ListObjectsV2Command({
+            Bucket: bucket,
+            MaxKeys: 1
+        }));
         return true;
-    }
-
-    async function configureBucket(publicOrigin) {
-        const origin = new URL(publicOrigin).origin;
-        await client.send(new PutBucketCorsCommand({
-            Bucket: bucket,
-            CORSConfiguration: {
-                CORSRules: [{
-                    AllowedOrigins: [origin],
-                    AllowedMethods: ["GET", "PUT", "HEAD"],
-                    AllowedHeaders: ["*"],
-                    ExposeHeaders: ["ETag"],
-                    MaxAgeSeconds: 3600
-                }]
-            }
-        }));
-        await client.send(new PutBucketLifecycleConfigurationCommand({
-            Bucket: bucket,
-            LifecycleConfiguration: {
-                Rules: [{
-                    ID: "phocloud-transferencias-24h",
-                    Status: "Enabled",
-                    Filter: { Prefix: "transfers/" },
-                    Expiration: { Days: 1 },
-                    AbortIncompleteMultipartUpload: {
-                        DaysAfterInitiation: 1
-                    }
-                }]
-            }
-        }));
-        return { origin, bucket };
     }
 
     return {
         enabled: true,
         provider: "r2",
+        bucket,
         endpointOrigin: new URL(endpoint).origin,
         partSize: DEFAULT_PART_SIZE,
         startMultipart,
@@ -199,8 +170,7 @@ function createObjectStorage(env = process.env) {
         downloadUrl,
         getObjectStream,
         deleteKeys,
-        healthcheck,
-        configureBucket
+        healthcheck
     };
 }
 

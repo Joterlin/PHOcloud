@@ -19,8 +19,6 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
     const parts = new Map();
     let completedObject = null;
     let deleted = false;
-    let corsConfiguration = "";
-    let lifecycleConfiguration = "";
     const uploadId = "upload-de-prueba";
     const etag = "\"etag-parte-1\"";
 
@@ -29,19 +27,14 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
         const key = decodeURIComponent(url.pathname)
             .replace(/^\/phocloud-transfers\//, "");
 
-        if (req.method === "HEAD" && url.pathname === "/phocloud-transfers/") {
-            res.writeHead(200);
-            return res.end();
-        }
-        if (req.method === "PUT" && url.searchParams.has("cors")) {
-            corsConfiguration = (await requestBody(req)).toString("utf8");
-            res.writeHead(200);
-            return res.end();
-        }
-        if (req.method === "PUT" && url.searchParams.has("lifecycle")) {
-            lifecycleConfiguration = (await requestBody(req)).toString("utf8");
-            res.writeHead(200);
-            return res.end();
+        if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
+            return xml(res, 200, [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">',
+                '<Name>phocloud-transfers</Name><KeyCount>0</KeyCount>',
+                '<MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated>',
+                '</ListBucketResult>'
+            ].join(""));
         }
         if (req.method === "POST" && url.searchParams.has("uploads")) {
             return xml(res, 200, [
@@ -136,14 +129,7 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
 
     try {
         assert.equal(await storage.healthcheck(), true);
-        const bucketConfiguration = await storage.configureBucket(
-            "https://app.phocloud.example/ruta-ignorada"
-        );
-        assert.equal(bucketConfiguration.origin, "https://app.phocloud.example");
-        assert.match(corsConfiguration, /https:\/\/app\.phocloud\.example/);
-        assert.match(corsConfiguration, /<AllowedMethod>PUT<\/AllowedMethod>/);
-        assert.match(lifecycleConfiguration, /<Expiration><Days>1<\/Days><\/Expiration>/);
-        assert.match(lifecycleConfiguration, /<DaysAfterInitiation>1<\/DaysAfterInitiation>/);
+        assert.equal(storage.bucket, "phocloud-transfers");
 
         const started = await storage.startMultipart({
             transferId: "00000000-0000-4000-8000-000000000020",
