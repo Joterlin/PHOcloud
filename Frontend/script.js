@@ -56,7 +56,6 @@ let pendingDeletion = null;
 let deletionInProgress = false;
 let accountData = null;
 let resultHideTimer = null;
-let galleryTemplates = [];
 let selectedTransferFiles = [];
 let currentTransferLink = "";
 const MAX_TRANSFER_FILE_SIZE = 50 * 1024 * 1024 * 1024;
@@ -136,6 +135,29 @@ function isoToDateInput(value) {
         String(date.getDate()).padStart(2, "0")
     ].join("-");
 }
+
+function dateDaysFromNow(days) {
+    const date = new Date();
+    date.setDate(date.getDate() + Number(days));
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0")
+    ].join("-");
+}
+
+function updateExpiryChoice() {
+    const choice = byId("editExpiryChoice").value;
+    const exactField = byId("editExpiresAtField");
+    const exactInput = byId("editExpiresAt");
+    exactField.hidden = choice !== "custom";
+    exactInput.required = choice === "custom";
+    if (!choice) exactInput.value = "";
+    else if (choice !== "custom") exactInput.value = dateDaysFromNow(choice);
+}
+
+byId("editExpiryChoice").addEventListener("change", updateExpiryChoice);
+byId("editExpiresAt").min = dateDaysFromNow(1);
 
 function formatDate(value) {
     const date = new Date(value);
@@ -231,15 +253,6 @@ function renderSelection() {
             image.preload = "metadata";
         } else image.alt = file.name;
 
-        const cover = document.createElement("button");
-        cover.type = "button";
-        cover.className = "cover-button";
-        cover.textContent = file === coverFile ? "✓ Portada" : "Portada";
-        cover.addEventListener("click", () => {
-            coverFile = file;
-            renderSelection();
-        });
-
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "remove-selection";
@@ -248,7 +261,6 @@ function renderSelection() {
         remove.addEventListener("click", () => removeSelectedFile(index));
 
         card.append(image);
-        if (!isVideoFile(file)) card.append(cover);
         card.append(remove);
         selectionPreview.appendChild(card);
     });
@@ -284,106 +296,6 @@ function appendDeliverySettings(formData) {
     formData.append("favoritesEnabled", byId("favoritesEnabled").checked);
     formData.append("selectionLimit", byId("selectionLimit").value || "0");
 }
-
-function currentTemplateSettings() {
-    return {
-        message: byId("deliveryMessage").value.trim(),
-        expiresAt: dateInputToIso(byId("expiresAt").value),
-        viewingEnabled: byId("viewingEnabled").checked,
-        allowOriginalDownload: byId("allowOriginalDownload").checked,
-        allowWebDownload: byId("allowWebDownload").checked,
-        favoritesEnabled: byId("favoritesEnabled").checked,
-        selectionLimit: Number(byId("selectionLimit").value) || 0,
-        galleryStyle: byId("galleryStyle").value,
-        coverStyle: byId("coverStyle").value,
-        coverPositionX: Number(byId("coverPositionX").value),
-        coverPositionY: Number(byId("coverPositionY").value),
-        ...createBrandValues("")
-    };
-}
-
-function applyTemplateSettings(settings = {}) {
-    const values = {
-        deliveryMessage: settings.message,
-        expiresAt: isoToDateInput(settings.expiresAt),
-        selectionLimit: settings.selectionLimit,
-        brandName: settings.brandName,
-        accentColor: settings.accentColor,
-        backgroundColor: settings.backgroundColor,
-        galleryStyle: settings.galleryStyle,
-        coverStyle: settings.coverStyle,
-        coverPositionX: settings.coverPositionX,
-        coverPositionY: settings.coverPositionY,
-        brandLogoScale: settings.logoScale,
-        brandLogoPositionX: settings.logoPositionX,
-        brandLogoPositionY: settings.logoPositionY
-    };
-    for (const [id, value] of Object.entries(values)) {
-        if (value !== undefined && value !== null && byId(id)) byId(id).value = value;
-    }
-    for (const [id, key] of [
-        ["viewingEnabled", "viewingEnabled"],
-        ["allowOriginalDownload", "allowOriginalDownload"],
-        ["allowWebDownload", "allowWebDownload"],
-        ["favoritesEnabled", "favoritesEnabled"]
-    ]) {
-        if (settings[key] !== undefined) byId(id).checked = Boolean(settings[key]);
-    }
-    if (Array.isArray(settings.socialLinks)) renderLinkRows("", settings.socialLinks);
-    updateLogoPreview("");
-}
-
-async function loadTemplates() {
-    const response = await fetch("/templates");
-    const data = await readResponse(response);
-    galleryTemplates = data.templates || [];
-    const select = byId("templateSelect");
-    const selected = select.value;
-    select.replaceChildren(new Option("Sin plantilla", ""));
-    for (const template of galleryTemplates) {
-        select.appendChild(new Option(template.name, String(template.id)));
-    }
-    if ([...select.options].some((option) => option.value === selected)) {
-        select.value = selected;
-    }
-}
-
-byId("applyTemplate").addEventListener("click", () => {
-    const template = galleryTemplates.find((item) => String(item.id) === byId("templateSelect").value);
-    if (!template) return;
-    applyTemplateSettings(template.settings);
-    showBuilderPanel("design", true);
-});
-
-byId("openTemplateDialog").addEventListener("click", () => {
-    byId("templateName").value = "";
-    byId("templateDialogError").hidden = true;
-    byId("templateDialog").showModal();
-    byId("templateName").focus();
-});
-byId("cancelTemplateDialog").addEventListener("click", () => byId("templateDialog").close());
-byId("templateForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const error = byId("templateDialogError");
-    error.hidden = true;
-    try {
-        const response = await fetch("/templates", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                name: byId("templateName").value.trim(),
-                settings: currentTemplateSettings()
-            })
-        });
-        const data = await readResponse(response);
-        await loadTemplates();
-        byId("templateSelect").value = String(data.template.id);
-        byId("templateDialog").close();
-    } catch (caught) {
-        error.textContent = caught.message;
-        error.hidden = false;
-    }
-});
 
 function linkList(prefix = "") {
     return byId(`${prefix || "brand"}LinksList`);
@@ -567,13 +479,12 @@ async function createDelivery() {
     const name = clientName.value.trim();
     if (!name) {
         showError("Escribe el nombre del cliente, empresa o evento");
-        showBuilderPanel("details", true);
         clientName.focus();
         return;
     }
     if (!selectedFiles.length) {
         showError("Selecciona fotografías");
-        showBuilderPanel("photos", true);
+        uploadButton.focus();
         return;
     }
 
@@ -603,6 +514,7 @@ async function createDelivery() {
         result.hidden = false;
         clearTimeout(resultHideTimer);
         resultHideTimer = setTimeout(() => { result.hidden = true; }, 6500);
+        const createdDeliveryId = data.galleryId;
         clearSelection();
         clientName.value = "";
         byId("clientEmail").value = "";
@@ -610,10 +522,9 @@ async function createDelivery() {
         byId("galleryPassword").value = "";
         byId("expiresAt").value = "";
         byId("brandLogo").value = "";
-        applyProfileToCreate();
-        showBuilderPanel("details");
         await loadDeliveries();
         await loadAccount();
+        await openEditDelivery(createdDeliveryId);
     } catch (error) {
         showError(error.message);
     } finally {
@@ -882,7 +793,7 @@ function createDeliveryCard(delivery) {
     const send = actionButton("Enviar al cliente", "delivery-send", () => {
         sendDelivery(delivery, send);
     });
-    const edit = actionButton("Editar", "delivery-edit", () => {
+    const edit = actionButton("Personalizar", "delivery-edit", () => {
         openEditDelivery(delivery.id);
     });
     const remove = actionButton("Eliminar", "delivery-delete", () => {
@@ -967,6 +878,8 @@ function fillEditForm() {
     byId("editClientEmail").value = delivery.clientEmail || "";
     byId("editMessage").value = delivery.message || "";
     byId("editExpiresAt").value = isoToDateInput(delivery.expiresAt);
+    byId("editExpiryChoice").value = delivery.expiresAt ? "custom" : "";
+    updateExpiryChoice();
     byId("editPassword").value = "";
     byId("removePassword").checked = false;
     byId("removePasswordLabel").hidden = !delivery.hasPassword;
@@ -979,7 +892,11 @@ function fillEditForm() {
     byId("editAccentColor").value = delivery.accentColor || "#c9aa70";
     byId("editBackgroundColor").value = delivery.backgroundColor || "#080808";
     renderLinkRows("edit", delivery.socialLinks || []);
-    byId("editGalleryStyle").value = delivery.galleryStyle || "masonry";
+    const galleryStyle = delivery.galleryStyle || "masonry";
+    const galleryStyleOption = document.querySelector(
+        `input[name="editGalleryStyle"][value="${galleryStyle}"]`
+    );
+    if (galleryStyleOption) galleryStyleOption.checked = true;
     byId("editCoverStyle").value = delivery.coverStyle || "immersive";
     byId("editCoverPositionX").value = delivery.coverPositionX ?? 50;
     byId("editCoverPositionY").value = delivery.coverPositionY ?? 50;
@@ -1005,9 +922,9 @@ function activityText(item) {
         selection_comment: "Nota añadida",
         selection_submitted: "Selección final enviada",
         download_gallery_original: "Galería original descargada",
-        download_gallery_web: "Galería web descargada",
+        download_gallery_web: "Galería descargada en calidad reducida",
         download_photo_original: "Original descargado",
-        download_photo_web: "Versión web descargada"
+        download_photo_web: "Calidad reducida descargada"
     };
     return labels[item.eventType] || "Actividad en la galería";
 }
@@ -1287,7 +1204,9 @@ editDeliveryForm.addEventListener("submit", async (event) => {
         allowWebDownload: byId("editAllowWebDownload").checked,
         favoritesEnabled: byId("editFavoritesEnabled").checked,
         selectionLimit: byId("editSelectionLimit").value || 0,
-        galleryStyle: byId("editGalleryStyle").value,
+        galleryStyle: document.querySelector(
+            'input[name="editGalleryStyle"]:checked'
+        )?.value || "masonry",
         coverFilename: currentEditDelivery.coverFilename,
         coverStyle: byId("editCoverStyle").value,
         coverPositionX: byId("editCoverPositionX").value,
@@ -1727,7 +1646,7 @@ deleteDialog.addEventListener("close", () => {
 });
 
 Promise.all([
-    loadBrandProfile(), loadDeliveries(), loadTransfers(), loadAccount(), loadTemplates()
+    loadBrandProfile(), loadDeliveries(), loadTransfers(), loadAccount()
 ]).catch((error) => {
     showError(error.message);
 });

@@ -11,6 +11,20 @@ button, input { font: inherit; }
 
 body { min-height: 100vh; margin: 0; background: #090909; }
 
+.theme-toggle {
+    min-height: 42px;
+    padding: 0 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #343330;
+    border-radius: 999px;
+    background: rgba(9, 9, 9, .58);
+    color: #d7d2ca;
+    cursor: pointer;
+}
+.auth-theme-toggle { position: fixed; top: 22px; right: 22px; z-index: 5; }
+
 .auth-shell {
     min-height: 100vh;
     display: grid;
@@ -84,6 +98,41 @@ button:disabled { opacity: .55; cursor: wait; }
     font-size: 11px;
 }
 
+:root[data-theme="light"] {
+    color-scheme: light;
+    background: #f7f6f2;
+    color: #1d1c19;
+}
+html[data-theme="light"] body { background: #f7f6f2; }
+html[data-theme="light"] .auth-story {
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, .15), rgba(222, 213, 195, .54)),
+        radial-gradient(circle at 25% 20%, #d9c9a9 0, transparent 42%),
+        #eeeae1;
+}
+html[data-theme="light"] .auth-story p:not(.eyebrow) { color: #67635c; }
+html[data-theme="light"] .auth-panel { background: #fff; }
+html[data-theme="light"] .auth-tabs { border-color: #d9d5cd; background: #f5f3ee; }
+html[data-theme="light"] .auth-tabs button { color: #69665f; }
+html[data-theme="light"] .auth-tabs button.active { background: #22211e; color: #fff; }
+html[data-theme="light"] .intro { color: #6f6b64; }
+html[data-theme="light"] label { color: #4d4a44; }
+html[data-theme="light"] input {
+    border-color: #d8d4cc;
+    background: #fff;
+    color: #1d1c19;
+}
+html[data-theme="light"] .primary-button { background: #22211e; color: #fff; }
+html[data-theme="light"] .secondary-button { border-color: #d1ccc3; color: #2b2925; }
+html[data-theme="light"] .terms,
+html[data-theme="light"] .legal-links { color: #6f6b64; }
+html[data-theme="light"] .theme-toggle {
+    border-color: #d2cec6;
+    background: rgba(255, 255, 255, .82);
+    color: #292722;
+    box-shadow: 0 8px 28px rgba(53, 48, 39, .08);
+}
+
 @media (max-width: 850px) {
     .auth-shell { display: block; }
     .auth-story { min-height: 330px; padding: 32px 24px; }
@@ -91,4 +140,5 @@ button:disabled { opacity: .55; cursor: wait; }
     .story-foot { display: none; }
     .auth-panel { padding: 52px 24px 70px; }
     .auth-tabs { margin-bottom: 42px; }
+    .auth-theme-toggle { top: 16px; right: 16px; }
 }

@@ -162,8 +162,10 @@ function applyBrand(data) {
     document.documentElement.style.setProperty(
         "--cover-y", `${data.coverPositionY ?? 50}%`
     );
-    brandText.textContent = data.brandName || "PHOcloud";
-    footerBrand.textContent = data.brandName || "PHOcloud";
+    const brandName = data.brandName?.trim() || "";
+    brandText.textContent = brandName || (data.logoUrl ? "" : "PHOcloud");
+    brandText.hidden = Boolean(data.logoUrl && !brandName);
+    footerBrand.textContent = brandName || "PHOcloud";
     brandLogo.hidden = !data.logoUrl;
     if (data.logoUrl) {
         brandLogo.src = data.logoUrl;

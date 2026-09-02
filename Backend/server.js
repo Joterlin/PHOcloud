@@ -663,7 +663,7 @@ function validateBrandSettings(input) {
     const logoPositionX = Math.max(0, Math.min(100, Number(input.logoPositionX ?? 50)));
     const logoPositionY = Math.max(0, Math.min(100, Number(input.logoPositionY ?? 50)));
     if (![logoScale, logoPositionX, logoPositionY].every(Number.isFinite)) {
-        return { error: "El encuadre del logotipo no es válido" };
+        return { error: "El encuadre de la imagen de marca no es válido" };
     }
 
     return {
@@ -1221,7 +1221,7 @@ const upload = multer({
         if (file.fieldname === "logo"
             && !supportedLogoMimeTypes.has(file.mimetype)) {
             return callback(new Error(
-                "El logotipo debe ser JPG, PNG o GIF"
+                "La imagen de marca debe ser JPG, PNG o GIF"
             ));
         }
         if (!supportedImageMimeTypes.has(file.mimetype)
@@ -1238,7 +1238,7 @@ const brandLogoUpload = multer({
     limits: { files: 1, fileSize: MAX_LOGO_SIZE_BYTES },
     fileFilter: (req, file, callback) => {
         if (!supportedLogoMimeTypes.has(file.mimetype)) {
-            return callback(new Error("El logotipo debe ser JPG, PNG o GIF"));
+            return callback(new Error("La imagen de marca debe ser JPG, PNG o GIF"));
         }
         callback(null, true);
     }
@@ -1403,6 +1403,11 @@ app.get("/login", (req, res) => {
 
 app.get("/login.css", (req, res) => {
     res.sendFile(path.join(frontendDirectory, "login.css"));
+});
+
+app.get("/theme.js", (req, res) => {
+    res.set("Cache-Control", "no-cache");
+    res.sendFile(path.join(frontendDirectory, "theme.js"));
 });
 
 app.get("/login.js", (req, res) => {
@@ -1713,7 +1718,7 @@ app.get("/brand", requireAuth, (req, res) => {
 app.get("/brand/logo", requireAuth, (req, res) => {
     const logoPath = profileLogoPath(req.auth.userId);
     if (!fs.existsSync(logoPath)) {
-        return res.status(404).json({ error: "Logotipo no encontrado" });
+        return res.status(404).json({ error: "Imagen de marca no encontrada" });
     }
     res.set("Cache-Control", "private, max-age=300");
     res.sendFile(logoPath, { dotfiles: "allow" });
@@ -1729,7 +1734,7 @@ app.put("/brand", requireAuth, requireSameOrigin, (req, res) => {
         }
         if (req.file && !isSupportedImageBuffer(req.file.buffer)) {
             return res.status(400).json({
-                error: "El archivo no contiene un logotipo válido"
+                error: "El archivo no contiene una imagen de marca válida"
             });
         }
 
@@ -1758,7 +1763,7 @@ app.put("/brand", requireAuth, requireSameOrigin, (req, res) => {
         } catch (processingError) {
             console.error(processingError);
             res.status(400).json({
-                error: "No se pudo procesar el logotipo"
+                error: "No se pudo procesar la imagen de marca"
             });
         }
     });
@@ -2416,7 +2421,7 @@ app.post("/deliveries/:folderId/logo", requireAuth, requireSameOrigin, (req, res
         if (error) return res.status(400).json({ error: error.message });
         if (!req.file || !isSupportedImageBuffer(req.file.buffer)) {
             return res.status(400).json({
-                error: "Selecciona un logotipo válido"
+                error: "Selecciona una imagen de marca válida"
             });
         }
         try {
@@ -2426,7 +2431,7 @@ app.post("/deliveries/:folderId/logo", requireAuth, requireSameOrigin, (req, res
             });
         } catch (processingError) {
             console.error(processingError);
-            res.status(400).json({ error: "No se pudo procesar el logotipo" });
+            res.status(400).json({ error: "No se pudo procesar la imagen de marca" });
         }
     });
 });
@@ -2936,7 +2941,7 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
     const files = records.map((file) => file.name);
     if (!files.length) {
         return res.status(400).json({
-            error: "Esta galería no contiene fotografías para preparar en versión web"
+            error: "Esta galería no contiene fotografías para preparar en calidad reducida"
         });
     }
     const failures = galleryStoredInR2(context.folderPath)
@@ -2947,7 +2952,7 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
     if (failures.length) {
         console.error("No se pudieron generar miniaturas para la descarga web", failures);
         return res.status(500).json({
-            error: "No se pudo preparar la versión web de la galería"
+            error: "No se pudo preparar la descarga en calidad reducida"
         });
     }
 
@@ -3034,7 +3039,7 @@ app.get("/gallery/:folderId/logo", (req, res) => {
     if (!context) return;
     const logoPath = galleryLogoPath(context.folderPath);
     if (!fs.existsSync(logoPath)) {
-        return res.status(404).json({ error: "Logotipo no encontrado" });
+        return res.status(404).json({ error: "Imagen de marca no encontrada" });
     }
     res.set("Cache-Control", "private, max-age=3600");
     res.sendFile(logoPath, { dotfiles: "allow" });
@@ -3157,7 +3162,7 @@ app.get("/gallery/:folderId/photos/:filename/download/web", async (req, res) => 
     }
     if (isVideoFilename(req.params.filename)) {
         return res.status(400).json({
-            error: "La versión web reducida solo está disponible para fotografías"
+            error: "La calidad reducida solo está disponible para fotografías"
         });
     }
     try {
@@ -3165,7 +3170,7 @@ app.get("/gallery/:folderId/photos/:filename/download/web", async (req, res) => 
             ? previewPath(context.folderPath, req.params.filename)
             : await createPreview(context.folderPath, req.params.filename);
         if (!fs.existsSync(targetPath)) {
-            throw new Error("La versión web no está disponible");
+            throw new Error("La calidad reducida no está disponible");
         }
         deliveryStore.logActivity(context.delivery.id, "download_photo_web", {
             filename: req.params.filename
@@ -3177,7 +3182,7 @@ app.get("/gallery/:folderId/photos/:filename/download/web", async (req, res) => 
         );
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: "No se pudo preparar la versión web" });
+        res.status(500).json({ error: "No se pudo preparar la calidad reducida" });
     }
 });
 

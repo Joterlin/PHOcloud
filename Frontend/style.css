@@ -65,6 +65,7 @@ button:disabled { cursor: wait; opacity: .52; }
     gap: 1px;
     border-color: rgba(201, 170, 112, .35);
 }
+.top-actions #themeToggle span:last-child { display: none; }
 
 .account-button small { color: #9d8966; font-size: 10px; font-weight: 650; }
 .plan-limit-notice { margin: 0 0 24px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid rgba(201, 170, 112, .24); border-radius: 16px; background: rgba(201, 170, 112, .07); text-align: left; }
@@ -173,6 +174,7 @@ h1 {
 #transferUploadProgress { width: 0; height: 100%; border-radius: inherit; background: #c9aa70; }
 
 .section-heading { margin-bottom: 25px; }
+.section-description { margin: 8px 0 0; color: #85827c; font-size: 13px; line-height: 1.55; }
 .section-heading h2,
 .deliveries-heading h2,
 .edit-dialog-heading h2 {
@@ -217,6 +219,18 @@ input:focus, textarea:focus, select:focus { border-color: #756443; }
     border-radius: 20px;
     background: #0c0c0b;
 }
+
+.quick-gallery-builder { min-height: 0; display: block; }
+.quick-gallery-builder .builder-workspace {
+    display: grid;
+    grid-template-columns: minmax(280px, .72fr) minmax(0, 1.28fr);
+    background: #0a0a09;
+}
+.quick-gallery-builder #builderDetails,
+.quick-gallery-builder #builderPhotos { display: block; min-height: 0; }
+.quick-gallery-builder #builderDetails { border-right: 1px solid #292824; }
+.quick-gallery-builder .create-identity-grid { grid-template-columns: 1fr; }
+.quick-gallery-builder .builder-footer { grid-column: 1 / -1; }
 
 .create-identity-grid { align-items: start; }
 .create-identity-grid label[for="clientName"] { margin: 0; color: #aaa7a1; }
@@ -342,6 +356,34 @@ input:focus, textarea:focus, select:focus { border-color: #756443; }
 }
 
 .field-wide { grid-column: 1 / -1; }
+
+.style-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
+.style-picker legend { margin-bottom: 8px; color: #aaa7a1; font-size: 13px; }
+.style-choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.style-choice {
+    min-width: 0;
+    padding: 15px;
+    display: grid;
+    gap: 7px;
+    border: 1px solid #302e2a;
+    border-radius: 14px;
+    background: #0c0c0b;
+    cursor: pointer;
+}
+.style-choice:has(input:checked) {
+    border-color: #c9aa70;
+    background: rgba(201, 170, 112, .09);
+    box-shadow: inset 0 0 0 1px rgba(201, 170, 112, .22);
+}
+.style-choice input { width: 1px; height: 1px; position: absolute; opacity: 0; }
+.style-choice strong { color: #e9e5dc; font-size: 12px; }
+.style-choice small { color: #77736d; font-size: 10px; line-height: 1.4; }
+.style-icon { height: 46px; padding: 5px; display: grid; gap: 4px; border-radius: 8px; background: #191816; }
+.style-icon i { display: block; border-radius: 3px; background: #81745e; }
+.masonry-icon { grid-template-columns: 1fr 1.25fr; grid-template-rows: 1fr 1fr; }
+.masonry-icon i:first-child { grid-row: 1 / -1; }
+.grid-icon { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.editorial-icon { grid-template-columns: 1.6fr .7fr; }
 
 .link-editor {
     padding: 18px;
@@ -716,6 +758,121 @@ dialog::backdrop {
     backdrop-filter: blur(7px);
 }
 
+:root[data-theme="light"] {
+    color-scheme: light;
+    background: #f7f6f2;
+    color: #211f1b;
+}
+html[data-theme="light"] body {
+    background:
+        radial-gradient(circle at 50% 0%, rgba(190, 157, 96, .13), transparent 40rem),
+        #f7f6f2;
+}
+html[data-theme="light"] .intro,
+html[data-theme="light"] .section-description,
+html[data-theme="light"] .transfer-title-row > span,
+html[data-theme="light"] .transfer-dropzone span,
+html[data-theme="light"] .transfer-retention span,
+html[data-theme="light"] .delivery-meta,
+html[data-theme="light"] #deliveriesEmpty,
+html[data-theme="light"] #transfersEmpty,
+html[data-theme="light"] .deliveries-error,
+html[data-theme="light"] .selection-heading p,
+html[data-theme="light"] .photo-manager p,
+html[data-theme="light"] .dialog-intro,
+html[data-theme="light"] .options-help { color: #6f6b64; }
+html[data-theme="light"] .top-actions button {
+    border-color: #d7d2c9;
+    background: rgba(255, 255, 255, .86);
+    color: #4d4942;
+    box-shadow: 0 7px 24px rgba(62, 54, 42, .06);
+}
+html[data-theme="light"] .product-switch {
+    border-color: #dcd7ce;
+    background: #eeece7;
+}
+html[data-theme="light"] .product-switch button { color: #66625b; }
+html[data-theme="light"] .product-switch button.is-active { background: #24221e; color: #fff; }
+html[data-theme="light"] .creator-card,
+html[data-theme="light"] .delivery-card,
+html[data-theme="light"] .transfer-card-admin {
+    border-color: #dfdbd3;
+    background: rgba(255, 255, 255, .9);
+    box-shadow: 0 18px 55px rgba(55, 48, 37, .055);
+}
+html[data-theme="light"] .quick-gallery-builder,
+html[data-theme="light"] .quick-gallery-builder .builder-workspace,
+html[data-theme="light"] .builder-footer,
+html[data-theme="light"] .transfer-fields,
+html[data-theme="light"] .link-editor,
+html[data-theme="light"] .selection-admin {
+    border-color: #dfdbd3;
+    background: #fff;
+}
+html[data-theme="light"] .quick-gallery-builder #builderDetails,
+html[data-theme="light"] .builder-footer { border-color: #e4e0d8; }
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select {
+    border-color: #d9d4cb;
+    background: #fff;
+    color: #23211d;
+}
+html[data-theme="light"] .transfer-dropzone {
+    border-color: #c8b999;
+    background: radial-gradient(circle at 50% 20%, rgba(201,170,112,.13), transparent 65%), #faf9f6;
+    color: #292620;
+}
+html[data-theme="light"] .secondary,
+html[data-theme="light"] .delivery-action {
+    border-color: #cdc7bd;
+    color: #35322d;
+}
+html[data-theme="light"] .primary,
+html[data-theme="light"] .delivery-open { background: #24221e; color: #fff; border-color: #24221e; }
+html[data-theme="light"] .permission-option,
+html[data-theme="light"] .link-row,
+html[data-theme="light"] .style-choice {
+    border-color: #dfdad1;
+    background: #faf9f6;
+    color: #555149;
+}
+html[data-theme="light"] .permission-option strong,
+html[data-theme="light"] .link-editor-heading strong,
+html[data-theme="light"] .style-choice strong { color: #2d2a25; }
+html[data-theme="light"] .permission-option:has(input:checked),
+html[data-theme="light"] .style-choice:has(input:checked) { background: #f7f1e5; }
+html[data-theme="light"] .style-icon { background: #ece8df; }
+html[data-theme="light"] .style-icon i { background: #8c7a59; }
+html[data-theme="light"] .delivery-badge { background: #efede8; color: #5b574f; }
+html[data-theme="light"] .delivery-badge.status-published { background: #e0f0e5; color: #28613d; }
+html[data-theme="light"] .delivery-badge.status-draft { background: #f5ead1; color: #6f5720; }
+html[data-theme="light"] .delivery-badge.status-archived { background: #ecebea; color: #65615a; }
+html[data-theme="light"] #result,
+html[data-theme="light"] #transferResult {
+    border-color: #d8d2c8;
+    background: rgba(255, 255, 255, .97);
+    box-shadow: 0 24px 70px rgba(65, 56, 42, .16);
+}
+html[data-theme="light"] dialog {
+    border-color: #d9d4cb;
+    background: #fff;
+    color: #23211d;
+    box-shadow: 0 30px 90px rgba(49, 43, 34, .25);
+}
+html[data-theme="light"] .account-identity,
+html[data-theme="light"] .usage-card,
+html[data-theme="light"] .logo-preview,
+html[data-theme="light"] .section-manager {
+    border-color: #dfdad1;
+    background: #faf9f6;
+}
+html[data-theme="light"] .usage-heading strong,
+html[data-theme="light"] .style-picker legend { color: #37332d; }
+html[data-theme="light"] .panel-footer,
+html[data-theme="light"] #deliveriesPanel,
+html[data-theme="light"] #transfersPanel { border-color: #ded9d0; color: #69655e; }
+
 #deleteDialog { width: min(92%, 480px); }
 #editDialog, #brandDialog { width: min(94%, 900px); }
 .delete-dialog-content, .edit-dialog-content { padding: clamp(24px, 5vw, 34px); }
@@ -828,6 +985,9 @@ dialog::backdrop {
     .delivery-card { grid-template-columns: 125px 1fr; }
     .delivery-cover { min-height: 230px; }
     .delivery-delete { margin-left: 0; }
+    .quick-gallery-builder .builder-workspace { grid-template-columns: 1fr; }
+    .quick-gallery-builder #builderDetails { border-right: 0; border-bottom: 1px solid #292824; }
+    .style-choice-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {

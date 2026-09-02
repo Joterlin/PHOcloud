@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node Backend/server.js",
     "start:production": "node scripts/preflight.js && node Backend/server.js",
-    "check": "node --check Backend/server.js && node --check Backend/database.js && node --check Backend/mailer.js && node --check Backend/object-storage.js && node --check Frontend/script.js && node --check Frontend/login.js && node --check public/gallery.js && node --check public/transfer.js && node --check scripts/preflight.js && node --check scripts/backup.js && node --check scripts/configure-r2.js && node --check scripts/smoke-public.js",
+    "check": "node --check Backend/server.js && node --check Backend/database.js && node --check Backend/mailer.js && node --check Backend/object-storage.js && node --check Frontend/theme.js && node --check Frontend/script.js && node --check Frontend/login.js && node --check public/gallery.js && node --check public/transfer.js && node --check scripts/preflight.js && node --check scripts/backup.js && node --check scripts/configure-r2.js && node --check scripts/smoke-public.js",
     "test": "node --test Backend/*.test.js",
     "validate": "npm run check && npm test",
     "preflight": "node scripts/preflight.js",
