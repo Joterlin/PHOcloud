@@ -1477,7 +1477,15 @@ const transferUpload = multer({
 
 app.get("/healthz", (req, res) => {
     res.set("Cache-Control", "no-store");
-    res.json({ status: "ok", service: "phocloud" });
+    res.json({
+        status: "ok",
+        service: "phocloud",
+        version: (
+            process.env.RAILWAY_GIT_COMMIT_SHA
+            || process.env.SOURCE_VERSION
+            || "local"
+        ).slice(0, 12)
+    });
 });
 
 app.get("/readyz", async (req, res) => {
