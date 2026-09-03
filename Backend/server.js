@@ -58,6 +58,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const objectStorage = createObjectStorage();
 const galleryStorage = createGalleryStorage();
 const billing = createBilling();
+const billingEnvironment = billing.publicConfiguration().mode;
 const secureCookies = isProduction;
 const GALLERY_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 const MAX_PHOTOS_PER_DELIVERY = 500;
@@ -233,6 +234,21 @@ function stripeTimestamp(value) {
         : null;
 }
 
+function userForCurrentBillingEnvironment(user) {
+    if (!user || !user.stripeEnvironment
+        || user.stripeEnvironment === billingEnvironment) {
+        return user;
+    }
+    return {
+        ...user,
+        plan: "free",
+        planStatus: "active",
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        stripeCurrentPeriodEnd: null
+    };
+}
+
 function billingUserForObject(object) {
     const metadataUserId = Number(object?.metadata?.phocloud_user_id);
     if (Number.isSafeInteger(metadataUserId) && metadataUserId > 0) {
@@ -253,7 +269,7 @@ function billingUserForObject(object) {
         : null;
 }
 
-function updateBillingFromCheckout(session, failed = false) {
+function updateBillingFromCheckout(session, environment, failed = false) {
     const user = billingUserForObject(session)
         || deliveryStore.getUserById(Number(session.client_reference_id));
     const plan = session.metadata?.phocloud_plan;
@@ -262,13 +278,14 @@ function updateBillingFromCheckout(session, failed = false) {
     deliveryStore.updateUserBilling(user.id, {
         customerId: stripeReferenceId(session.customer) || user.stripeCustomerId,
         subscriptionId: stripeReferenceId(session.subscription),
+        environment,
         plan: paid ? plan : "free",
         planStatus: paid ? "active" : "incomplete",
         currentPeriodEnd: user.stripeCurrentPeriodEnd
     });
 }
 
-function updateBillingFromSubscription(subscription) {
+function updateBillingFromSubscription(subscription, environment) {
     const user = billingUserForObject(subscription);
     if (!user) return;
     const priceId = subscription.items?.data?.[0]?.price?.id;
@@ -285,6 +302,7 @@ function updateBillingFromSubscription(subscription) {
         customerId: stripeReferenceId(subscription.customer)
             || user.stripeCustomerId,
         subscriptionId: deleted ? null : subscription.id,
+        environment,
         plan: entitled && ["professional", "studio"].includes(selectedPlan)
             ? selectedPlan
             : "free",
@@ -293,7 +311,7 @@ function updateBillingFromSubscription(subscription) {
     });
 }
 
-function updateBillingFromInvoice(invoice, paid) {
+function updateBillingFromInvoice(invoice, environment, paid) {
     const user = billingUserForObject(invoice);
     if (!user) return;
     deliveryStore.updateUserBilling(user.id, {
@@ -302,6 +320,7 @@ function updateBillingFromInvoice(invoice, paid) {
             invoice.subscription
             || invoice.parent?.subscription_details?.subscription
         ) || user.stripeSubscriptionId,
+        environment,
         plan: user.plan,
         planStatus: paid ? "active" : "past_due",
         currentPeriodEnd: user.stripeCurrentPeriodEnd
@@ -310,24 +329,25 @@ function updateBillingFromInvoice(invoice, paid) {
 
 function processStripeEvent(event) {
     if (deliveryStore.hasStripeEvent(event.id)) return;
+    const environment = event.livemode ? "live" : "test";
     switch (event.type) {
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
-        updateBillingFromCheckout(event.data.object);
+        updateBillingFromCheckout(event.data.object, environment);
         break;
     case "checkout.session.async_payment_failed":
-        updateBillingFromCheckout(event.data.object, true);
+        updateBillingFromCheckout(event.data.object, environment, true);
         break;
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted":
-        updateBillingFromSubscription(event.data.object);
+        updateBillingFromSubscription(event.data.object, environment);
         break;
     case "invoice.paid":
-        updateBillingFromInvoice(event.data.object, true);
+        updateBillingFromInvoice(event.data.object, environment, true);
         break;
     case "invoice.payment_failed":
-        updateBillingFromInvoice(event.data.object, false);
+        updateBillingFromInvoice(event.data.object, environment, false);
         break;
     default:
         break;
@@ -1804,7 +1824,8 @@ app.post("/auth/login", requireSameOrigin, (req, res) => {
     deliveryStore.deleteExpiredSessions(Date.now());
     startSession(res, user.id);
 
-    res.json({ username: user.username, plan: user.plan });
+    const billingUser = userForCurrentBillingEnvironment(user);
+    res.json({ username: billingUser.username, plan: billingUser.plan });
 });
 
 app.post("/auth/logout", requireSameOrigin, (req, res) => {
@@ -1840,8 +1861,11 @@ app.get("/script.js", requirePageAuth, (req, res) => {
 });
 
 app.get("/account", requireAuth, (req, res) => {
-    const user = deliveryStore.getUserById(req.auth.userId);
-    if (!user) return res.status(404).json({ error: "Cuenta no encontrada" });
+    const storedUser = deliveryStore.getUserById(req.auth.userId);
+    if (!storedUser) {
+        return res.status(404).json({ error: "Cuenta no encontrada" });
+    }
+    const user = userForCurrentBillingEnvironment(storedUser);
     res.set("Cache-Control", "no-store");
     res.json({
         account: {
@@ -1865,9 +1889,12 @@ app.get("/account", requireAuth, (req, res) => {
 });
 
 app.post("/billing/checkout-session", requireAuth, requireSameOrigin, limitSensitiveAction, async (req, res) => {
-    const user = deliveryStore.getUserById(req.auth.userId);
+    const storedUser = deliveryStore.getUserById(req.auth.userId);
     const plan = req.body?.plan;
-    if (!user) return res.status(404).json({ error: "Cuenta no encontrada" });
+    if (!storedUser) {
+        return res.status(404).json({ error: "Cuenta no encontrada" });
+    }
+    const user = userForCurrentBillingEnvironment(storedUser);
     if (!billing.configured) {
         return res.status(503).json({
             error: "Los planes de pago todavía no están disponibles",
@@ -1894,6 +1921,12 @@ app.post("/billing/checkout-session", requireAuth, requireSameOrigin, limitSensi
             plan,
             baseUrl: publicBaseUrl(req)
         });
+        if (storedUser.stripeEnvironment
+            && storedUser.stripeEnvironment !== billingEnvironment) {
+            deliveryStore.clearUserStripeBillingForEnvironment(
+                storedUser.id, storedUser.stripeEnvironment
+            );
+        }
         res.json({ url: session.url });
     } catch (error) {
         console.error(`[${req.requestId}] Stripe Checkout error`, error);
@@ -1904,8 +1937,11 @@ app.post("/billing/checkout-session", requireAuth, requireSameOrigin, limitSensi
 });
 
 app.post("/billing/portal-session", requireAuth, requireSameOrigin, limitSensitiveAction, async (req, res) => {
-    const user = deliveryStore.getUserById(req.auth.userId);
-    if (!user) return res.status(404).json({ error: "Cuenta no encontrada" });
+    const storedUser = deliveryStore.getUserById(req.auth.userId);
+    if (!storedUser) {
+        return res.status(404).json({ error: "Cuenta no encontrada" });
+    }
+    const user = userForCurrentBillingEnvironment(storedUser);
     if (!billing.configured) {
         return res.status(503).json({
             error: "La gestión de pagos todavía no está disponible",
@@ -2067,7 +2103,9 @@ app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveA
     if (totalBytes > MAX_TRANSFER_SIZE_BYTES) {
         return res.status(400).json({ error: "La transferencia no puede superar 50 GB" });
     }
-    const account = deliveryStore.getUserById(req.auth.userId);
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
     const usage = accountUsage(
         req.auth.userId, account?.plan || "free", account?.planStatus
     );
@@ -2273,7 +2311,9 @@ app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (re
         if (totalBytes > MAX_TRANSFER_SIZE_BYTES) {
             return fail(400, "La transferencia no puede superar 50 GB");
         }
-        const account = deliveryStore.getUserById(req.auth.userId);
+        const account = userForCurrentBillingEnvironment(
+            deliveryStore.getUserById(req.auth.userId)
+        );
         const usage = accountUsage(
             req.auth.userId, account?.plan || "free", account?.planStatus
         );
@@ -2679,7 +2719,9 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
     }
     const existingRecords = listGalleryFileRecords(folderPath);
     const remoteGallery = galleryStoredInR2(folderPath);
-    const account = deliveryStore.getUserById(req.auth.userId);
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
     const usageBeforeUpload = accountUsage(
         req.auth.userId, account?.plan || "free", account?.planStatus
     );
@@ -2885,7 +2927,9 @@ app.delete("/deliveries/:folderId", requireAuth, requireSameOrigin, async (req, 
 });
 
 app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, res) => {
-    const account = deliveryStore.getUserById(req.auth.userId);
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
     const usageBeforeUpload = accountUsage(
         req.auth.userId, account?.plan || "free", account?.planStatus
     );

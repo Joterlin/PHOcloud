@@ -346,6 +346,7 @@ test("persiste la suscripción y evita procesar dos veces un webhook", () => {
         assert.equal(store.updateUserBilling(userId, {
             customerId: "cus_test",
             subscriptionId: "sub_test",
+            environment: "test",
             plan: "professional",
             planStatus: "active",
             currentPeriodEnd: "2026-10-02T10:00:00.000Z"
@@ -353,6 +354,7 @@ test("persiste la suscripción y evita procesar dos veces un webhook", () => {
         const user = store.getUserByStripeCustomerId("cus_test");
         assert.equal(user.id, userId);
         assert.equal(user.plan, "professional");
+        assert.equal(user.stripeEnvironment, "test");
         assert.equal(
             store.getUserByStripeSubscriptionId("sub_test").stripeCurrentPeriodEnd,
             "2026-10-02T10:00:00.000Z"
@@ -365,6 +367,19 @@ test("persiste la suscripción y evita procesar dos veces un webhook", () => {
             "evt_test", "checkout.session.completed", "2026-09-02T10:02:00.000Z"
         ), false);
         assert.equal(store.hasStripeEvent("evt_test"), true);
+        assert.equal(
+            store.clearUserStripeBillingForEnvironment(userId, "live"),
+            0
+        );
+        assert.equal(
+            store.clearUserStripeBillingForEnvironment(userId, "test"),
+            1
+        );
+        const migratedUser = store.getUserById(userId);
+        assert.equal(migratedUser.plan, "free");
+        assert.equal(migratedUser.stripeCustomerId, null);
+        assert.equal(migratedUser.stripeSubscriptionId, null);
+        assert.equal(migratedUser.stripeEnvironment, null);
     } finally {
         store.close();
         fs.rmSync(environment.root, { recursive: true, force: true });

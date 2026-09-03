@@ -62,6 +62,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             plan_status TEXT NOT NULL DEFAULT 'active',
             stripe_customer_id TEXT,
             stripe_subscription_id TEXT,
+            stripe_environment TEXT CHECK (stripe_environment IN ('test', 'live')),
             stripe_current_period_end TEXT,
             terms_accepted_at TEXT,
             created_at TEXT NOT NULL
@@ -147,11 +148,19 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         ["plan_status", "ALTER TABLE users ADD COLUMN plan_status TEXT NOT NULL DEFAULT 'active'"],
         ["stripe_customer_id", "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT"],
         ["stripe_subscription_id", "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT"],
+        ["stripe_environment", "ALTER TABLE users ADD COLUMN stripe_environment TEXT CHECK (stripe_environment IN ('test', 'live'))"],
         ["stripe_current_period_end", "ALTER TABLE users ADD COLUMN stripe_current_period_end TEXT"],
         ["terms_accepted_at", "ALTER TABLE users ADD COLUMN terms_accepted_at TEXT"]
     ];
     for (const [column, statement] of userMigrations) {
         if (!userColumns.has(column)) database.exec(statement);
+    }
+    if (!userColumns.has("stripe_environment")) {
+        database.prepare(`
+            UPDATE users SET stripe_environment = 'test'
+            WHERE stripe_customer_id IS NOT NULL
+                OR stripe_subscription_id IS NOT NULL
+        `).run();
     }
 
     const brandColumns = new Set(
@@ -483,6 +492,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
+            stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE username = ? COLLATE NOCASE
@@ -494,6 +504,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
+            stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE email = ? COLLATE NOCASE
@@ -505,6 +516,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
+            stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE id = ?
@@ -520,8 +532,16 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     `);
     const updateUserBillingStatement = database.prepare(`
         UPDATE users SET stripe_customer_id = ?, stripe_subscription_id = ?,
-            plan = ?, plan_status = ?, stripe_current_period_end = ?
+            stripe_environment = ?, plan = ?, plan_status = ?,
+            stripe_current_period_end = ?
         WHERE id = ?
+    `);
+    const clearUserStripeBillingByEnvironment = database.prepare(`
+        UPDATE users SET stripe_customer_id = NULL,
+            stripe_subscription_id = NULL, stripe_environment = NULL,
+            stripe_current_period_end = NULL, plan = 'free',
+            plan_status = 'active'
+        WHERE id = ? AND stripe_environment = ?
     `);
     const selectUserByStripeCustomer = database.prepare(`
         SELECT id, username, email, display_name AS displayName,
@@ -530,6 +550,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
+            stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE stripe_customer_id = ?
@@ -541,6 +562,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             plan_status AS planStatus, terms_accepted_at AS termsAcceptedAt,
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
+            stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd,
             created_at AS createdAt
         FROM users WHERE stripe_subscription_id = ?
@@ -1010,12 +1032,20 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         },
         updateUserBilling(userId, {
             customerId = null, subscriptionId = null, plan = "free",
-            planStatus = "active", currentPeriodEnd = null
+            environment = null, planStatus = "active", currentPeriodEnd = null
         }) {
             return updateUserBillingStatement.run(
-                customerId, subscriptionId, plan, planStatus,
+                customerId, subscriptionId, environment, plan, planStatus,
                 currentPeriodEnd, userId
             ).changes > 0;
+        },
+        clearUserStripeBillingForEnvironment(userId, environment) {
+            if (!["test", "live"].includes(environment)) return 0;
+            return Number(
+                clearUserStripeBillingByEnvironment.run(
+                    userId, environment
+                ).changes
+            );
         },
         getUserByStripeCustomerId: (customerId) => (
             selectUserByStripeCustomer.get(customerId) || null
