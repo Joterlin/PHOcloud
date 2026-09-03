@@ -29,6 +29,43 @@ function integrationIdentifier() {
     )).join("")}`;
 }
 
+function checkoutFailure(error) {
+    const type = String(error?.type || "");
+    const code = String(error?.code || "");
+    const param = String(error?.param || "");
+    const statusCode = Number(error?.statusCode) || 0;
+    const diagnostic = [type, code, param].filter(Boolean).join("/");
+
+    if (statusCode === 403 || type === "StripePermissionError") {
+        return {
+            code: "STRIPE_PERMISSION_DENIED",
+            message: "La clave restringida de Stripe todavía no tiene permisos para crear suscripciones."
+        };
+    }
+    if (statusCode === 401 || type === "StripeAuthenticationError") {
+        return {
+            code: "STRIPE_AUTHENTICATION_FAILED",
+            message: "Stripe ha rechazado la clave de producción configurada en Railway."
+        };
+    }
+    if (code === "resource_missing" && param.includes("price")) {
+        return {
+            code: "STRIPE_PRICE_NOT_FOUND",
+            message: "El precio configurado no pertenece a la cuenta activa de Stripe."
+        };
+    }
+    if (type === "StripeInvalidRequestError") {
+        return {
+            code: "STRIPE_INVALID_CHECKOUT",
+            message: `Stripe rechazó la configuración del pago${diagnostic ? ` (${diagnostic})` : ""}.`
+        };
+    }
+    return {
+        code: "STRIPE_CHECKOUT_FAILED",
+        message: `No se pudo abrir el pago${diagnostic ? ` (${diagnostic})` : ""}. Inténtalo de nuevo.`
+    };
+}
+
 function createBilling(env = process.env) {
     const explicitlyEnabled = enabledValue(env.PHOCLOUD_BILLING_ENABLED);
     const apiKey = (env.STRIPE_RESTRICTED_KEY || env.STRIPE_SECRET_KEY || "").trim();
@@ -140,6 +177,7 @@ function createBilling(env = process.env) {
         missing,
         priceIds,
         planFromPriceId,
+        checkoutFailure,
         createCheckoutSession,
         createPortalSession,
         constructWebhookEvent,
@@ -150,5 +188,6 @@ function createBilling(env = process.env) {
 module.exports = {
     STRIPE_API_VERSION,
     PAID_PLANS,
+    checkoutFailure,
     createBilling
 };

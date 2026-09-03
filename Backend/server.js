@@ -1938,8 +1938,10 @@ app.post("/billing/checkout-session", requireAuth, requireSameOrigin, limitSensi
         res.json({ url: session.url });
     } catch (error) {
         console.error(`[${req.requestId}] Stripe Checkout error`, error);
+        const failure = billing.checkoutFailure(error);
         res.status(error.code === "INVALID_PLAN" ? 400 : 502).json({
-            error: "No se pudo abrir el pago. Inténtalo de nuevo."
+            error: failure.message,
+            code: failure.code
         });
     }
 });

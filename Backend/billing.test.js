@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createBilling, PAID_PLANS, STRIPE_API_VERSION } = require("./billing");
+const {
+    createBilling, checkoutFailure, PAID_PLANS, STRIPE_API_VERSION
+} = require("./billing");
 
 test("billing remains disabled until the explicit switch and every secret are present", () => {
     const billing = createBilling({});
@@ -37,4 +39,23 @@ test("billing refuses Checkout while it is inactive", async () => {
         }),
         (error) => error.code === "BILLING_NOT_CONFIGURED"
     );
+});
+
+test("billing translates Stripe failures without exposing secret values", () => {
+    assert.deepEqual(checkoutFailure({
+        type: "StripePermissionError",
+        statusCode: 403,
+        message: "Key rk_live_private cannot access this resource"
+    }), {
+        code: "STRIPE_PERMISSION_DENIED",
+        message: "La clave restringida de Stripe todavía no tiene permisos para crear suscripciones."
+    });
+    assert.deepEqual(checkoutFailure({
+        type: "StripeInvalidRequestError",
+        code: "resource_missing",
+        param: "line_items[0][price]"
+    }), {
+        code: "STRIPE_PRICE_NOT_FOUND",
+        message: "El precio configurado no pertenece a la cuenta activa de Stripe."
+    });
 });
