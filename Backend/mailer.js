@@ -88,12 +88,12 @@ async function sendAccountLink({ to, displayName, purpose, link }) {
     const isVerification = purpose === "verify_email";
     const action = isVerification ? "Verificar mi correo" : "Crear nueva contraseña";
     const subject = isVerification
-        ? "Confirma tu cuenta de PHOcloud"
-        : "Recupera tu cuenta de PHOcloud";
+        ? "Confirma tu cuenta de The Real Gallery"
+        : "Recupera tu cuenta de The Real Gallery";
 
     if (!emailConfigured()) {
         if (process.env.NODE_ENV !== "test") {
-            console.info(`[PHOcloud correo local] ${subject}: ${link}`);
+            console.info(`[The Real Gallery correo local] ${subject}: ${link}`);
         }
         return { delivered: false, devLink: link };
     }
@@ -104,7 +104,7 @@ async function sendAccountLink({ to, displayName, purpose, link }) {
         text: `Hola ${displayName || "fotógrafo"}. ${action}: ${link}`,
         html: `
             <div style="max-width:560px;margin:auto;padding:36px;font-family:Arial,sans-serif;color:#171717">
-                <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">PHOCLOUD</p>
+                <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">THE REAL GALLERY</p>
                 <h1 style="font-family:Georgia,serif;font-weight:400">${escapeHtml(subject)}</h1>
                 <p>Hola ${escapeHtml(displayName || "fotógrafo")},</p>
                 <p>${isVerification
@@ -131,7 +131,7 @@ async function sendGalleryDelivery({
 
     if (!emailConfigured()) {
         if (process.env.NODE_ENV !== "test") {
-            console.info(`[PHOcloud correo local] ${subject}: ${link}`);
+            console.info(`[The Real Gallery correo local] ${subject}: ${link}`);
         }
         return { delivered: false, devLink: link };
     }
@@ -142,7 +142,7 @@ async function sendGalleryDelivery({
         text: `Hola ${clientName}. Tu galería ${galleryName} ya está disponible: ${link}. ${accessNote}`,
         html: `
             <div style="max-width:580px;margin:auto;padding:40px;font-family:Arial,sans-serif;color:#171717">
-                <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">PHOCLOUD</p>
+                <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">THE REAL GALLERY</p>
                 <h1 style="font-family:Georgia,serif;font-weight:400">Tu galería ya está disponible</h1>
                 <p>Hola ${escapeHtml(clientName)},</p>
                 <p>${escapeHtml(photographerName || "Tu fotógrafo")} ha preparado la galería <strong>${escapeHtml(galleryName)}</strong> para ti.</p>
@@ -160,7 +160,7 @@ async function sendGalleryDelivery({
 async function sendTransferDelivery({
     to, senderName, title, message, link, protectedTransfer, expiresAt
 }) {
-    const subject = `${senderName || "PHOcloud"} te ha enviado archivos`;
+    const subject = `${senderName || "The Real Gallery"} te ha enviado archivos`;
     const protection = protectedTransfer
         ? "La transferencia está protegida; pide la contraseña al remitente por separado."
         : "Puedes descargarla directamente desde el enlace.";
@@ -169,19 +169,19 @@ async function sendTransferDelivery({
     }).format(new Date(expiresAt));
     if (!emailConfigured()) {
         if (process.env.NODE_ENV !== "test") {
-            console.info(`[PHOcloud correo local] ${subject}: ${link}`);
+            console.info(`[The Real Gallery correo local] ${subject}: ${link}`);
         }
         return { delivered: false, devLink: link };
     }
     await sendEmail({
         to,
         subject,
-        text: `${senderName || "PHOcloud"} te ha enviado “${title}”: ${link}. Disponible hasta el ${expiry}. ${protection}`,
+        text: `${senderName || "The Real Gallery"} te ha enviado “${title}”: ${link}. Disponible hasta el ${expiry}. ${protection}`,
         html: `
             <div style="max-width:580px;margin:auto;padding:40px;font-family:Arial,sans-serif;color:#171717">
-                <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">PHOCLOUD TRANSFER</p>
+                <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">THE REAL GALLERY TRANSFER</p>
                 <h1 style="font-family:Georgia,serif;font-weight:400">Te han enviado archivos</h1>
-                <p><strong>${escapeHtml(senderName || "PHOcloud")}</strong> ha preparado <strong>${escapeHtml(title)}</strong> para ti.</p>
+                <p><strong>${escapeHtml(senderName || "The Real Gallery")}</strong> ha preparado <strong>${escapeHtml(title)}</strong> para ti.</p>
                 ${message ? `<p>${escapeHtml(message)}</p>` : ""}
                 <p style="margin:30px 0"><a href="${escapeHtml(link)}" style="display:inline-block;padding:14px 22px;border-radius:99px;background:#111;color:#fff;text-decoration:none">Ver y descargar archivos</a></p>
                 <p style="font-size:13px;color:#666">Disponible hasta el ${escapeHtml(expiry)}. ${escapeHtml(protection)}</p>

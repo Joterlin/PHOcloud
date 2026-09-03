@@ -65,7 +65,7 @@ function renderTransfer(data) {
     const light = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 > 150;
     document.documentElement.style.setProperty("--text", light ? "#171717" : "#f5f3ef");
     document.documentElement.style.colorScheme = light ? "light" : "dark";
-    byId("transferBrand").textContent = data.brandName || "PHOcloud";
+    byId("transferBrand").textContent = data.brandName || "The Real Gallery";
     byId("transferLogo").hidden = !data.logoUrl;
     byId("transferBrand").hidden = Boolean(data.logoUrl);
     if (data.logoUrl) byId("transferLogo").src = data.logoUrl;
@@ -97,7 +97,7 @@ function renderTransfer(data) {
         row.append(icon, copy, download);
         list.appendChild(row);
     }
-    document.title = `${data.title} · PHOcloud`;
+    document.title = `${data.title} · The Real Gallery`;
     byId("transferContent").hidden = false;
 }
 

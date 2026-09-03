@@ -42,7 +42,7 @@ async function main() {
 
     const login = await expectStatus("/login", 200);
     const loginHtml = await login.text();
-    if (!loginHtml.includes("PHOcloud")) fail("/login no contiene la aplicación");
+    if (!loginHtml.includes("The Real Gallery")) fail("/login no contiene la aplicación");
 
     await expectStatus("/privacidad", 200);
     await expectStatus("/terminos", 200);
@@ -64,7 +64,7 @@ async function main() {
         fail("Falta Strict-Transport-Security");
     }
     console.log(
-        `PHOcloud público correcto en ${baseUrl}; transferencias: ${readyData.transferStorage || "sin declarar"}.`
+        `The Real Gallery público correcto en ${baseUrl}; transferencias: ${readyData.transferStorage || "sin declarar"}.`
     );
 }
 

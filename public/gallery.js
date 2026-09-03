@@ -115,7 +115,7 @@ async function loadGallery() {
         clientName.textContent = data.clientName || "Galería";
         galleryMessage.textContent = data.message || "";
         galleryMessage.hidden = !data.message;
-        document.title = `${data.clientName || "Galería"} · PHOcloud`;
+        document.title = `${data.clientName || "Galería"} · The Real Gallery`;
         updateInfo();
 
         downloadGalleryOriginal.href = galleryUrl("/download");
@@ -173,9 +173,9 @@ function applyBrand(data) {
         "--cover-y", `${data.coverPositionY ?? 50}%`
     );
     const brandName = data.brandName?.trim() || "";
-    brandText.textContent = brandName || (data.logoUrl ? "" : "PHOcloud");
+    brandText.textContent = brandName || (data.logoUrl ? "" : "The Real Gallery");
     brandText.hidden = Boolean(data.logoUrl && !brandName);
-    footerBrand.textContent = brandName || "PHOcloud";
+    footerBrand.textContent = brandName || "The Real Gallery";
     brandLogo.hidden = !data.logoUrl;
     if (data.logoUrl) {
         brandLogo.src = data.logoUrl;

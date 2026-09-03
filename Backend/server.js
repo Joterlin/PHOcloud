@@ -1503,7 +1503,7 @@ app.get("/robots.txt", (req, res) => {
 });
 
 app.get("/.well-known/security.txt", (req, res) => {
-    const email = process.env.PHOCLOUD_LEGAL_EMAIL || "privacidad@phocloud.local";
+    const email = process.env.PHOCLOUD_LEGAL_EMAIL || "privacidad@therealgallery.local";
     res.type("text/plain").send([
         `Contact: mailto:${email}`,
         `Canonical: ${publicBaseUrl(req)}/.well-known/security.txt`,
@@ -1527,8 +1527,8 @@ function escapeLegalValue(value) {
 function sendLegalPage(res, filename) {
     const template = fs.readFileSync(path.join(publicDirectory, filename), "utf8");
     const values = {
-        LEGAL_NAME: process.env.PHOCLOUD_LEGAL_NAME || "Responsable de PHOcloud (pendiente de configurar)",
-        LEGAL_EMAIL: process.env.PHOCLOUD_LEGAL_EMAIL || "privacidad@phocloud.local",
+        LEGAL_NAME: process.env.PHOCLOUD_LEGAL_NAME || "Responsable de The Real Gallery (pendiente de configurar)",
+        LEGAL_EMAIL: process.env.PHOCLOUD_LEGAL_EMAIL || "privacidad@therealgallery.local",
         LEGAL_COUNTRY: process.env.PHOCLOUD_LEGAL_COUNTRY || "España",
         UPDATED_DATE: "28 de agosto de 2026"
     };
@@ -3123,7 +3123,7 @@ app.get("/gallery/:folderId/download", async (req, res) => {
         details: { fileCount: files.length }
     });
 
-    res.attachment(`PHOcloud-${archiveName}.zip`);
+    res.attachment(`The-Real-Gallery-${archiveName}.zip`);
 
     const archive = new ZipArchive({ store: true });
 
@@ -3190,7 +3190,7 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
     deliveryStore.logActivity(context.delivery.id, "download_gallery_web", {
         details: { fileCount: files.length }
     });
-    res.attachment(`PHOcloud-${archiveName}-web.zip`);
+    res.attachment(`The-Real-Gallery-${archiveName}-web.zip`);
     const archive = new ZipArchive({ store: true });
     archive.on("error", (error) => {
         console.error(error);
@@ -3591,7 +3591,7 @@ app.get("/transfer/:transferId", (req, res) => {
         fileCount: context.transfer.fileCount,
         totalBytes: context.transfer.totalBytes,
         files,
-        brandName: profile.brandName || "PHOcloud",
+        brandName: profile.brandName || "The Real Gallery",
         accentColor: profile.accentColor || "#c9aa70",
         backgroundColor: profile.backgroundColor || "#ffffff",
         hasLogo: fs.existsSync(logoPath),
@@ -3651,7 +3651,7 @@ app.get("/transfer/:transferId/download", async (req, res) => {
     deliveryStore.recordTransferDownload(
         context.transfer.id, new Date().toISOString()
     );
-    res.attachment(`PHOcloud-${safeDownloadName(context.transfer.title)}.zip`);
+    res.attachment(`The-Real-Gallery-${safeDownloadName(context.transfer.title)}.zip`);
     const archive = new ZipArchive({ store: true });
     archive.on("error", (error) => {
         console.error(error);
@@ -3708,7 +3708,7 @@ app.get("/s/:folderId", (req, res) => {
 app.use((req, res) => {
     if (req.accepts("html")) {
         return res.status(404).type("html").send(
-            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>No encontrado · PHOcloud</title><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><p>PHOcloud</p><h1>Página no encontrada</h1><a href=\"/login\">Volver</a></article></body></html>"
+            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>No encontrado · The Real Gallery</title><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><p>The Real Gallery</p><h1>Página no encontrada</h1><a href=\"/login\">Volver</a></article></body></html>"
         );
     }
     res.status(404).json({ error: "Ruta no encontrada" });
@@ -3728,7 +3728,7 @@ app.use((error, req, res, next) => {
 });
 
 const server = app.listen(PORT, () => {
-    console.log(`PHOcloud iniciado en ${process.env.PHOCLOUD_PUBLIC_URL || `http://localhost:${PORT}`}`);
+    console.log(`The Real Gallery iniciado en ${process.env.PHOCLOUD_PUBLIC_URL || `http://localhost:${PORT}`}`);
     automaticBackups.start();
     migrateLocalGalleriesToR2().catch((error) => {
         console.error("No se pudo completar la migración de galerías a R2", error);

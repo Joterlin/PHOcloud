@@ -3,7 +3,9 @@
     {
       "allowed": {
         "origins": [
-          "https://phocloud-production.up.railway.app"
+          "https://phocloud-production.up.railway.app",
+          "https://therealgallery.com",
+          "https://www.therealgallery.com"
         ],
         "methods": [
           "GET",
