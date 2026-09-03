@@ -24,20 +24,6 @@ main {
     text-align: center;
 }
 
-.app-brand {
-    position: absolute;
-    top: 23px;
-    left: 24px;
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    color: inherit;
-    font: 21px Georgia, serif;
-    letter-spacing: -.035em;
-    text-decoration: none;
-}
-.app-brand img { width: 40px; height: 40px; }
-
 .top-actions {
     position: absolute;
     top: 24px;
@@ -778,8 +764,6 @@ input:focus, textarea:focus, select:focus { border-color: #756443; }
     font-size: 11px;
 }
 .panel-footer span { margin-right: auto; letter-spacing: .12em; }
-.panel-signature { display: inline-flex; align-items: center; gap: 8px; }
-.panel-signature img { width: 22px; height: 22px; }
 .panel-footer a { color: inherit; }
 
 dialog {
@@ -1011,9 +995,8 @@ html[data-theme="light"] #transfersPanel { border-color: #ded9d0; color: #69655e
 }
 
 @media (max-width: 760px) {
-    main { width: 100%; padding: 143px 15px 70px; }
-    .app-brand { top: 18px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
-    .top-actions { top: 72px; left: 15px; right: 15px; justify-content: center; }
+    main { width: 100%; padding: 85px 15px 70px; }
+    .top-actions { left: 15px; right: 15px; justify-content: center; }
     .options-grid { grid-template-columns: 1fr; }
     .transfer-form-grid { grid-template-columns: 1fr; }
     .delivery-builder { display: block; min-height: 0; }
@@ -1040,7 +1023,7 @@ html[data-theme="light"] #transfersPanel { border-color: #ded9d0; color: #69655e
 
 @media (max-width: 520px) {
     .panel-footer { align-items: center; justify-content: center; flex-wrap: wrap; }
-    .panel-footer .panel-signature { width: 100%; margin: 0 0 4px; justify-content: center; }
+    .panel-footer span { width: 100%; margin: 0 0 4px; text-align: center; }
 }
 
 @media (max-width: 520px) {

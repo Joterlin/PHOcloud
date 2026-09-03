@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330 64" role="img" aria-labelledby="title desc">
-  <title id="title">The Real Gallery</title>
-  <desc id="desc">Logotipo provisional de The Real Gallery</desc>
-  <rect width="64" height="64" rx="17" fill="#171715"/>
-  <path d="M14 23V14h9M41 14h9v9M50 41v9h-9M23 50h-9v-9" fill="none" stroke="#c7a86e" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M23 45V19h11.2c7.1 0 11.3 3.4 11.3 9.2 0 4.3-2.5 7.2-6.6 8.4L46 45h-7l-6.2-7.7h-3.7V45H23Zm6.1-13h4.4c3.8 0 5.8-1.2 5.8-3.7 0-2.6-2-3.8-5.8-3.8h-4.4V32Z" fill="#f6f2e9"/>
-  <text x="82" y="41" fill="#171715" font-family="Georgia, 'Times New Roman', serif" font-size="29" letter-spacing="-1.1">The Real Gallery</text>
-</svg>

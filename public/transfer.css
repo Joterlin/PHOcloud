@@ -12,7 +12,6 @@ button, input { font: inherit; }
 :where(a, button, input):focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 72%, white); outline-offset: 3px; }
 .transfer-brand { min-height: 92px; padding: 22px clamp(20px, 5vw, 70px); display: flex; align-items: center; gap: 13px; }
 .transfer-brand img { width: 150px; height: 54px; object-fit: contain; object-position: left center; }
-.transfer-brand img.is-platform-mark { width: 48px; height: 48px; }
 .transfer-brand span { font: 26px Georgia, serif; letter-spacing: -.04em; }
 main { width: min(100% - 28px, 980px); margin: auto; padding: 35px 0 80px; }
 .transfer-card { padding: clamp(28px, 6vw, 66px); border: 1px solid color-mix(in srgb, var(--text) 13%, transparent); border-radius: 30px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: 0 28px 80px color-mix(in srgb, var(--text) 10%, transparent); }
@@ -44,8 +43,7 @@ h1 { max-width: 720px; margin: 0; font: 400 clamp(42px, 7vw, 78px)/.98 Georgia, 
 #unlockForm { margin-top: 25px; display: grid; grid-template-columns: 1fr auto; gap: 9px; }
 #unlockForm input { min-width: 0; padding: 0 16px; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); }
 .error { color: #ff958d; font-size: 12px; }
-footer { padding: 25px; display: flex; align-items: center; justify-content: center; gap: 7px; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; text-align: center; }
-footer img { width: 18px; height: 18px; }
+footer { padding: 25px; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; text-align: center; }
 @media (max-width: 650px) {
     .transfer-brand { min-height: 72px; }
     main { padding-top: 10px; }

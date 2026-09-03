@@ -9,8 +9,7 @@ body {
 }
 header, article, footer { width: min(860px, calc(100% - 36px)); margin: auto; }
 header { padding: 35px 0 25px; border-bottom: 1px solid #dedbd4; }
-.wordmark { display: inline-flex; text-decoration: none; }
-.wordmark img { width: min(100%, 260px); height: 50px; display: block; object-fit: contain; object-position: left center; }
+.wordmark { color: #211f1b; font: 28px Georgia, serif; letter-spacing: -.04em; text-decoration: none; }
 article { padding: 52px 0; }
 h1, h2 { font-family: Georgia, serif; font-weight: 400; }
 h1 { margin: 16px 0 8px; font-size: clamp(38px, 8vw, 66px); line-height: 1; }

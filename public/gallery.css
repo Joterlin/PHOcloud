@@ -163,8 +163,6 @@ body[data-gallery-style="editorial"] .photo-card:nth-child(even) { margin-left: 
 footer { padding: 40px 20px 50px; border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); color: color-mix(in srgb, currentColor 44%, transparent); font-size: 11px; text-align: center; }
 footer p { margin: 5px 0; }
 #footerBrand { color: color-mix(in srgb, currentColor 72%, transparent); font-size: 13px; }
-.platform-credit { display: flex; align-items: center; justify-content: center; gap: 7px; }
-.platform-credit img { width: 18px; height: 18px; }
 
 @keyframes coverReveal { from { opacity: 0; transform: scale(1.035); } to { opacity: 1; transform: scale(1); } }
 @keyframes copyReveal { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
