@@ -34,7 +34,7 @@ function ensureWritableDirectory(target, label) {
 }
 
 if (!production) {
-    console.log("PHOcloud: configuración local detectada; las exigencias de publicación no se aplican.");
+    console.log("The Real Gallery: configuración local detectada; las exigencias de publicación no se aplican.");
     process.exit(0);
 }
 
@@ -167,4 +167,4 @@ if (errors.length) {
     process.exit(1);
 }
 
-console.log("PHOcloud: configuración de producción válida.");
+console.log("The Real Gallery: configuración de producción válida.");

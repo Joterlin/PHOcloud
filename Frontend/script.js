@@ -621,11 +621,14 @@ async function openBillingDestination(path, body, button) {
 }
 
 for (const button of document.querySelectorAll("[data-billing-plan]")) {
-    button.addEventListener("click", () => openBillingDestination(
-        "/billing/checkout-session",
-        { plan: button.dataset.billingPlan },
-        button
-    ));
+    button.addEventListener("click", () => {
+        const hasSubscription = Boolean(accountData?.billing?.portalAvailable);
+        openBillingDestination(
+            hasSubscription ? "/billing/portal-session" : "/billing/checkout-session",
+            hasSubscription ? {} : { plan: button.dataset.billingPlan },
+            button
+        );
+    });
 }
 
 byId("manageBillingButton").addEventListener("click", (event) => {
@@ -671,6 +674,7 @@ async function loadAccount() {
 
     const billingConfiguration = accountData.billing || { enabled: false };
     const billingEnabled = billingConfiguration.enabled === true;
+    const hasSubscription = billingConfiguration.portalAvailable === true;
     byId("billingModeBadge").textContent = billingEnabled
         ? (billingConfiguration.mode === "live" ? "Disponible" : "Modo de prueba")
         : "Vista previa";
@@ -682,7 +686,7 @@ async function loadAccount() {
         button.textContent = currentPlan
             ? "Tu plan actual"
             : (billingEnabled && available
-                ? `Elegir ${planLabel(buttonPlan).replace("Plan ", "")}`
+                ? `${hasSubscription ? "Cambiar a" : "Elegir"} ${planLabel(buttonPlan).replace("Plan ", "")}`
                 : "Próximamente");
     }
     byId("manageBillingButton").hidden = !billingConfiguration.portalAvailable;

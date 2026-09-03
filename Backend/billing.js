@@ -24,7 +24,7 @@ function enabledValue(value) {
 function integrationIdentifier() {
     const alphabet = "abcdefghijklmnopqrstuvwxyz";
     const bytes = randomBytes(8);
-    return `phocloud_${Array.from(bytes, (byte) => (
+    return `realgallery_${Array.from(bytes, (byte) => (
         alphabet[byte % alphabet.length]
     )).join("")}`;
 }
@@ -87,6 +87,7 @@ function createBilling(env = process.env) {
                 phocloud_plan: plan
             },
             subscription_data: {
+                billing_mode: { type: "flexible" },
                 metadata: {
                     phocloud_user_id: String(user.id),
                     phocloud_plan: plan

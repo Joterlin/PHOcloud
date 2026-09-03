@@ -1877,6 +1877,12 @@ app.post("/billing/checkout-session", requireAuth, requireSameOrigin, limitSensi
     if (!["professional", "studio"].includes(plan)) {
         return res.status(400).json({ error: "Selecciona un plan válido" });
     }
+    if (user.stripeSubscriptionId) {
+        return res.status(409).json({
+            error: "Ya tienes una suscripción. Gestiona el cambio desde Stripe.",
+            code: "SUBSCRIPTION_ALREADY_EXISTS"
+        });
+    }
     if (effectivePlan(user.plan, user.planStatus) === plan) {
         return res.status(409).json({
             error: "Ya tienes este plan. Puedes gestionarlo desde tu cuenta."
