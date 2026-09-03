@@ -65,10 +65,13 @@ function renderTransfer(data) {
     const light = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 > 150;
     document.documentElement.style.setProperty("--text", light ? "#171717" : "#f5f3ef");
     document.documentElement.style.colorScheme = light ? "light" : "dark";
+    const transferLogo = byId("transferLogo");
+    const customLogo = Boolean(data.logoUrl);
     byId("transferBrand").textContent = data.brandName || "The Real Gallery";
-    byId("transferLogo").hidden = !data.logoUrl;
-    byId("transferBrand").hidden = Boolean(data.logoUrl);
-    if (data.logoUrl) byId("transferLogo").src = data.logoUrl;
+    byId("transferBrand").hidden = customLogo;
+    transferLogo.src = customLogo ? data.logoUrl : "/assets/brand-mark.svg";
+    transferLogo.classList.toggle("is-platform-mark", !customLogo);
+    transferLogo.hidden = false;
     byId("transferTitle").textContent = data.title;
     byId("transferMessage").textContent = data.message || "";
     byId("transferMessage").hidden = !data.message;

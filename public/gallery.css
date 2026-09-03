@@ -17,6 +17,7 @@ body { min-height: 100vh; margin: 0; background: var(--gallery-bg); }
 body.no-scroll { overflow: hidden; }
 button, input, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
+:where(a, button, input, textarea):focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 72%, white); outline-offset: 3px; }
 
 .gallery-header {
     min-height: max(680px, 100svh);
@@ -147,21 +148,23 @@ body[data-gallery-style="editorial"] .photo-card:nth-child(even) { margin-left: 
 .lightbox-nav { font-size: 64px; font-weight: 200; }
 .lightbox-close { width: 48px; height: 48px; position: absolute; top: 17px; right: 20px; font-size: 35px; }
 .lightbox-actions { max-width: calc(100% - 120px); margin: 0; padding: 8px; position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 3; transform: translateX(-50%); flex-wrap: nowrap; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(10,10,10,.82); box-shadow: 0 16px 50px rgba(0,0,0,.5); backdrop-filter: blur(16px); }
-.client-dialog { width: min(calc(100% - 28px), 520px); padding: 0; border: 1px solid rgba(255,255,255,.15); border-radius: 24px; background: #121212; color: #f5f3ef; box-shadow: 0 25px 90px rgba(0,0,0,.72); }
-.client-dialog::backdrop { background: rgba(0,0,0,.78); backdrop-filter: blur(8px); }
+.client-dialog { width: min(calc(100% - 28px), 520px); padding: 0; border: 1px solid #dedad2; border-radius: 24px; background: #fff; color: #201f1c; box-shadow: 0 25px 90px rgba(32,29,24,.2); }
+.client-dialog::backdrop { background: rgba(20,19,17,.62); backdrop-filter: blur(8px); }
 .client-dialog form { padding: clamp(24px, 6vw, 38px); }
 .client-dialog h2 { margin: 0 0 14px; font: 400 clamp(28px, 6vw, 40px)/1.05 Georgia, serif; }
-.client-dialog form > p:not(.eyebrow):not(.dialog-error) { color: #aaa59d; font-size: 13px; line-height: 1.6; }
-.client-dialog label { margin-top: 16px; display: grid; gap: 7px; color: #aaa59d; font-size: 12px; }
-.client-dialog input, .client-dialog textarea { width: 100%; box-sizing: border-box; padding: 13px 14px; border: 1px solid #36332f; border-radius: 11px; background: #090909; color: #fff; }
+.client-dialog form > p:not(.eyebrow):not(.dialog-error) { color: #6e6a62; font-size: 13px; line-height: 1.6; }
+.client-dialog label { margin-top: 16px; display: grid; gap: 7px; color: #5e5a53; font-size: 12px; }
+.client-dialog input, .client-dialog textarea { width: 100%; box-sizing: border-box; padding: 13px 14px; border: 1px solid #d8d3ca; border-radius: 11px; outline: 0; background: #fbfaf7; color: #201f1c; }
 .client-dialog textarea { min-height: 130px; resize: vertical; }
 .client-dialog-actions { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.client-dialog-actions button { min-height: 46px; border: 1px solid #3a3733; border-radius: 999px; background: transparent; color: #fff; cursor: pointer; }
+.client-dialog-actions button { min-height: 46px; border: 1px solid #d4cfc5; border-radius: 999px; background: transparent; color: #27241f; cursor: pointer; }
 .client-dialog-actions button:last-child { border-color: var(--accent); background: var(--accent); color: #111; font-weight: 800; }
-.dialog-error { color: #ff958d; font-size: 12px; }
+.dialog-error { color: #a9362e; font-size: 12px; }
 footer { padding: 40px 20px 50px; border-top: 1px solid color-mix(in srgb, currentColor 9%, transparent); color: color-mix(in srgb, currentColor 44%, transparent); font-size: 11px; text-align: center; }
 footer p { margin: 5px 0; }
 #footerBrand { color: color-mix(in srgb, currentColor 72%, transparent); font-size: 13px; }
+.platform-credit { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.platform-credit img { width: 18px; height: 18px; }
 
 @keyframes coverReveal { from { opacity: 0; transform: scale(1.035); } to { opacity: 1; transform: scale(1); } }
 @keyframes copyReveal { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }

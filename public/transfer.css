@@ -9,11 +9,13 @@
 [hidden] { display: none !important; }
 body { min-height: 100vh; margin: 0; display: grid; grid-template-rows: auto 1fr auto; background: var(--page-bg); color: var(--text); }
 button, input { font: inherit; }
+:where(a, button, input):focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 72%, white); outline-offset: 3px; }
 .transfer-brand { min-height: 92px; padding: 22px clamp(20px, 5vw, 70px); display: flex; align-items: center; gap: 13px; }
 .transfer-brand img { width: 150px; height: 54px; object-fit: contain; object-position: left center; }
+.transfer-brand img.is-platform-mark { width: 48px; height: 48px; }
 .transfer-brand span { font: 26px Georgia, serif; letter-spacing: -.04em; }
 main { width: min(100% - 28px, 980px); margin: auto; padding: 35px 0 80px; }
-.transfer-card { padding: clamp(28px, 6vw, 66px); border: 1px solid color-mix(in srgb, var(--text) 13%, transparent); border-radius: 30px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: 0 35px 100px rgba(0,0,0,.34); }
+.transfer-card { padding: clamp(28px, 6vw, 66px); border: 1px solid color-mix(in srgb, var(--text) 13%, transparent); border-radius: 30px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: 0 28px 80px color-mix(in srgb, var(--text) 10%, transparent); }
 .transfer-card.compact { width: min(100%, 530px); margin: 0 auto; }
 .eyebrow { margin: 0 0 16px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .26em; }
 h1 { max-width: 720px; margin: 0; font: 400 clamp(42px, 7vw, 78px)/.98 Georgia, serif; letter-spacing: -.055em; overflow-wrap: anywhere; }
@@ -36,12 +38,14 @@ h1 { max-width: 720px; margin: 0; font: 400 clamp(42px, 7vw, 78px)/.98 Georgia, 
 .file-copy { min-width: 0; display: grid; gap: 3px; }
 .file-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .file-copy span { color: color-mix(in srgb, var(--text) 45%, transparent); font-size: 10px; }
-.file-row a { padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 999px; color: var(--text); font-size: 10px; text-decoration: none; }
+.file-row a { padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 999px; color: var(--text); font-size: 10px; text-decoration: none; transition: border-color .18s ease, background .18s ease; }
+.file-row a:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .transfer-footnote { margin: 24px 0 0; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; text-align: center; }
 #unlockForm { margin-top: 25px; display: grid; grid-template-columns: 1fr auto; gap: 9px; }
 #unlockForm input { min-width: 0; padding: 0 16px; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); }
 .error { color: #ff958d; font-size: 12px; }
-footer { padding: 25px; color: color-mix(in srgb, var(--text) 35%, transparent); font-size: 10px; text-align: center; }
+footer { padding: 25px; display: flex; align-items: center; justify-content: center; gap: 7px; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; text-align: center; }
+footer img { width: 18px; height: 18px; }
 @media (max-width: 650px) {
     .transfer-brand { min-height: 72px; }
     main { padding-top: 10px; }
@@ -52,4 +56,8 @@ footer { padding: 25px; color: color-mix(in srgb, var(--text) 35%, transparent);
     #unlockForm { grid-template-columns: 1fr; }
     #unlockForm input { min-height: 50px; }
     .file-row { grid-template-columns: 38px minmax(0,1fr) auto; gap: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }

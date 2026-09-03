@@ -3768,7 +3768,7 @@ app.get("/s/:folderId", (req, res) => {
 app.use((req, res) => {
     if (req.accepts("html")) {
         return res.status(404).type("html").send(
-            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>No encontrado · The Real Gallery</title><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><p>The Real Gallery</p><h1>Página no encontrada</h1><a href=\"/login\">Volver</a></article></body></html>"
+            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><meta name=\"theme-color\" content=\"#171715\"><title>No encontrado · The Real Gallery</title><link rel=\"icon\" href=\"/assets/favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><img src=\"/assets/brand-mark.svg\" width=\"52\" height=\"52\" alt=\"\"><h1>Página no encontrada</h1><p>No hemos encontrado la dirección que buscas.</p><a href=\"/login\">Volver a The Real Gallery</a></article></body></html>"
         );
     }
     res.status(404).json({ error: "Ruta no encontrada" });
