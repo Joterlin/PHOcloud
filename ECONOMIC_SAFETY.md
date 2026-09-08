@@ -20,9 +20,9 @@ permanente de galerías y del abuso mediante cuentas múltiples.
 | Cuenta | Transferencia | Subidas/mes | Temporales simultáneas | Subidas simultáneas | ZIP | ZIP/mes |
 |---|---:|---:|---:|---:|---:|---:|
 | Invitado | 0 | 0 | 0 | 0 | 0 | 0 |
-| Gratis | 5 GiB | 5 GiB | 5 GiB | 1 | 1 GiB | 2 trabajos / 2 GiB |
-| Creador (4,99 €) | 25 GiB | 250 GiB | 50 GiB | 2 | 5 GiB | 50 trabajos / 100 GiB |
-| Pro (9,99 €) | 50 GiB | 1 TiB | 250 GiB | 4 | 10 GiB | 200 trabajos / 500 GiB |
+| Gratis | 5 GiB | 5 GiB | 5 GiB | 1 | 1 GiB | 1 trabajo / 1 GiB |
+| Creador (4,99 €) | 25 GiB | 250 GiB | 50 GiB | 2 | 5 GiB | 5 trabajos / 10 GiB |
+| Pro (9,99 €) | 50 GiB | 1 TiB | 250 GiB | 4 | 10 GiB | 20 trabajos / 50 GiB |
 
 No existe subida anónima. Los 50 GiB siguen siendo una capacidad técnica del
 plan Pro. Para paquetes mayores que el límite ZIP se mantienen las descargas
@@ -155,6 +155,14 @@ de almacenamiento se use de forma estadística, no si cada usuario consume al
 máximo de manera constante. Creador no debe recibir ZIP de 25 GiB ilimitados:
 cada creación movería unos 26,84 GB desde Railway y costaría alrededor de
 1,34 USD solo en egress. El límite implantado de 5 GiB reduce ese riesgo.
+
+Con las cuotas mensuales definitivas, el egress máximo estimado de creación ZIP
+es de unos 0,46 € por cuenta Creador (10 GiB/mes) y 2,32 € por cuenta Pro
+(50 GiB/mes), antes de operaciones y CPU. Si además se llenase toda la cuota de
+galerías, quedarían aproximadamente 3,47 € y 5,12 € respectivamente después de
+Stripe, almacenamiento y ese egress ZIP. El umbral global de 250 GiB limita el
+egress mensual de todos los ZIP a unos 11,58 € con el cambio usado en este
+modelo; no es una garantía de factura y debe compararse con Railway.
 
 ## Abuso y decisión para 50 GiB
 

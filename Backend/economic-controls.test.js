@@ -15,6 +15,12 @@ test("aplica límites conservadores y conserva 50 GiB como capacidad técnica", 
     assert.equal(config.plans.professional.transferMaxBytes, 25 * GIB);
     assert.equal(config.plans.studio.transferMaxBytes, TECHNICAL_MAX_TRANSFER_BYTES);
     assert.equal(config.plans.free.concurrentUploads, 1);
+    assert.equal(config.plans.free.monthlyZipJobs, 1);
+    assert.equal(config.plans.free.monthlyZipBytes, 1 * GIB);
+    assert.equal(config.plans.professional.monthlyZipJobs, 5);
+    assert.equal(config.plans.professional.monthlyZipBytes, 10 * GIB);
+    assert.equal(config.plans.studio.monthlyZipJobs, 20);
+    assert.equal(config.plans.studio.monthlyZipBytes, 50 * GIB);
     assert.equal(config.accountConcurrentZips, 1);
 });
 

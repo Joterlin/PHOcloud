@@ -11,8 +11,8 @@ const DEFAULT_PLAN_LIMITS = Object.freeze({
         transferStorageBytes: 5 * GIB,
         concurrentUploads: 1,
         zipMaxBytes: 1 * GIB,
-        monthlyZipJobs: 2,
-        monthlyZipBytes: 2 * GIB
+        monthlyZipJobs: 1,
+        monthlyZipBytes: 1 * GIB
     }),
     professional: Object.freeze({
         galleries: 25,
@@ -22,8 +22,8 @@ const DEFAULT_PLAN_LIMITS = Object.freeze({
         transferStorageBytes: 50 * GIB,
         concurrentUploads: 2,
         zipMaxBytes: 5 * GIB,
-        monthlyZipJobs: 50,
-        monthlyZipBytes: 100 * GIB
+        monthlyZipJobs: 5,
+        monthlyZipBytes: 10 * GIB
     }),
     studio: Object.freeze({
         galleries: 100,
@@ -33,8 +33,8 @@ const DEFAULT_PLAN_LIMITS = Object.freeze({
         transferStorageBytes: 250 * GIB,
         concurrentUploads: 4,
         zipMaxBytes: 10 * GIB,
-        monthlyZipJobs: 200,
-        monthlyZipBytes: 500 * GIB
+        monthlyZipJobs: 20,
+        monthlyZipBytes: 50 * GIB
     })
 });
 
