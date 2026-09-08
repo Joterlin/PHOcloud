@@ -4,6 +4,8 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const { createHash, timingSafeEqual } = require("crypto");
+const { PassThrough, Readable, Transform } = require("stream");
 const { ZipArchive } = require("archiver");
 const { v4: uuidv4 } = require("uuid");
 const { createDeliveryStore } = require("./database");
@@ -13,6 +15,12 @@ const {
 } = require("./object-storage");
 const { createBilling } = require("./billing");
 const { createAutomaticBackupService } = require("./automatic-backup");
+const {
+    TECHNICAL_MAX_TRANSFER_BYTES,
+    createConcurrencyLimiter,
+    createEconomicConfig,
+    monthKey
+} = require("./economic-controls");
 const {
     configuredSecurityEmail,
     renderLegalTemplate,
@@ -63,6 +71,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const objectStorage = createObjectStorage();
 const galleryStorage = createGalleryStorage();
 const billing = createBilling();
+const economicConfig = createEconomicConfig();
 const billingEnvironment = billing.publicConfiguration().mode;
 const secureCookies = isProduction;
 const GALLERY_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
@@ -72,31 +81,34 @@ const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024;
 const MAX_DELIVERY_SIZE_BYTES = 10 * 1024 * 1024 * 1024;
 const MAX_LOGO_SIZE_BYTES = 8 * 1024 * 1024;
 const MAX_TRANSFER_FILES = 500;
-const MAX_TRANSFER_FILE_SIZE_BYTES = 50 * 1024 * 1024 * 1024;
-const MAX_TRANSFER_SIZE_BYTES = 50 * 1024 * 1024 * 1024;
+const MAX_TRANSFER_FILE_SIZE_BYTES = TECHNICAL_MAX_TRANSFER_BYTES;
+const MAX_TRANSFER_SIZE_BYTES = TECHNICAL_MAX_TRANSFER_BYTES;
 const ACCOUNT_TOKEN_DURATION_MS = 60 * 60 * 1000;
 const RESET_TOKEN_DURATION_MS = 30 * 60 * 1000;
 const PLAN_LIMITS = {
     free: {
         galleries: 3,
-        storageBytes: 5 * 1024 * 1024 * 1024,
-        transferStorageBytes: 50 * 1024 * 1024 * 1024
+        storageBytes: economicConfig.plans.free.galleryStorageBytes,
+        transferStorageBytes: economicConfig.plans.free.transferStorageBytes
     },
     professional: {
         galleries: 25,
-        storageBytes: 100 * 1024 * 1024 * 1024,
-        transferStorageBytes: 250 * 1024 * 1024 * 1024
+        storageBytes: economicConfig.plans.professional.galleryStorageBytes,
+        transferStorageBytes: economicConfig.plans.professional.transferStorageBytes
     },
     studio: {
         galleries: 100,
-        storageBytes: 300 * 1024 * 1024 * 1024,
-        transferStorageBytes: 1024 * 1024 * 1024 * 1024
+        storageBytes: economicConfig.plans.studio.galleryStorageBytes,
+        transferStorageBytes: economicConfig.plans.studio.transferStorageBytes
     }
 };
 const validFolderId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const loginAttempts = new Map();
 const galleryAttempts = new Map();
 const sensitiveActionAttempts = new Map();
+const zipConcurrency = createConcurrencyLimiter();
+const uploadConcurrency = createConcurrencyLimiter();
+const activeZipBuilds = new Map();
 
 function validateRuntimeConfig() {
     if (!isProduction) return;
@@ -173,6 +185,9 @@ deliveryStore.deleteExpiredSessions(Date.now());
 deliveryStore.deleteExpiredGallerySessions(Date.now());
 deliveryStore.deleteExpiredAccountTokens(Date.now());
 deliveryStore.deleteExpiredTransferSessions(Date.now());
+deliveryStore.resetStaleZipJobs(
+    new Date(Date.now() - economicConfig.zipLeaseMs).toISOString()
+);
 
 async function removeTransferStorage(transfer) {
     if (transfer.storageProvider === "r2") {
@@ -180,12 +195,16 @@ async function removeTransferStorage(transfer) {
             throw new Error("R2 no está configurado; no se borrarán referencias a objetos remotos");
         }
         const files = deliveryStore.listTransferFiles(transfer.id);
+        const zipJob = deliveryStore.getTransferZipJob(transfer.id);
         await Promise.allSettled(files.map((file) => objectStorage.abortMultipart({
             key: file.objectKey,
             uploadId: file.multipartUploadId
         })));
         await objectStorage.deleteKeys(
-            files.map((file) => file.objectKey).filter(Boolean)
+            [
+                ...files.map((file) => file.objectKey),
+                zipJob?.objectKey
+            ].filter(Boolean)
         );
         return;
     }
@@ -202,6 +221,7 @@ async function cleanupExpiredTransfers() {
             deliveryStore.deleteTransferById(transfer.id);
         } catch (error) {
             console.error(`No se pudo limpiar la transferencia ${transfer.id}`, error);
+            recordUsage(transfer.ownerId, "errors", 1);
         }
     }
 }
@@ -974,6 +994,10 @@ function planLimits(plan) {
     return PLAN_LIMITS[plan] || PLAN_LIMITS.free;
 }
 
+function economicPlanLimits(plan) {
+    return economicConfig.plans[plan] || economicConfig.plans.free;
+}
+
 function effectivePlan(plan, planStatus = "active") {
     if (plan === "free") return "free";
     return ["active", "trialing", "past_due"].includes(planStatus)
@@ -993,6 +1017,10 @@ function accountUsage(userId, plan = "free", planStatus = "active") {
     const transfers = deliveryStore.listTransfers(userId);
     const entitledPlan = effectivePlan(plan, planStatus);
     const limits = planLimits(entitledPlan);
+    const economicLimits = economicPlanLimits(entitledPlan);
+    const economicUsage = deliveryStore.getEconomicUsage(
+        userId, monthKey(), new Date().toISOString()
+    );
     return {
         plan: entitledPlan,
         galleryCount: deliveries.length,
@@ -1003,11 +1031,247 @@ function accountUsage(userId, plan = "free", planStatus = "active") {
             (total, transfer) => total + transfer.totalBytes, 0
         ),
         transferStorageLimitBytes: limits.transferStorageBytes,
+        transferMaxBytes: economicLimits.transferMaxBytes,
+        monthlyUploadBytes: Number(economicUsage.counters.uploaded_bytes || 0),
+        monthlyReservedUploadBytes: Number(
+            economicUsage.counters.reserved_upload_bytes || 0
+        ),
+        monthlyUploadLimitBytes: economicLimits.monthlyUploadBytes,
+        activeUploads: economicUsage.activeUploads,
+        concurrentUploadLimit: economicLimits.concurrentUploads,
+        zipMaxBytes: economicLimits.zipMaxBytes,
+        monthlyZipJobs: Number(economicUsage.counters.zip_jobs_started || 0),
+        monthlyZipJobLimit: economicLimits.monthlyZipJobs,
+        monthlyZipBytes: Number(economicUsage.counters.zip_generated_bytes || 0),
+        monthlyZipLimitBytes: economicLimits.monthlyZipBytes,
+        transfersAcceptingNew: economicConfig.acceptNewTransfers,
+        zipEnabled: economicConfig.zipEnabled,
         storageBytes: deliveries.reduce(
             (total, delivery) => total + deliveryStorageBytes(delivery), 0
         ),
         storageLimitBytes: limits.storageBytes
     };
+}
+
+function transferAdmissionLimits(plan) {
+    const limits = economicPlanLimits(plan);
+    return {
+        transferMaxBytes: limits.transferMaxBytes,
+        accountStorageBytes: limits.transferStorageBytes,
+        accountMonthlyUploadBytes: limits.monthlyUploadBytes,
+        accountConcurrentUploads: limits.concurrentUploads,
+        globalStorageBytes: economicConfig.globalTransferStorageBytes,
+        globalMonthlyUploadBytes: economicConfig.globalMonthlyUploadBytes,
+        globalConcurrentUploads: economicConfig.globalConcurrentUploads,
+        globalMonthlyDownloadBytes: economicConfig.globalMonthlyDownloadBytes,
+        globalMonthlyErrorLimit: economicConfig.globalMonthlyErrorLimit
+    };
+}
+
+function zipAdmissionLimits(plan) {
+    const limits = economicPlanLimits(plan);
+    return {
+        accountZipMaxBytes: limits.zipMaxBytes,
+        accountMonthlyZipJobs: limits.monthlyZipJobs,
+        accountMonthlyZipBytes: limits.monthlyZipBytes,
+        accountConcurrentZips: economicConfig.accountConcurrentZips,
+        globalMonthlyZipJobs: economicConfig.globalMonthlyZipJobs,
+        globalMonthlyZipBytes: economicConfig.globalMonthlyZipBytes,
+        globalConcurrentZips: economicConfig.globalConcurrentZips,
+        globalMonthlyErrorLimit: economicConfig.globalMonthlyErrorLimit
+    };
+}
+
+function quotaMessage(code) {
+    return ({
+        PLAN_TRANSFER_SIZE_LIMIT: "Esta transferencia supera el tamaño máximo de tu plan",
+        PLAN_TRANSFER_STORAGE_LIMIT: "Esta transferencia supera el espacio temporal de tu plan",
+        PLAN_MONTHLY_UPLOAD_LIMIT: "Has alcanzado la cuota mensual de transferencias de tu plan",
+        ACCOUNT_UPLOAD_CONCURRENCY_LIMIT: "Ya tienes otra subida en curso. Termínala o cancélala antes de continuar",
+        GLOBAL_TRANSFER_STORAGE_LIMIT: "Las nuevas transferencias están pausadas temporalmente por capacidad",
+        GLOBAL_MONTHLY_UPLOAD_LIMIT: "Las nuevas transferencias están pausadas temporalmente por consumo mensual",
+        GLOBAL_UPLOAD_CONCURRENCY_LIMIT: "Hay demasiadas subidas simultáneas. Inténtalo de nuevo en unos minutos",
+        GLOBAL_DOWNLOAD_THRESHOLD: "Las nuevas operaciones costosas están pausadas temporalmente",
+        GLOBAL_ERROR_THRESHOLD: "Las nuevas operaciones están pausadas mientras revisamos una incidencia",
+        PLAN_ZIP_SIZE_LIMIT: "Este paquete es demasiado grande para generarlo como ZIP. Descarga los archivos individualmente",
+        PLAN_MONTHLY_ZIP_JOB_LIMIT: "Has alcanzado el límite mensual de paquetes ZIP",
+        PLAN_MONTHLY_ZIP_BYTES_LIMIT: "Has alcanzado la cuota mensual de datos procesados en ZIP",
+        ACCOUNT_ZIP_CONCURRENCY_LIMIT: "Ya se está preparando otro ZIP para esta cuenta",
+        GLOBAL_MONTHLY_ZIP_JOB_LIMIT: "La generación de ZIP está pausada temporalmente",
+        GLOBAL_MONTHLY_ZIP_BYTES_LIMIT: "La generación de ZIP está pausada por el umbral mensual",
+        GLOBAL_ZIP_CONCURRENCY_LIMIT: "Hay otros paquetes preparándose. Inténtalo de nuevo en unos minutos"
+    })[code] || "Esta operación está temporalmente limitada";
+}
+
+function recordUsage(ownerId, metric, value) {
+    try {
+        deliveryStore.recordUsageMetric(ownerId, metric, value);
+    } catch (error) {
+        console.error("No se pudo registrar una métrica económica", error);
+    }
+}
+
+function operationsAuthorized(req) {
+    const expected = process.env.PHOCLOUD_OPERATIONS_TOKEN;
+    const supplied = req.get("Authorization")?.replace(/^Bearer\s+/i, "");
+    if (!expected || !supplied) return false;
+    const expectedHash = createHash("sha256").update(expected).digest();
+    const suppliedHash = createHash("sha256").update(supplied).digest();
+    return timingSafeEqual(expectedHash, suppliedHash);
+}
+
+function currentGalleryStorageBytes() {
+    if (!fs.existsSync(uploadsDirectory)) return 0;
+    return fs.readdirSync(uploadsDirectory, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .reduce((total, entry) => total + deliveryStorageBytes({ id: entry.name }), 0);
+}
+
+function ownerPlan(ownerId) {
+    const account = userForCurrentBillingEnvironment(deliveryStore.getUserById(ownerId));
+    return effectivePlan(account?.plan || "free", account?.planStatus);
+}
+
+function transferZipObjectName(transfer) {
+    return `The-Real-Gallery-${safeDownloadName(transfer.title)}.zip`;
+}
+
+function lazyObjectStream(objectKey) {
+    return Readable.from((async function* readObject() {
+        const source = await objectStorage.getObjectStream(objectKey);
+        for await (const chunk of source) yield chunk;
+    })());
+}
+
+function startTransferZipBuild(transfer, files) {
+    if (activeZipBuilds.has(transfer.id)) return activeZipBuilds.get(transfer.id);
+    const plan = ownerPlan(transfer.ownerId);
+    const release = zipConcurrency.tryAcquire(transfer.ownerId, {
+        globalLimit: economicConfig.globalConcurrentZips,
+        accountLimit: economicConfig.accountConcurrentZips
+    });
+    if (!release) return null;
+
+    const operation = (async () => {
+        const objectKey = objectStorage.zipKey(transfer.id);
+        let writtenBytes = 0;
+        const counter = new Transform({
+            transform(chunk, encoding, callback) {
+                writtenBytes += chunk.length;
+                callback(null, chunk);
+            }
+        });
+        const body = new PassThrough();
+        const archive = new ZipArchive({ store: true });
+        const upload = objectStorage.uploadStream({
+            key: objectKey,
+            stream: body,
+            contentType: "application/zip",
+            filename: transferZipObjectName(transfer)
+        });
+        archive.pipe(counter).pipe(body);
+        try {
+            for (const file of files) {
+                archive.append(lazyObjectStream(file.objectKey), { name: file.name });
+            }
+            await archive.finalize();
+            await upload;
+            deliveryStore.completeTransferZip(
+                transfer.id, writtenBytes, new Date().toISOString()
+            );
+        } catch (error) {
+            archive.abort();
+            body.destroy(error);
+            await objectStorage.deleteKeys([objectKey]).catch(() => {});
+            deliveryStore.failTransferZip(
+                transfer.id, "ZIP_BUILD_FAILED", new Date().toISOString()
+            );
+            recordUsage(transfer.ownerId, "errors", 1);
+            console.error(`[ZIP ${transfer.id}]`, error);
+        } finally {
+            release();
+            activeZipBuilds.delete(transfer.id);
+        }
+    })();
+    activeZipBuilds.set(transfer.id, operation);
+    return operation;
+}
+
+function prepareTransferZip(transfer) {
+    if (!economicConfig.zipEnabled) {
+        return { ok: false, code: "ZIP_PAUSED", status: 503 };
+    }
+    const plan = ownerPlan(transfer.ownerId);
+    const planLimit = economicPlanLimits(plan);
+    if (transfer.totalBytes > planLimit.zipMaxBytes) {
+        return { ok: false, code: "PLAN_ZIP_SIZE_LIMIT", status: 403 };
+    }
+    if (transfer.storageProvider !== "r2") {
+        return { ok: true, state: "local" };
+    }
+    const files = deliveryStore.listTransferFiles(transfer.id)
+        .filter((file) => file.status === "ready");
+    if (!files.length || files.some((file) => !file.objectKey)) {
+        return { ok: false, code: "ZIP_SOURCE_NOT_READY", status: 409 };
+    }
+    const now = new Date();
+    const reservation = deliveryStore.reserveTransferZip({
+        transferId: transfer.id,
+        ownerId: transfer.ownerId,
+        objectKey: objectStorage.zipKey(transfer.id),
+        expectedBytes: transfer.totalBytes,
+        period: monthKey(now),
+        nowIso: now.toISOString(),
+        staleBeforeIso: new Date(now.getTime() - economicConfig.zipLeaseMs).toISOString(),
+        limits: zipAdmissionLimits(plan)
+    });
+    if (!reservation.ok) {
+        return { ok: false, code: reservation.code, status: 429 };
+    }
+    if (reservation.status === "ready") {
+        return { ok: true, state: "ready", job: reservation.job };
+    }
+    if (!activeZipBuilds.has(transfer.id)) {
+        const started = startTransferZipBuild(transfer, files);
+        if (!started) {
+            deliveryStore.failTransferZip(
+                transfer.id, "ZIP_CONCURRENCY_LIMIT", new Date().toISOString()
+            );
+            return { ok: false, code: "GLOBAL_ZIP_CONCURRENCY_LIMIT", status: 429 };
+        }
+    }
+    return { ok: true, state: "building" };
+}
+
+function reserveEphemeralZip(ownerId, expectedBytes) {
+    if (!economicConfig.zipEnabled) {
+        return { ok: false, code: "ZIP_PAUSED", status: 503 };
+    }
+    const result = deliveryStore.reserveEphemeralZip({
+        ownerId,
+        expectedBytes,
+        period: monthKey(),
+        nowIso: new Date().toISOString(),
+        limits: zipAdmissionLimits(ownerPlan(ownerId))
+    });
+    return result.ok ? result : { ...result, status: 429 };
+}
+
+function acquireUploadSlot(res, ownerId, plan) {
+    const release = uploadConcurrency.tryAcquire(ownerId, {
+        globalLimit: economicConfig.globalConcurrentUploads,
+        accountLimit: economicPlanLimits(plan).concurrentUploads
+    });
+    if (!release) return false;
+    let released = false;
+    const releaseOnce = () => {
+        if (released) return;
+        released = true;
+        release();
+    };
+    res.once("finish", releaseOnce);
+    res.once("close", releaseOnce);
+    return true;
 }
 
 function publicBaseUrl(req) {
@@ -1532,6 +1796,56 @@ app.get("/readyz", async (req, res) => {
         console.error(`[${req.requestId}] Readiness error`, error);
         res.status(503).json({ status: "not_ready" });
     }
+});
+
+app.get("/operations/economics", (req, res) => {
+    if (!process.env.PHOCLOUD_OPERATIONS_TOKEN) return res.status(404).end();
+    if (!operationsAuthorized(req)) {
+        return res.status(401).json({ error: "No autorizado" });
+    }
+    const period = monthKey();
+    const usage = deliveryStore.getEconomicUsage(null, period, new Date().toISOString());
+    const galleryStoredBytes = currentGalleryStorageBytes();
+    res.set("Cache-Control", "no-store");
+    res.json({
+        period,
+        estimates: {
+            uploadedBytes: Number(usage.counters.uploaded_bytes || 0)
+                + Number(usage.counters.gallery_uploaded_bytes || 0),
+            transferUploadedBytes: Number(usage.counters.uploaded_bytes || 0),
+            galleryUploadedBytes: Number(usage.counters.gallery_uploaded_bytes || 0),
+            reservedUploadBytes: Number(usage.counters.reserved_upload_bytes || 0),
+            downloadedBytes: Number(usage.counters.downloaded_bytes || 0),
+            zipGeneratedBytes: Number(usage.counters.zip_generated_bytes || 0),
+            zipJobsStarted: Number(usage.counters.zip_jobs_started || 0),
+            errors: Number(usage.counters.errors || 0),
+            transferStoredBytes: usage.activeTransferBytes,
+            zipStoredBytes: usage.readyZipBytes,
+            galleryStoredBytes,
+            totalStoredBytes: usage.activeTransferBytes
+                + usage.readyZipBytes + galleryStoredBytes
+        },
+        active: {
+            transfers: usage.activeTransferCount,
+            uploads: usage.activeUploads,
+            localUploadWorkers: uploadConcurrency.snapshot().globalActive,
+            readyZips: usage.readyZipCount,
+            zipWorkers: zipConcurrency.snapshot().globalActive
+        },
+        controls: {
+            acceptingNewTransfers: economicConfig.acceptNewTransfers,
+            zipEnabled: economicConfig.zipEnabled,
+            globalMonthlyUploadBytes: economicConfig.globalMonthlyUploadBytes,
+            globalTransferStorageBytes: economicConfig.globalTransferStorageBytes,
+            globalMonthlyDownloadBytes: economicConfig.globalMonthlyDownloadBytes,
+            globalMonthlyZipBytes: economicConfig.globalMonthlyZipBytes,
+            globalMonthlyZipJobs: economicConfig.globalMonthlyZipJobs,
+            globalMonthlyErrorLimit: economicConfig.globalMonthlyErrorLimit,
+            globalConcurrentUploads: economicConfig.globalConcurrentUploads,
+            globalConcurrentZips: economicConfig.globalConcurrentZips
+        },
+        note: "Contadores internos estimados; compáralos con Railway y Cloudflare, cuya factura es autoritativa."
+    });
 });
 
 app.get("/robots.txt", (req, res) => {
@@ -2061,17 +2375,35 @@ app.get("/transfers", requireAuth, (req, res) => {
 });
 
 app.get("/transfers/capabilities", requireAuth, (req, res) => {
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
+    const plan = effectivePlan(account?.plan || "free", account?.planStatus);
+    const limits = economicPlanLimits(plan);
     res.set("Cache-Control", "no-store");
     res.json({
+        acceptingNewTransfers: economicConfig.acceptNewTransfers,
+        zipEnabled: economicConfig.zipEnabled,
         uploadMode: objectStorage.enabled ? "multipart" : "local",
         partSize: objectStorage.partSize,
         maxFiles: MAX_TRANSFER_FILES,
-        maxFileSize: MAX_TRANSFER_FILE_SIZE_BYTES,
-        maxTotalSize: MAX_TRANSFER_SIZE_BYTES
+        maxFileSize: Math.min(MAX_TRANSFER_FILE_SIZE_BYTES, limits.transferMaxBytes),
+        maxTotalSize: limits.transferMaxBytes,
+        technicalMaxTotalSize: MAX_TRANSFER_SIZE_BYTES,
+        monthlyUploadLimitBytes: limits.monthlyUploadBytes,
+        transferStorageLimitBytes: limits.transferStorageBytes,
+        concurrentUploadLimit: limits.concurrentUploads,
+        zipMaxBytes: limits.zipMaxBytes
     });
 });
 
 app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveAction, (req, res) => {
+    if (!economicConfig.acceptNewTransfers) {
+        return res.status(503).json({
+            error: "Las nuevas transferencias están pausadas temporalmente",
+            code: "TRANSFERS_PAUSED"
+        });
+    }
     if (!objectStorage.enabled) {
         return res.status(409).json({ error: "La subida por partes no está configurada" });
     }
@@ -2116,22 +2448,10 @@ app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveA
         });
     }
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-    if (totalBytes > MAX_TRANSFER_SIZE_BYTES) {
-        return res.status(400).json({ error: "La transferencia no puede superar 50 GB" });
-    }
     const account = userForCurrentBillingEnvironment(
         deliveryStore.getUserById(req.auth.userId)
     );
-    const usage = accountUsage(
-        req.auth.userId, account?.plan || "free", account?.planStatus
-    );
-    if (usage.transferStorageBytes + totalBytes > usage.transferStorageLimitBytes) {
-        return res.status(403).json({
-            error: "Esta transferencia supera el espacio temporal de tu plan",
-            code: "PLAN_TRANSFER_STORAGE_LIMIT",
-            usage
-        });
-    }
+    const plan = effectivePlan(account?.plan || "free", account?.planStatus);
 
     const transferId = uuidv4();
     const now = Date.now();
@@ -2140,29 +2460,39 @@ app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveA
         ? createPasswordRecord(password)
         : { passwordHash: null, passwordSalt: null };
     try {
-        deliveryStore.createTransfer({
-            id: transferId,
-            ownerId: req.auth.userId,
-            title,
-            message,
-            recipientEmail,
-            createdAt,
-            expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-            passwordHash: passwordRecord.passwordHash,
-            passwordSalt: passwordRecord.passwordSalt,
-            fileCount: files.length,
-            totalBytes,
-            status: "uploading",
-            storageProvider: "r2"
+        const reservation = deliveryStore.reserveTransferUpload({
+            transfer: {
+                id: transferId,
+                ownerId: req.auth.userId,
+                title,
+                message,
+                recipientEmail,
+                createdAt,
+                expiresAt: new Date(now + economicConfig.uploadLeaseMs).toISOString(),
+                passwordHash: passwordRecord.passwordHash,
+                passwordSalt: passwordRecord.passwordSalt,
+                fileCount: files.length,
+                totalBytes,
+                status: "uploading",
+                storageProvider: "r2"
+            },
+            files: files.map((file) => ({ ...file, createdAt })),
+            limits: transferAdmissionLimits(plan),
+            nowIso: createdAt,
+            period: monthKey(createdAt)
         });
-        deliveryStore.createTransferFiles(files.map((file) => ({
-            ...file,
-            transferId,
-            createdAt
-        })));
+        if (!reservation.ok) {
+            return res.status(reservation.code.includes("CONCURRENCY") ? 429 : 403).json({
+                error: quotaMessage(reservation.code),
+                code: reservation.code,
+                usage: accountUsage(
+                    req.auth.userId, account?.plan || "free", account?.planStatus
+                )
+            });
+        }
     } catch (error) {
-        deliveryStore.deleteTransfer(transferId, req.auth.userId);
         console.error(error);
+        recordUsage(req.auth.userId, "errors", 1);
         return res.status(500).json({ error: "No se pudo preparar la transferencia" });
     }
     res.status(201).json({
@@ -2200,6 +2530,10 @@ app.post("/transfers/:transferId/files/:fileId/start", requireAuth, requireSameO
         deliveryStore.markTransferFileStarted(
             file.id, transfer.id, upload.key, upload.uploadId
         );
+        deliveryStore.touchTransferUpload(
+            transfer.id, req.auth.userId,
+            new Date(Date.now() + economicConfig.uploadLeaseMs).toISOString()
+        );
         res.status(201).json({
             fileId: file.id,
             partSize: objectStorage.partSize,
@@ -2207,6 +2541,7 @@ app.post("/transfers/:transferId/files/:fileId/start", requireAuth, requireSameO
         });
     } catch (error) {
         console.error(error);
+        recordUsage(req.auth.userId, "errors", 1);
         res.status(502).json({ error: "No se pudo iniciar la subida del archivo" });
     }
 });
@@ -2237,9 +2572,17 @@ app.post("/transfers/:transferId/files/:fileId/parts", requireAuth, requireSameO
                 partNumber
             })
         })));
+        deliveryStore.touchTransferUpload(
+            req.params.transferId, req.auth.userId,
+            new Date(Date.now() + economicConfig.uploadLeaseMs).toISOString()
+        );
         res.json({ urls });
     } catch (error) {
         console.error(error);
+        const transfer = deliveryStore.getOwnedTransfer(
+            req.params.transferId, req.auth.userId
+        );
+        recordUsage(transfer?.ownerId || req.auth.userId, "errors", 1);
         res.status(502).json({ error: "No se pudieron autorizar los bloques" });
     }
 });
@@ -2268,9 +2611,14 @@ app.post("/transfers/:transferId/files/:fileId/complete", requireAuth, requireSa
             parts
         });
         deliveryStore.markTransferFileReady(file.id, file.transferId);
+        deliveryStore.touchTransferUpload(
+            file.transferId, req.auth.userId,
+            new Date(Date.now() + economicConfig.uploadLeaseMs).toISOString()
+        );
         res.json({ ready: true });
     } catch (error) {
         console.error(error);
+        recordUsage(req.auth.userId, "errors", 1);
         res.status(502).json({ error: "No se pudo completar el archivo" });
     }
 });
@@ -2285,7 +2633,9 @@ app.post("/transfers/:transferId/complete", requireAuth, requireSameOrigin, (req
     }
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     if (transfer.status !== "ready") {
-        deliveryStore.markTransferReady(transfer.id, req.auth.userId, expiresAt);
+        deliveryStore.finalizeTransferUpload(
+            transfer.id, req.auth.userId, expiresAt, new Date().toISOString()
+        );
     }
     res.json({
         transferId: transfer.id,
@@ -2296,6 +2646,19 @@ app.post("/transfers/:transferId/complete", requireAuth, requireSameOrigin, (req
 });
 
 app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (req, res) => {
+    if (!economicConfig.acceptNewTransfers) {
+        return res.status(503).json({
+            error: "Las nuevas transferencias están pausadas temporalmente",
+            code: "TRANSFERS_PAUSED"
+        });
+    }
+    const transferPlan = ownerPlan(req.auth.userId);
+    if (!acquireUploadSlot(res, req.auth.userId, transferPlan)) {
+        return res.status(429).json({
+            error: quotaMessage("GLOBAL_UPLOAD_CONCURRENCY_LIMIT"),
+            code: "GLOBAL_UPLOAD_CONCURRENCY_LIMIT"
+        });
+    }
     const transferId = uuidv4();
     req.transferId = transferId;
     transferUpload.array("files", MAX_TRANSFER_FILES)(req, res, (error) => {
@@ -2324,41 +2687,48 @@ app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (re
         const expiresAtMs = now + 24 * 60 * 60 * 1000;
 
         const totalBytes = req.files.reduce((total, file) => total + file.size, 0);
-        if (totalBytes > MAX_TRANSFER_SIZE_BYTES) {
-            return fail(400, "La transferencia no puede superar 50 GB");
-        }
         const account = userForCurrentBillingEnvironment(
             deliveryStore.getUserById(req.auth.userId)
         );
-        const usage = accountUsage(
-            req.auth.userId, account?.plan || "free", account?.planStatus
-        );
-        if (usage.transferStorageBytes + totalBytes > usage.transferStorageLimitBytes) {
-            return fail(403, "Esta transferencia supera el espacio temporal de tu plan", {
-                code: "PLAN_TRANSFER_STORAGE_LIMIT", usage
-            });
-        }
+        const plan = effectivePlan(account?.plan || "free", account?.planStatus);
 
         const passwordRecord = password
             ? createPasswordRecord(password)
             : { passwordHash: null, passwordSalt: null };
         const createdAt = new Date(now).toISOString();
         try {
-            deliveryStore.createTransfer({
-                id: transferId,
-                ownerId: req.auth.userId,
-                title,
-                message,
-                recipientEmail,
-                createdAt,
-                expiresAt: new Date(expiresAtMs).toISOString(),
-                passwordHash: passwordRecord.passwordHash,
-                passwordSalt: passwordRecord.passwordSalt,
-                fileCount: req.files.length,
-                totalBytes
+            const reservation = deliveryStore.reserveTransferUpload({
+                transfer: {
+                    id: transferId,
+                    ownerId: req.auth.userId,
+                    title,
+                    message,
+                    recipientEmail,
+                    createdAt,
+                    expiresAt: new Date(expiresAtMs).toISOString(),
+                    passwordHash: passwordRecord.passwordHash,
+                    passwordSalt: passwordRecord.passwordSalt,
+                    fileCount: req.files.length,
+                    totalBytes,
+                    status: "ready",
+                    storageProvider: "local"
+                },
+                limits: transferAdmissionLimits(plan),
+                nowIso: createdAt,
+                period: monthKey(createdAt)
             });
+            if (!reservation.ok) {
+                return fail(reservation.code.includes("CONCURRENCY") ? 429 : 403,
+                    quotaMessage(reservation.code), {
+                        code: reservation.code,
+                        usage: accountUsage(
+                            req.auth.userId, account?.plan || "free", account?.planStatus
+                        )
+                    });
+            }
         } catch (databaseError) {
             console.error(databaseError);
+            recordUsage(req.auth.userId, "errors", 1);
             return fail(500, "No se pudo guardar la transferencia");
         }
         res.status(201).json({
@@ -2737,10 +3107,20 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
     const usageBeforeUpload = accountUsage(
         req.auth.userId, account?.plan || "free", account?.planStatus
     );
+    const plan = effectivePlan(account?.plan || "free", account?.planStatus);
+    if (!acquireUploadSlot(res, req.auth.userId, plan)) {
+        return res.status(429).json({
+            error: quotaMessage("GLOBAL_UPLOAD_CONCURRENCY_LIMIT"),
+            code: "GLOBAL_UPLOAD_CONCURRENCY_LIMIT"
+        });
+    }
 
     req.folderId = req.params.folderId;
     upload.array("photos", MAX_PHOTOS_PER_DELIVERY)(req, res, async (error) => {
-        if (error) return res.status(400).json({ error: error.message });
+        if (error) {
+            for (const file of req.files || []) fs.rmSync(file.path, { force: true });
+            return res.status(400).json({ error: error.message });
+        }
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ error: "Selecciona al menos una fotografía" });
         }
@@ -2813,6 +3193,7 @@ app.post("/deliveries/:folderId/photos", requireAuth, requireSameOrigin, (req, r
         deliveryStore.updatePhotoCount(
             delivery.id, files.length, new Date().toISOString()
         );
+        recordUsage(req.auth.userId, "gallery_uploaded_bytes", newBytes);
         res.status(201).json({
             files: listGalleryFiles(folderPath),
             photoCount: files.length,
@@ -2950,6 +3331,13 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
             error: `Ya tienes ${usageBeforeUpload.galleryLimit} galerías. Elimina una antes de crear otra.`,
             code: "PLAN_GALLERY_LIMIT",
             usage: usageBeforeUpload
+        });
+    }
+    const plan = effectivePlan(account?.plan || "free", account?.planStatus);
+    if (!acquireUploadSlot(res, req.auth.userId, plan)) {
+        return res.status(429).json({
+            error: quotaMessage("GLOBAL_UPLOAD_CONCURRENCY_LIMIT"),
+            code: "GLOBAL_UPLOAD_CONCURRENCY_LIMIT"
         });
     }
     const folderId = uuidv4();
@@ -3095,6 +3483,7 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
                 submittedAt: null,
                 updatedAt: createdAt
             });
+            recordUsage(req.auth.userId, "gallery_uploaded_bytes", totalSize);
         } catch (databaseError) {
             if (remoteRecords.length) {
                 await galleryStorage.deleteKeys(
@@ -3103,6 +3492,7 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
             }
             fs.rmSync(folderPath, { recursive: true, force: true });
             console.error(databaseError);
+            recordUsage(req.auth.userId, "errors", 1);
             return res.status(500).json({
                 error: "No se pudo guardar la entrega"
             });
@@ -3180,6 +3570,30 @@ app.get("/gallery/:folderId/download", async (req, res) => {
 
     const records = listGalleryFileRecords(context.folderPath);
     const files = records.map((file) => file.name);
+    if (!economicConfig.zipEnabled) {
+        return res.status(503).json({
+            error: "La descarga ZIP está pausada. Puedes descargar las fotografías una a una",
+            code: "ZIP_PAUSED"
+        });
+    }
+    const totalBytes = records.reduce((total, file) => total + file.size, 0);
+    const release = zipConcurrency.tryAcquire(context.delivery.ownerId, {
+        globalLimit: economicConfig.globalConcurrentZips,
+        accountLimit: economicConfig.accountConcurrentZips
+    });
+    if (!release) {
+        return res.status(429).json({
+            error: quotaMessage("GLOBAL_ZIP_CONCURRENCY_LIMIT"),
+            code: "GLOBAL_ZIP_CONCURRENCY_LIMIT"
+        });
+    }
+    const reservation = reserveEphemeralZip(context.delivery.ownerId, totalBytes);
+    if (!reservation.ok) {
+        release();
+        return res.status(reservation.status).json({
+            error: quotaMessage(reservation.code), code: reservation.code
+        });
+    }
     const archiveName = safeDownloadName(context.delivery.clientName);
     deliveryStore.logActivity(context.delivery.id, "download_gallery_original", {
         details: { fileCount: files.length }
@@ -3188,6 +3602,14 @@ app.get("/gallery/:folderId/download", async (req, res) => {
     res.attachment(`The-Real-Gallery-${archiveName}.zip`);
 
     const archive = new ZipArchive({ store: true });
+    let released = false;
+    const releaseOnce = () => {
+        if (released) return;
+        released = true;
+        release();
+    };
+    res.once("close", releaseOnce);
+    res.once("finish", releaseOnce);
 
     archive.on("error", (error) => {
         console.error(error);
@@ -3213,6 +3635,7 @@ app.get("/gallery/:folderId/download", async (req, res) => {
             }
         }
         await archive.finalize();
+        recordUsage(context.delivery.ownerId, "downloaded_bytes", totalBytes);
     } catch (error) {
         console.error(error);
         if (!res.destroyed) res.destroy(error);
@@ -3225,6 +3648,12 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
     if (!context.delivery.allowWebDownload) {
         return res.status(403).json({
             error: "La descarga en calidad web está desactivada"
+        });
+    }
+    if (!economicConfig.zipEnabled) {
+        return res.status(503).json({
+            error: "La descarga ZIP está pausada. Puedes descargar las fotografías una a una",
+            code: "ZIP_PAUSED"
         });
     }
 
@@ -3248,12 +3677,41 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
         });
     }
 
+    const totalBytes = files.reduce((total, file) => (
+        total + fs.statSync(previewPath(context.folderPath, file)).size
+    ), 0);
+    const release = zipConcurrency.tryAcquire(context.delivery.ownerId, {
+        globalLimit: economicConfig.globalConcurrentZips,
+        accountLimit: economicConfig.accountConcurrentZips
+    });
+    if (!release) {
+        return res.status(429).json({
+            error: quotaMessage("GLOBAL_ZIP_CONCURRENCY_LIMIT"),
+            code: "GLOBAL_ZIP_CONCURRENCY_LIMIT"
+        });
+    }
+    const reservation = reserveEphemeralZip(context.delivery.ownerId, totalBytes);
+    if (!reservation.ok) {
+        release();
+        return res.status(reservation.status).json({
+            error: quotaMessage(reservation.code), code: reservation.code
+        });
+    }
+
     const archiveName = safeDownloadName(context.delivery.clientName);
     deliveryStore.logActivity(context.delivery.id, "download_gallery_web", {
         details: { fileCount: files.length }
     });
     res.attachment(`The-Real-Gallery-${archiveName}-web.zip`);
     const archive = new ZipArchive({ store: true });
+    let released = false;
+    const releaseOnce = () => {
+        if (released) return;
+        released = true;
+        release();
+    };
+    res.once("close", releaseOnce);
+    res.once("finish", releaseOnce);
     archive.on("error", (error) => {
         console.error(error);
         res.destroy(error);
@@ -3268,6 +3726,7 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
         console.error(error);
         if (!res.destroyed) res.destroy(error);
     });
+    recordUsage(context.delivery.ownerId, "downloaded_bytes", totalBytes);
 });
 
 app.get("/gallery/:folderId", (req, res) => {
@@ -3401,6 +3860,7 @@ app.get("/gallery/:folderId/photos/:filename", async (req, res) => {
                 error: "El almacenamiento de la galería no está disponible"
             });
         }
+        recordUsage(context.delivery.ownerId, "downloaded_bytes", record.size);
         return res.redirect(
             await galleryStorage.inlineUrl(record.objectKey, record.name)
         );
@@ -3432,10 +3892,12 @@ app.get("/gallery/:folderId/photos/:filename/download", async (req, res) => {
                 error: "El almacenamiento de la galería no está disponible"
             });
         }
+        recordUsage(context.delivery.ownerId, "downloaded_bytes", record.size);
         return res.redirect(
             await galleryStorage.downloadUrl(record.objectKey, record.name)
         );
     }
+    recordUsage(context.delivery.ownerId, "downloaded_bytes", fs.statSync(targetPath).size);
     res.download(targetPath, req.params.filename);
 });
 
@@ -3467,6 +3929,7 @@ app.get("/gallery/:folderId/photos/:filename/download/web", async (req, res) => 
         deliveryStore.logActivity(context.delivery.id, "download_photo_web", {
             filename: req.params.filename
         });
+        recordUsage(context.delivery.ownerId, "downloaded_bytes", fs.statSync(targetPath).size);
         res.download(
             targetPath,
             webPhotoName(req.params.filename),
@@ -3684,6 +4147,7 @@ app.get("/transfer/:transferId/files/:filename/download", async (req, res) => {
             deliveryStore.recordTransferDownload(
                 context.transfer.id, new Date().toISOString()
             );
+            recordUsage(context.transfer.ownerId, "downloaded_bytes", file.size);
             res.set("Cache-Control", "private, no-store");
             return res.redirect(302, url);
         } catch (error) {
@@ -3698,23 +4162,149 @@ app.get("/transfer/:transferId/files/:filename/download", async (req, res) => {
     deliveryStore.recordTransferDownload(
         context.transfer.id, new Date().toISOString()
     );
+    const localSize = fs.statSync(targetPath).size;
+    recordUsage(context.transfer.ownerId, "downloaded_bytes", localSize);
     res.set("Cache-Control", "private, no-store");
     res.download(targetPath, req.params.filename);
+});
+
+async function transferZipStatusResponse(context, res, { start = false } = {}) {
+    let result;
+    if (context.transfer.storageProvider === "r2" && !start) {
+        const job = deliveryStore.getTransferZipJob(context.transfer.id);
+        if (!job) {
+            return res.status(404).json({
+                error: "El ZIP todavía no se ha solicitado", code: "ZIP_NOT_STARTED"
+            });
+        }
+        if (job.status === "failed") {
+            return res.status(409).json({
+                error: "No se pudo preparar el ZIP. Pulsa de nuevo para reintentarlo",
+                code: job.errorCode || "ZIP_BUILD_FAILED"
+            });
+        }
+        result = job.status === "ready"
+            ? { ok: true, state: "ready", job }
+            : prepareTransferZip(context.transfer);
+    } else {
+        result = prepareTransferZip(context.transfer);
+    }
+    if (!result.ok) {
+        return res.status(result.status).json({
+            error: quotaMessage(result.code), code: result.code
+        });
+    }
+    if (result.state === "local") {
+        return res.json({ status: "ready", url: `/transfer/${context.transfer.id}/download` });
+    }
+    if (result.state !== "ready") {
+        return res.status(202).json({ status: "building" });
+    }
+    try {
+        const url = await objectStorage.downloadUrl(
+            result.job.objectKey, transferZipObjectName(context.transfer)
+        );
+        deliveryStore.recordTransferDownload(context.transfer.id, new Date().toISOString());
+        recordUsage(context.transfer.ownerId, "downloaded_bytes", result.job.size);
+        return res.json({ status: "ready", url, size: result.job.size });
+    } catch (error) {
+        console.error(error);
+        recordUsage(context.transfer.ownerId, "errors", 1);
+        return res.status(502).json({ error: "No se pudo preparar la descarga" });
+    }
+}
+
+app.post("/transfer/:transferId/zip", requireSameOrigin, async (req, res) => {
+    const context = getPublicTransfer(req, res);
+    if (!context) return;
+    return transferZipStatusResponse(context, res, { start: true });
+});
+
+app.get("/transfer/:transferId/zip", async (req, res) => {
+    const context = getPublicTransfer(req, res);
+    if (!context) return;
+    return transferZipStatusResponse(context, res);
 });
 
 app.get("/transfer/:transferId/download", async (req, res) => {
     const context = getPublicTransfer(req, res);
     if (!context) return;
+    if (!economicConfig.zipEnabled) {
+        return res.status(503).json({
+            error: "La descarga ZIP está pausada. Puedes descargar los archivos individualmente",
+            code: "ZIP_PAUSED"
+        });
+    }
+    if (context.transfer.storageProvider === "r2") {
+        const result = prepareTransferZip(context.transfer);
+        if (!result.ok) {
+            return res.status(result.status).json({
+                error: quotaMessage(result.code), code: result.code
+            });
+        }
+        if (result.state !== "ready") {
+            return res.status(202).json({
+                status: "building",
+                error: "El ZIP se está preparando"
+            });
+        }
+        try {
+            const url = await objectStorage.downloadUrl(
+                result.job.objectKey, transferZipObjectName(context.transfer)
+            );
+            deliveryStore.recordTransferDownload(context.transfer.id, new Date().toISOString());
+            recordUsage(context.transfer.ownerId, "downloaded_bytes", result.job.size);
+            res.set("Cache-Control", "private, no-store");
+            return res.redirect(302, url);
+        } catch (error) {
+            console.error(error);
+            recordUsage(context.transfer.ownerId, "errors", 1);
+            return res.status(502).json({ error: "No se pudo preparar la descarga" });
+        }
+    }
     const files = context.transfer.storageProvider === "r2"
         ? deliveryStore.listTransferFiles(context.transfer.id)
             .filter((file) => file.status === "ready")
         : listTransferFiles(context.folderPath);
     if (!files.length) return res.status(404).json({ error: "No hay archivos" });
+    const planLimit = economicPlanLimits(ownerPlan(context.transfer.ownerId));
+    if (context.transfer.totalBytes > planLimit.zipMaxBytes) {
+        return res.status(403).json({
+            error: quotaMessage("PLAN_ZIP_SIZE_LIMIT"), code: "PLAN_ZIP_SIZE_LIMIT"
+        });
+    }
+    const release = zipConcurrency.tryAcquire(context.transfer.ownerId, {
+        globalLimit: economicConfig.globalConcurrentZips,
+        accountLimit: economicConfig.accountConcurrentZips
+    });
+    if (!release) {
+        return res.status(429).json({
+            error: quotaMessage("GLOBAL_ZIP_CONCURRENCY_LIMIT"),
+            code: "GLOBAL_ZIP_CONCURRENCY_LIMIT"
+        });
+    }
+    const reservation = reserveEphemeralZip(
+        context.transfer.ownerId, context.transfer.totalBytes
+    );
+    if (!reservation.ok) {
+        release();
+        return res.status(reservation.status).json({
+            error: quotaMessage(reservation.code), code: reservation.code
+        });
+    }
     deliveryStore.recordTransferDownload(
         context.transfer.id, new Date().toISOString()
     );
     res.attachment(`The-Real-Gallery-${safeDownloadName(context.transfer.title)}.zip`);
     const archive = new ZipArchive({ store: true });
+    let released = false;
+    const releaseOnce = () => {
+        if (released) return;
+        released = true;
+        release();
+    };
+    res.once("close", releaseOnce);
+    res.once("finish", releaseOnce);
     archive.on("error", (error) => {
         console.error(error);
         if (!res.destroyed) res.destroy(error);
@@ -3737,6 +4327,7 @@ app.get("/transfer/:transferId/download", async (req, res) => {
         console.error(error);
         if (!res.destroyed) res.destroy(error);
     });
+    recordUsage(context.transfer.ownerId, "downloaded_bytes", context.transfer.totalBytes);
 });
 
 app.get("/t/:transferId", (req, res) => {

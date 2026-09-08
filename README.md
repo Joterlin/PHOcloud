@@ -47,7 +47,7 @@ npm run validate
 - Registrar cuándo se envió por última vez una entrega.
 - Mostrar términos y privacidad configurables y exigir su aceptación al registrarse.
 - Crear transferencias independientes de las galerías con cualquier archivo permitido.
-- Proteger transferencias de hasta 50 GB con contraseña y caducidad automática a las 24 horas.
+- Transferir hasta 5 GiB en Gratis, 25 GiB en Creador y 50 GiB en Pro, siempre con caducidad a las 24 horas.
 - Descargar un archivo concreto o el paquete completo en ZIP.
 - Enviar el enlace por correo y registrar el número de descargas.
 
@@ -98,8 +98,8 @@ volumen de la aplicación para responder rápidamente.
 ## Planes
 
 - `free`: 3 galerías activas y 5 GB.
-- `professional`: 25 galerías activas, 100 GB para galerías y 250 GB para transferencias.
-- `studio`: 100 galerías activas, 300 GB para galerías y 1 TB para transferencias.
+- `professional`: 25 galerías activas, 50 GiB para galerías y 250 GiB de transferencias al mes.
+- `studio`: 100 galerías activas, 150 GiB para galerías y 1 TiB de transferencias al mes.
 
 El servidor comprueba los límites; no dependen de ocultar botones en el
 navegador. El cobro real se conectará al proveedor de pagos al publicar el

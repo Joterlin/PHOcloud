@@ -1,0 +1,14 @@
+{
+  "Rules": [
+    {
+      "ID": "Abort incomplete transfer uploads after one day",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "transfers/"
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}

@@ -134,4 +134,49 @@ byId("shareTransfer").addEventListener("click", async () => {
     } catch {}
 });
 
+function wait(milliseconds) {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+byId("downloadAll").addEventListener("click", async (event) => {
+    event.preventDefault();
+    const button = byId("downloadAll");
+    const initial = button.innerHTML;
+    const status = byId("zipStatus");
+    status.hidden = false;
+    status.classList.remove("is-error");
+    status.textContent = "Preparando un único paquete reutilizable. Puedes seguir descargando archivos por separado.";
+    button.setAttribute("aria-disabled", "true");
+    button.style.pointerEvents = "none";
+    try {
+        let response = await fetch(apiUrl("/zip"), { method: "POST" });
+        let data = await response.json();
+        if (!response.ok && response.status !== 202) {
+            throw new Error(data.error || "No se pudo preparar el ZIP");
+        }
+        for (let attempt = 0; data.status === "building" && attempt < 1200; attempt += 1) {
+            button.textContent = "Preparando ZIP…";
+            await wait(1500);
+            response = await fetch(apiUrl("/zip"));
+            data = await response.json();
+            if (!response.ok && response.status !== 202) {
+                throw new Error(data.error || "No se pudo preparar el ZIP");
+            }
+        }
+        if (data.status !== "ready" || !data.url) {
+            throw new Error("El ZIP está tardando demasiado. Puedes descargar los archivos uno a uno.");
+        }
+        button.textContent = "ZIP listo ✓";
+        status.textContent = "ZIP listo. La descarga comenzará ahora.";
+        window.location.assign(data.url);
+    } catch (error) {
+        status.textContent = error.message;
+        status.classList.add("is-error");
+    } finally {
+        button.innerHTML = initial;
+        button.removeAttribute("aria-disabled");
+        button.style.pointerEvents = "";
+    }
+});
+
 loadTransfer();

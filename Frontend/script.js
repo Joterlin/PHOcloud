@@ -58,8 +58,12 @@ let accountData = null;
 let resultHideTimer = null;
 let selectedTransferFiles = [];
 let currentTransferLink = "";
-const MAX_TRANSFER_FILE_SIZE = 50 * 1024 * 1024 * 1024;
-const MAX_TRANSFER_TOTAL_SIZE = 50 * 1024 * 1024 * 1024;
+let transferCapabilities = {
+    maxFileSize: 5 * 1024 * 1024 * 1024,
+    maxTotalSize: 5 * 1024 * 1024 * 1024,
+    maxFiles: 500,
+    acceptingNewTransfers: true
+};
 const blockedTransferExtensions = new Set([
     "exe", "msi", "msp", "com", "scr", "bat", "cmd", "ps1", "vbs",
     "js", "jar", "apk", "app", "dmg"
@@ -663,6 +667,14 @@ async function loadAccount() {
     byId("storageUsageBar").style.width = `${storagePercent}%`;
     byId("transferUsageText").textContent = `${formatBytes(usage.transferStorageBytes)} de ${formatBytes(usage.transferStorageLimitBytes)}`;
     byId("transferUsageBar").style.width = `${transferPercent}%`;
+    const monthlyTransferPercent = Math.min(100,
+        usage.monthlyUploadLimitBytes
+            ? (usage.monthlyUploadBytes + usage.monthlyReservedUploadBytes)
+                / usage.monthlyUploadLimitBytes * 100
+            : 0
+    );
+    byId("monthlyTransferUsageText").textContent = `${formatBytes(usage.monthlyUploadBytes + usage.monthlyReservedUploadBytes)} de ${formatBytes(usage.monthlyUploadLimitBytes)}`;
+    byId("monthlyTransferUsageBar").style.width = `${monthlyTransferPercent}%`;
     const backupStatus = accountData.backups || { enabled: false };
     byId("backupStatusText").textContent = backupStatus.enabled
         ? (backupStatus.lastSuccessAt
@@ -1347,25 +1359,39 @@ byId("showGalleries").addEventListener("click", () => showProduct("galleries"));
 byId("showTransfers").addEventListener("click", () => showProduct("transfers"));
 showProduct("transfers");
 
+async function loadTransferCapabilities() {
+    const response = await fetch("/transfers/capabilities");
+    transferCapabilities = await readResponse(response);
+    byId("transferLimitHint").textContent = `Hasta ${formatBytes(transferCapabilities.maxTotalSize)} por transferencia · Disponible durante 24 horas`;
+    byId("selectTransferFiles").disabled = !transferCapabilities.acceptingNewTransfers;
+    byId("createTransfer").disabled = !transferCapabilities.acceptingNewTransfers;
+    if (!transferCapabilities.acceptingNewTransfers) {
+        showTransferError("Las nuevas transferencias están pausadas temporalmente. Tus archivos existentes siguen disponibles.");
+    }
+}
+
 function transferFileExtension(file) {
     return file.name.split(".").pop()?.toLowerCase() || "";
 }
 
 function addTransferFiles(files) {
     hideError();
+    if (!transferCapabilities.acceptingNewTransfers) {
+        return showTransferError("Las nuevas transferencias están pausadas temporalmente.");
+    }
     const blocked = files.find((file) => blockedTransferExtensions.has(transferFileExtension(file)));
     if (blocked) return showError(`${blocked.name} no está permitido por seguridad`);
-    const oversized = files.find((file) => file.size > MAX_TRANSFER_FILE_SIZE);
-    if (oversized) return showError(`${oversized.name} supera el máximo de 50 GB`);
+    const oversized = files.find((file) => file.size > transferCapabilities.maxFileSize);
+    if (oversized) return showTransferError(`${oversized.name} supera el máximo de ${formatBytes(transferCapabilities.maxFileSize)}`);
     const existing = new Set(selectedTransferFiles.map(fileKey));
     const unique = files.filter((file) => !existing.has(fileKey(file)));
-    if (selectedTransferFiles.length + unique.length > 500) {
-        return showError("Cada transferencia admite como máximo 500 archivos");
+    if (selectedTransferFiles.length + unique.length > transferCapabilities.maxFiles) {
+        return showTransferError(`Cada transferencia admite como máximo ${transferCapabilities.maxFiles} archivos`);
     }
     const total = [...selectedTransferFiles, ...unique]
         .reduce((sum, file) => sum + file.size, 0);
-    if (total > MAX_TRANSFER_TOTAL_SIZE) {
-        return showError("La transferencia no puede superar 50 GB");
+    if (total > transferCapabilities.maxTotalSize) {
+        return showTransferError(`La transferencia no puede superar ${formatBytes(transferCapabilities.maxTotalSize)}`);
     }
     selectedTransferFiles.push(...unique);
     renderTransferSelection();
@@ -1596,7 +1622,7 @@ byId("createTransfer").addEventListener("click", async () => {
     } catch (error) {
         showTransferError(`${error.message || "No se pudo completar la subida"} Puedes volver a intentarlo con los mismos archivos.`);
     } finally {
-        byId("createTransfer").disabled = false;
+        byId("createTransfer").disabled = !transferCapabilities.acceptingNewTransfers;
         byId("transferUploadStatus").hidden = true;
     }
 });
@@ -1755,7 +1781,8 @@ deleteDialog.addEventListener("close", () => {
 });
 
 Promise.all([
-    loadBrandProfile(), loadDeliveries(), loadTransfers(), loadAccount()
+    loadBrandProfile(), loadDeliveries(), loadTransfers(), loadAccount(),
+    loadTransferCapabilities()
 ]).then(() => {
     const url = new URL(window.location.href);
     const billingResult = url.searchParams.get("billing");

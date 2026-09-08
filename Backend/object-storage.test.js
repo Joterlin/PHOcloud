@@ -5,6 +5,7 @@ const http = require("node:http");
 const { once } = require("node:events");
 const os = require("node:os");
 const path = require("node:path");
+const { Readable } = require("node:stream");
 const {
     createGalleryStorage,
     createObjectStorage
@@ -58,6 +59,12 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
                 ETag: etag,
                 "Access-Control-Expose-Headers": "ETag"
             });
+            return res.end();
+        }
+        if (req.method === "PUT") {
+            completedObject = await requestBody(req);
+            deleted = false;
+            res.writeHead(200, { ETag: etag });
             return res.end();
         }
         if (req.method === "GET" && url.searchParams.has("uploadId")) {
@@ -169,7 +176,17 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
         const stream = await storage.getObjectStream(started.key);
         assert.equal(await stream.transformToString(), "material de prueba");
 
-        await storage.deleteKeys([started.key]);
+        const zipKey = storage.zipKey("00000000-0000-4000-8000-000000000020");
+        await storage.uploadStream({
+            key: zipKey,
+            stream: Readable.from([Buffer.from("zip simulado")]),
+            contentType: "application/zip",
+            filename: "paquete.zip"
+        });
+        const zipDownload = await fetch(await storage.downloadUrl(zipKey, "paquete.zip"));
+        assert.equal(await zipDownload.text(), "zip simulado");
+
+        await storage.deleteKeys([started.key, zipKey]);
         assert.equal(deleted, true);
         assert.equal((await fetch(downloadUrl)).status, 404);
     } finally {

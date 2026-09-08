@@ -80,7 +80,17 @@ if (transferStorage === "r2") {
     required("PHOCLOUD_R2_SECRET_ACCESS_KEY");
     required("PHOCLOUD_R2_BUCKET");
 } else {
-    warnings.push("Las transferencias usan disco local y no se reanudan por bloques; usa R2 antes de ofrecer 50 GB");
+    warnings.push("Las transferencias usan disco local y no se reanudan por bloques; usa R2 antes de ofrecer archivos grandes");
+}
+
+if (!process.env.PHOCLOUD_OPERATIONS_TOKEN?.trim()) {
+    warnings.push("PHOCLOUD_OPERATIONS_TOKEN no está configurado; las métricas económicas privadas permanecerán desactivadas");
+}
+if (!enabledValue(process.env.PHOCLOUD_ACCEPT_NEW_TRANSFERS ?? "true")) {
+    warnings.push("Interruptor de emergencia activo: no se aceptarán transferencias nuevas");
+}
+if (!enabledValue(process.env.PHOCLOUD_ZIP_ENABLED ?? "true")) {
+    warnings.push("Interruptor de emergencia activo: la generación de ZIP está suspendida");
 }
 
 try {

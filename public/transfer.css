@@ -40,6 +40,8 @@ h1 { max-width: 720px; margin: 0; font: 400 clamp(42px, 7vw, 78px)/.98 Georgia, 
 .file-row a { padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 999px; color: var(--text); font-size: 10px; text-decoration: none; transition: border-color .18s ease, background .18s ease; }
 .file-row a:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .transfer-footnote { margin: 24px 0 0; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; text-align: center; }
+.zip-status { margin: 12px 0 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 12px; }
+.zip-status.is-error { border-color: #c86969; background: color-mix(in srgb, #c86969 10%, transparent); }
 #unlockForm { margin-top: 25px; display: grid; grid-template-columns: 1fr auto; gap: 9px; }
 #unlockForm input { min-width: 0; padding: 0 16px; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); }
 .error { color: #ff958d; font-size: 12px; }

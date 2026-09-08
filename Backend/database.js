@@ -339,6 +339,36 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
 
         CREATE INDEX IF NOT EXISTS transfer_sessions_expires_at
         ON transfer_sessions(expires_at);
+
+        CREATE TABLE IF NOT EXISTS usage_counters (
+            scope TEXT NOT NULL CHECK (scope IN ('global', 'account')),
+            scope_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            metric TEXT NOT NULL,
+            value INTEGER NOT NULL DEFAULT 0 CHECK (value >= 0),
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (scope, scope_id, period, metric)
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS usage_counters_period_metric
+        ON usage_counters(period, metric);
+
+        CREATE TABLE IF NOT EXISTS transfer_zip_jobs (
+            transfer_id TEXT PRIMARY KEY,
+            owner_id INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('building', 'ready', 'failed')),
+            object_key TEXT NOT NULL,
+            size INTEGER NOT NULL DEFAULT 0 CHECK (size >= 0),
+            expected_size INTEGER NOT NULL DEFAULT 0 CHECK (expected_size >= 0),
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (transfer_id) REFERENCES transfers(id) ON DELETE CASCADE,
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS transfer_zip_jobs_owner_status
+        ON transfer_zip_jobs(owner_id, status);
     `);
 
     const transferColumns = new Set(
@@ -351,6 +381,15 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     ];
     for (const [column, statement] of transferMigrations) {
         if (!transferColumns.has(column)) database.exec(statement);
+    }
+    const zipJobColumns = new Set(
+        database.prepare("PRAGMA table_info(transfer_zip_jobs)").all()
+            .map((column) => column.name)
+    );
+    if (!zipJobColumns.has("expected_size")) {
+        database.exec(
+            "ALTER TABLE transfer_zip_jobs ADD COLUMN expected_size INTEGER NOT NULL DEFAULT 0 CHECK (expected_size >= 0)"
+        );
     }
 
     database.exec(`
@@ -782,6 +821,10 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         UPDATE transfers SET status = 'ready', expires_at = ?
         WHERE id = ? AND owner_id = ? AND status = 'uploading'
     `);
+    const touchUploadingTransfer = database.prepare(`
+        UPDATE transfers SET expires_at = ?
+        WHERE id = ? AND owner_id = ? AND status = 'uploading'
+    `);
     const insertTransferFile = database.prepare(`
         INSERT INTO transfer_files (
             id, transfer_id, display_name, object_key, size, mime_type,
@@ -818,7 +861,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         "DELETE FROM transfers WHERE id = ? AND owner_id = ?"
     );
     const selectExpiredTransfers = database.prepare(`
-        SELECT id FROM transfers WHERE expires_at <= ?
+        SELECT ${transferProjection} FROM transfers WHERE expires_at <= ?
     `);
     const removeTransferById = database.prepare(
         "DELETE FROM transfers WHERE id = ?"
@@ -839,6 +882,104 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     const removeExpiredTransferSessions = database.prepare(
         "DELETE FROM transfer_sessions WHERE expires_at <= ?"
     );
+    const upsertUsageCounter = database.prepare(`
+        INSERT INTO usage_counters (
+            scope, scope_id, period, metric, value, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(scope, scope_id, period, metric) DO UPDATE SET
+            value = MAX(0, usage_counters.value + excluded.value),
+            updated_at = excluded.updated_at
+    `);
+    const decreaseUsageCounter = database.prepare(`
+        UPDATE usage_counters
+        SET value = MAX(0, value - ?), updated_at = ?
+        WHERE scope = ? AND scope_id = ? AND period = ? AND metric = ?
+    `);
+    const selectUsageCounters = database.prepare(`
+        SELECT metric, value FROM usage_counters
+        WHERE scope = ? AND scope_id = ? AND period = ?
+        ORDER BY metric
+    `);
+    const selectUsageCounter = database.prepare(`
+        SELECT value FROM usage_counters
+        WHERE scope = ? AND scope_id = ? AND period = ? AND metric = ?
+    `);
+    const selectActiveTransferTotals = database.prepare(`
+        SELECT COALESCE(SUM(total_bytes), 0) AS bytes,
+            COUNT(*) AS transferCount,
+            COALESCE(SUM(CASE WHEN status = 'uploading' THEN 1 ELSE 0 END), 0)
+                AS uploadingCount
+        FROM transfers
+        WHERE expires_at > ? AND status IN ('uploading', 'ready')
+    `);
+    const selectAccountActiveTransferTotals = database.prepare(`
+        SELECT COALESCE(SUM(total_bytes), 0) AS bytes,
+            COUNT(*) AS transferCount,
+            COALESCE(SUM(CASE WHEN status = 'uploading' THEN 1 ELSE 0 END), 0)
+                AS uploadingCount
+        FROM transfers
+        WHERE owner_id = ? AND expires_at > ? AND status IN ('uploading', 'ready')
+    `);
+    const selectReadyZipTotals = database.prepare(`
+        SELECT COALESCE(SUM(z.size), 0) AS bytes, COUNT(*) AS zipCount
+        FROM transfer_zip_jobs z
+        INNER JOIN transfers t ON t.id = z.transfer_id
+        WHERE z.status = 'ready' AND t.expires_at > ?
+    `);
+    const selectAccountReadyZipTotals = database.prepare(`
+        SELECT COALESCE(SUM(z.size), 0) AS bytes, COUNT(*) AS zipCount
+        FROM transfer_zip_jobs z
+        INNER JOIN transfers t ON t.id = z.transfer_id
+        WHERE z.owner_id = ? AND z.status = 'ready' AND t.expires_at > ?
+    `);
+    const selectTransferForQuota = database.prepare(`
+        SELECT id, owner_id AS ownerId, total_bytes AS totalBytes,
+            created_at AS createdAt, status
+        FROM transfers WHERE id = ?
+    `);
+    const selectZipJob = database.prepare(`
+        SELECT transfer_id AS transferId, owner_id AS ownerId, status,
+            object_key AS objectKey, size, expected_size AS expectedSize,
+            error_code AS errorCode,
+            created_at AS createdAt, updated_at AS updatedAt
+        FROM transfer_zip_jobs WHERE transfer_id = ?
+    `);
+    const countBuildingZipJobs = database.prepare(`
+        SELECT COUNT(*) AS count FROM transfer_zip_jobs WHERE status = 'building'
+    `);
+    const countAccountBuildingZipJobs = database.prepare(`
+        SELECT COUNT(*) AS count FROM transfer_zip_jobs
+        WHERE owner_id = ? AND status = 'building'
+    `);
+    const markStaleZipJobsFailed = database.prepare(`
+        UPDATE transfer_zip_jobs SET status = 'failed', error_code = 'STALE_JOB',
+            updated_at = ? WHERE status = 'building' AND updated_at < ?
+    `);
+    const selectStaleZipJobs = database.prepare(`
+        SELECT transfer_id AS transferId, owner_id AS ownerId,
+            expected_size AS expectedSize, created_at AS createdAt
+        FROM transfer_zip_jobs WHERE status = 'building' AND updated_at < ?
+    `);
+    const upsertBuildingZipJob = database.prepare(`
+        INSERT INTO transfer_zip_jobs (
+            transfer_id, owner_id, status, object_key, size, expected_size,
+            error_code, created_at, updated_at
+        ) VALUES (?, ?, 'building', ?, 0, ?, NULL, ?, ?)
+        ON CONFLICT(transfer_id) DO UPDATE SET
+            status = 'building', object_key = excluded.object_key,
+            size = 0, expected_size = excluded.expected_size,
+            error_code = NULL, created_at = excluded.created_at,
+            updated_at = excluded.updated_at
+    `);
+    const updateReadyZipJob = database.prepare(`
+        UPDATE transfer_zip_jobs SET status = 'ready', size = ?,
+            error_code = NULL, updated_at = ?
+        WHERE transfer_id = ? AND status = 'building'
+    `);
+    const updateFailedZipJob = database.prepare(`
+        UPDATE transfer_zip_jobs SET status = 'failed', error_code = ?, updated_at = ?
+        WHERE transfer_id = ? AND status = 'building'
+    `);
 
     function legacySocialLinks(row) {
         return [
@@ -917,6 +1058,74 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     }
 
     migrateExistingDeliveries();
+
+    function scopeRows(ownerId) {
+        return ownerId === null || ownerId === undefined
+            ? [["global", "all"]]
+            : [["global", "all"], ["account", String(ownerId)]];
+    }
+
+    function metricValue(scope, scopeId, period, metric) {
+        return Number(selectUsageCounter.get(scope, scopeId, period, metric)?.value || 0);
+    }
+
+    function adjustMetric(ownerId, period, metric, delta, updatedAt) {
+        if (!Number.isSafeInteger(delta) || delta === 0) return;
+        for (const [scope, scopeId] of scopeRows(ownerId)) {
+            if (delta < 0) {
+                decreaseUsageCounter.run(
+                    Math.abs(delta), updatedAt, scope, scopeId, period, metric
+                );
+            } else {
+                upsertUsageCounter.run(
+                    scope, scopeId, period, metric, delta, updatedAt
+                );
+            }
+        }
+    }
+
+    function releaseTransferReservation(transfer, updatedAt) {
+        if (!transfer || transfer.status !== "uploading") return;
+        adjustMetric(
+            transfer.ownerId,
+            String(transfer.createdAt).slice(0, 7),
+            "reserved_upload_bytes",
+            -Number(transfer.totalBytes || 0),
+            updatedAt
+        );
+    }
+
+    function failStaleZipJobs(staleBeforeIso, updatedAt) {
+        const stale = selectStaleZipJobs.all(staleBeforeIso);
+        for (const job of stale) {
+            adjustMetric(
+                job.ownerId, String(job.createdAt).slice(0, 7),
+                "reserved_zip_bytes", -Number(job.expectedSize || 0), updatedAt
+            );
+        }
+        markStaleZipJobsFailed.run(updatedAt, staleBeforeIso);
+        return stale.length;
+    }
+
+    function deleteTransferWithReservation(id, ownerId) {
+        database.exec("BEGIN IMMEDIATE");
+        try {
+            const transfer = selectTransferForQuota.get(id);
+            if (!transfer || (ownerId !== null && transfer.ownerId !== ownerId)) {
+                database.exec("ROLLBACK");
+                return false;
+            }
+            releaseTransferReservation(transfer, new Date().toISOString());
+            const changes = ownerId === null
+                ? removeTransferById.run(id).changes
+                : removeTransfer.run(id, ownerId).changes;
+            database.exec("COMMIT");
+            return changes > 0;
+        } catch (error) {
+            database.exec("ROLLBACK");
+            throw error;
+        }
+    }
 
     return {
         listDeliveries: (ownerId) => selectDeliveries.all(ownerId).map(normalize),
@@ -1262,8 +1471,118 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 transfer.status || "ready", transfer.storageProvider || "local"
             );
         },
+        reserveTransferUpload({ transfer, files = [], limits, nowIso, period }) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const accountTotals = selectAccountActiveTransferTotals.get(
+                    transfer.ownerId, nowIso
+                );
+                const globalTotals = selectActiveTransferTotals.get(nowIso);
+                const accountUploaded = metricValue(
+                    "account", String(transfer.ownerId), period, "uploaded_bytes"
+                );
+                const accountReserved = metricValue(
+                    "account", String(transfer.ownerId), period, "reserved_upload_bytes"
+                );
+                const globalUploaded = metricValue(
+                    "global", "all", period, "uploaded_bytes"
+                );
+                const globalGalleryUploaded = metricValue(
+                    "global", "all", period, "gallery_uploaded_bytes"
+                );
+                const globalReserved = metricValue(
+                    "global", "all", period, "reserved_upload_bytes"
+                );
+                const globalDownloads = metricValue(
+                    "global", "all", period, "downloaded_bytes"
+                );
+                const globalErrors = metricValue("global", "all", period, "errors");
+                const checks = [
+                    [transfer.totalBytes > limits.transferMaxBytes, "PLAN_TRANSFER_SIZE_LIMIT"],
+                    [Number(accountTotals.bytes) + transfer.totalBytes
+                        > limits.accountStorageBytes, "PLAN_TRANSFER_STORAGE_LIMIT"],
+                    [accountUploaded + accountReserved + transfer.totalBytes
+                        > limits.accountMonthlyUploadBytes, "PLAN_MONTHLY_UPLOAD_LIMIT"],
+                    [Number(accountTotals.uploadingCount) >= limits.accountConcurrentUploads,
+                        "ACCOUNT_UPLOAD_CONCURRENCY_LIMIT"],
+                    [Number(globalTotals.bytes) + transfer.totalBytes
+                        > limits.globalStorageBytes, "GLOBAL_TRANSFER_STORAGE_LIMIT"],
+                    [globalUploaded + globalGalleryUploaded
+                        + globalReserved + transfer.totalBytes
+                        > limits.globalMonthlyUploadBytes, "GLOBAL_MONTHLY_UPLOAD_LIMIT"],
+                    [Number(globalTotals.uploadingCount) >= limits.globalConcurrentUploads,
+                        "GLOBAL_UPLOAD_CONCURRENCY_LIMIT"],
+                    [globalDownloads >= limits.globalMonthlyDownloadBytes,
+                        "GLOBAL_DOWNLOAD_THRESHOLD"],
+                    [globalErrors >= limits.globalMonthlyErrorLimit,
+                        "GLOBAL_ERROR_THRESHOLD"]
+                ];
+                const rejection = checks.find(([blocked]) => blocked);
+                if (rejection) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: rejection[1] };
+                }
+
+                insertTransfer.run(
+                    transfer.id, transfer.ownerId, transfer.title,
+                    transfer.message || "", transfer.recipientEmail || "",
+                    transfer.createdAt, transfer.expiresAt,
+                    transfer.passwordHash || null, transfer.passwordSalt || null,
+                    transfer.fileCount, transfer.totalBytes,
+                    transfer.status || "uploading", transfer.storageProvider || "local"
+                );
+                for (const file of files) {
+                    insertTransferFile.run(
+                        file.id, transfer.id, file.name, file.objectKey || null,
+                        file.size, file.mimeType || "application/octet-stream",
+                        file.multipartUploadId || null, file.status || "pending",
+                        file.createdAt || transfer.createdAt
+                    );
+                }
+                adjustMetric(
+                    transfer.ownerId, period,
+                    transfer.status === "ready" ? "uploaded_bytes" : "reserved_upload_bytes",
+                    transfer.totalBytes, nowIso
+                );
+                adjustMetric(transfer.ownerId, period, "transfers_created", 1, nowIso);
+                database.exec("COMMIT");
+                return { ok: true };
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
         markTransferReady(id, ownerId, expiresAt) {
             return updateTransferReady.run(expiresAt, id, ownerId).changes > 0;
+        },
+        touchTransferUpload(id, ownerId, expiresAt) {
+            return touchUploadingTransfer.run(expiresAt, id, ownerId).changes > 0;
+        },
+        finalizeTransferUpload(id, ownerId, expiresAt, updatedAt) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const transfer = selectTransferForQuota.get(id);
+                if (!transfer || transfer.ownerId !== ownerId) {
+                    database.exec("ROLLBACK");
+                    return false;
+                }
+                if (transfer.status !== "uploading") {
+                    database.exec("COMMIT");
+                    return transfer.status === "ready";
+                }
+                if (!updateTransferReady.run(expiresAt, id, ownerId).changes) {
+                    database.exec("ROLLBACK");
+                    return false;
+                }
+                const period = String(transfer.createdAt).slice(0, 7);
+                adjustMetric(ownerId, period, "reserved_upload_bytes", -transfer.totalBytes, updatedAt);
+                adjustMetric(ownerId, period, "uploaded_bytes", transfer.totalBytes, updatedAt);
+                database.exec("COMMIT");
+                return true;
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
         },
         createTransferFiles(files) {
             database.exec("BEGIN IMMEDIATE");
@@ -1300,13 +1619,13 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             return Number(countPendingTransferFiles.get(id)?.count || 0) > 0;
         },
         deleteTransfer(id, ownerId) {
-            return removeTransfer.run(id, ownerId).changes > 0;
+            return deleteTransferWithReservation(id, ownerId);
         },
         listExpiredTransfers(nowIso) {
             return selectExpiredTransfers.all(nowIso);
         },
         deleteTransferById(id) {
-            return removeTransferById.run(id).changes > 0;
+            return deleteTransferWithReservation(id, null);
         },
         recordTransferDownload(id, downloadedAt) {
             return updateTransferDownload.run(downloadedAt, id).changes > 0;
@@ -1319,6 +1638,203 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         },
         deleteExpiredTransferSessions(now) {
             return Number(removeExpiredTransferSessions.run(now).changes);
+        },
+        recordUsageMetric(ownerId, metric, value, at = new Date().toISOString()) {
+            const period = String(at).slice(0, 7);
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                adjustMetric(ownerId, period, metric, Math.max(0, Math.round(value)), at);
+                database.exec("COMMIT");
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
+        getEconomicUsage(ownerId, period, nowIso = new Date().toISOString()) {
+            const scope = ownerId === null || ownerId === undefined ? "global" : "account";
+            const scopeId = scope === "global" ? "all" : String(ownerId);
+            const counters = Object.fromEntries(selectUsageCounters
+                .all(scope, scopeId, period)
+                .map((row) => [row.metric, Number(row.value)]));
+            const active = scope === "global"
+                ? selectActiveTransferTotals.get(nowIso)
+                : selectAccountActiveTransferTotals.get(ownerId, nowIso);
+            const zip = scope === "global"
+                ? selectReadyZipTotals.get(nowIso)
+                : selectAccountReadyZipTotals.get(ownerId, nowIso);
+            return {
+                period,
+                counters,
+                activeTransferBytes: Number(active.bytes),
+                activeTransferCount: Number(active.transferCount),
+                activeUploads: Number(active.uploadingCount),
+                readyZipBytes: Number(zip.bytes),
+                readyZipCount: Number(zip.zipCount)
+            };
+        },
+        getTransferZipJob(transferId) {
+            return selectZipJob.get(transferId) || null;
+        },
+        reserveTransferZip({
+            transferId, ownerId, objectKey, expectedBytes, period,
+            nowIso, staleBeforeIso, limits
+        }) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                failStaleZipJobs(staleBeforeIso, nowIso);
+                const existing = selectZipJob.get(transferId);
+                if (existing?.status === "ready") {
+                    database.exec("COMMIT");
+                    return { ok: true, status: "ready", job: existing };
+                }
+                if (existing?.status === "building") {
+                    database.exec("COMMIT");
+                    return { ok: true, status: "building", job: existing };
+                }
+                const accountJobs = metricValue(
+                    "account", String(ownerId), period, "zip_jobs_started"
+                );
+                const accountBytes = metricValue(
+                    "account", String(ownerId), period, "zip_generated_bytes"
+                );
+                const accountReservedBytes = metricValue(
+                    "account", String(ownerId), period, "reserved_zip_bytes"
+                );
+                const globalJobs = metricValue("global", "all", period, "zip_jobs_started");
+                const globalBytes = metricValue("global", "all", period, "zip_generated_bytes");
+                const globalReservedBytes = metricValue(
+                    "global", "all", period, "reserved_zip_bytes"
+                );
+                const globalErrors = metricValue("global", "all", period, "errors");
+                const checks = [
+                    [expectedBytes > limits.accountZipMaxBytes, "PLAN_ZIP_SIZE_LIMIT"],
+                    [accountJobs >= limits.accountMonthlyZipJobs, "PLAN_MONTHLY_ZIP_JOB_LIMIT"],
+                    [accountBytes + accountReservedBytes + expectedBytes
+                        > limits.accountMonthlyZipBytes,
+                        "PLAN_MONTHLY_ZIP_BYTES_LIMIT"],
+                    [Number(countAccountBuildingZipJobs.get(ownerId).count)
+                        >= limits.accountConcurrentZips, "ACCOUNT_ZIP_CONCURRENCY_LIMIT"],
+                    [globalJobs >= limits.globalMonthlyZipJobs, "GLOBAL_MONTHLY_ZIP_JOB_LIMIT"],
+                    [globalBytes + globalReservedBytes + expectedBytes
+                        > limits.globalMonthlyZipBytes,
+                        "GLOBAL_MONTHLY_ZIP_BYTES_LIMIT"],
+                    [Number(countBuildingZipJobs.get().count)
+                        >= limits.globalConcurrentZips, "GLOBAL_ZIP_CONCURRENCY_LIMIT"],
+                    [globalErrors >= limits.globalMonthlyErrorLimit, "GLOBAL_ERROR_THRESHOLD"]
+                ];
+                const rejection = checks.find(([blocked]) => blocked);
+                if (rejection) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: rejection[1] };
+                }
+                upsertBuildingZipJob.run(
+                    transferId, ownerId, objectKey, expectedBytes, nowIso, nowIso
+                );
+                adjustMetric(ownerId, period, "zip_jobs_started", 1, nowIso);
+                adjustMetric(ownerId, period, "reserved_zip_bytes", expectedBytes, nowIso);
+                database.exec("COMMIT");
+                return { ok: true, status: "building", job: selectZipJob.get(transferId) };
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
+        reserveEphemeralZip({ ownerId, expectedBytes, period, nowIso, limits }) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const accountJobs = metricValue(
+                    "account", String(ownerId), period, "zip_jobs_started"
+                );
+                const accountBytes = metricValue(
+                    "account", String(ownerId), period, "zip_generated_bytes"
+                );
+                const accountReserved = metricValue(
+                    "account", String(ownerId), period, "reserved_zip_bytes"
+                );
+                const globalJobs = metricValue("global", "all", period, "zip_jobs_started");
+                const globalBytes = metricValue("global", "all", period, "zip_generated_bytes");
+                const globalReserved = metricValue("global", "all", period, "reserved_zip_bytes");
+                const globalErrors = metricValue("global", "all", period, "errors");
+                const checks = [
+                    [expectedBytes > limits.accountZipMaxBytes, "PLAN_ZIP_SIZE_LIMIT"],
+                    [accountJobs >= limits.accountMonthlyZipJobs, "PLAN_MONTHLY_ZIP_JOB_LIMIT"],
+                    [accountBytes + accountReserved + expectedBytes
+                        > limits.accountMonthlyZipBytes, "PLAN_MONTHLY_ZIP_BYTES_LIMIT"],
+                    [globalJobs >= limits.globalMonthlyZipJobs, "GLOBAL_MONTHLY_ZIP_JOB_LIMIT"],
+                    [globalBytes + globalReserved + expectedBytes
+                        > limits.globalMonthlyZipBytes, "GLOBAL_MONTHLY_ZIP_BYTES_LIMIT"],
+                    [globalErrors >= limits.globalMonthlyErrorLimit, "GLOBAL_ERROR_THRESHOLD"]
+                ];
+                const rejection = checks.find(([blocked]) => blocked);
+                if (rejection) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: rejection[1] };
+                }
+                adjustMetric(ownerId, period, "zip_jobs_started", 1, nowIso);
+                adjustMetric(ownerId, period, "zip_generated_bytes", expectedBytes, nowIso);
+                database.exec("COMMIT");
+                return { ok: true };
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
+        completeTransferZip(transferId, size, updatedAt) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const job = selectZipJob.get(transferId);
+                if (!job || job.status !== "building") {
+                    database.exec("ROLLBACK");
+                    return false;
+                }
+                updateReadyZipJob.run(size, updatedAt, transferId);
+                adjustMetric(
+                    job.ownerId, String(job.createdAt).slice(0, 7),
+                    "reserved_zip_bytes", -Number(job.expectedSize || 0), updatedAt
+                );
+                adjustMetric(
+                    job.ownerId, String(job.createdAt).slice(0, 7),
+                    "zip_generated_bytes", Math.max(0, Math.round(size)), updatedAt
+                );
+                database.exec("COMMIT");
+                return true;
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
+        failTransferZip(transferId, errorCode, updatedAt) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const job = selectZipJob.get(transferId);
+                if (!job || job.status !== "building") {
+                    database.exec("ROLLBACK");
+                    return false;
+                }
+                adjustMetric(
+                    job.ownerId, String(job.createdAt).slice(0, 7),
+                    "reserved_zip_bytes", -Number(job.expectedSize || 0), updatedAt
+                );
+                const changed = updateFailedZipJob.run(
+                    String(errorCode || "ZIP_FAILED").slice(0, 80), updatedAt, transferId
+                ).changes > 0;
+                database.exec("COMMIT");
+                return changed;
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
+        resetStaleZipJobs(cutoffIso, updatedAt = new Date().toISOString()) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const count = failStaleZipJobs(cutoffIso, updatedAt);
+                database.exec("COMMIT");
+                return count;
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
         },
         close() {
             if (database.isOpen) database.close();

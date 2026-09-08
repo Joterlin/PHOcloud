@@ -237,7 +237,7 @@
                     <button id="selectTransferFiles" class="transfer-dropzone" type="button">
                         <strong>＋ Añadir archivos</strong>
                         <span>Documentos, RAW, vídeos, ZIP y otros formatos</span>
-                        <small>Hasta 50 GB por transferencia · Disponible durante 24 horas</small>
+                        <small id="transferLimitHint">Consultando el límite de tu plan…</small>
                     </button>
                     <div id="transferSelection" class="transfer-selection" hidden>
                         <div class="transfer-selection-heading">
@@ -336,8 +336,10 @@
                 <div class="usage-track"><div id="galleryUsageBar"></div></div>
                 <div class="usage-heading storage-heading"><strong>Almacenamiento</strong><span id="storageUsageText">0 MB</span></div>
                 <div class="usage-track"><div id="storageUsageBar"></div></div>
-                <div class="usage-heading storage-heading"><strong>Transferencias temporales</strong><span id="transferUsageText">0 GB</span></div>
+                <div class="usage-heading storage-heading"><strong>Transferencias guardadas (24 h)</strong><span id="transferUsageText">0 GB</span></div>
                 <div class="usage-track"><div id="transferUsageBar"></div></div>
+                <div class="usage-heading storage-heading"><strong>Subidas de transferencias este mes</strong><span id="monthlyTransferUsageText">0 GB</span></div>
+                <div class="usage-track"><div id="monthlyTransferUsageBar"></div></div>
                 <div class="account-system-status"><span>Copias de seguridad</span><strong id="backupStatusText">Comprobando…</strong></div>
             </section>
             <section class="pricing-preview" aria-labelledby="pricingPreviewTitle">
@@ -356,8 +358,9 @@
                         <p class="plan-description">Para fotógrafos que entregan trabajos de forma habitual.</p>
                         <ul>
                             <li>Hasta 25 galerías</li>
-                            <li>100 GB para fotografías y vídeos</li>
-                            <li>Transferencias temporales de hasta 250 GB</li>
+                            <li>50 GiB para fotografías y vídeos</li>
+                            <li>Transferencias de hasta 25 GiB · 250 GiB al mes</li>
+                            <li>ZIP de hasta 5 GiB; archivos grandes por descarga individual</li>
                             <li>Marca, logotipo, enlaces y descargas completas</li>
                             <li>Galerías sin la firma de The Real Gallery</li>
                         </ul>
@@ -369,8 +372,9 @@
                         <p class="plan-description">Para profesionales con más volumen y varias entregas abiertas.</p>
                         <ul>
                             <li>Hasta 100 galerías</li>
-                            <li>300 GB para fotografías y vídeos</li>
-                            <li>Transferencias temporales de hasta 1 TB</li>
+                            <li>150 GiB para fotografías y vídeos</li>
+                            <li>Transferencias de hasta 50 GiB · 1 TiB al mes</li>
+                            <li>ZIP de hasta 10 GiB; archivos grandes por descarga individual</li>
                             <li>Dominio propio y varias identidades de marca</li>
                             <li>Estadísticas avanzadas y soporte prioritario</li>
                         </ul>

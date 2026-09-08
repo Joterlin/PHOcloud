@@ -56,7 +56,9 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             SMTP_HOST: "",
             SMTP_USER: "",
             SMTP_PASS: "",
-            PHOCLOUD_FROM_EMAIL: ""
+            PHOCLOUD_FROM_EMAIL: "",
+            PHOCLOUD_FREE_MONTHLY_ZIP_JOBS: "10",
+            PHOCLOUD_FREE_MONTHLY_ZIP_GIB: "20"
         },
         stdio: "ignore"
     });
@@ -149,7 +151,8 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         );
         assert.equal(capabilities.response.status, 200);
         assert.equal(capabilities.data.uploadMode, "local");
-        assert.equal(capabilities.data.maxTotalSize, 50 * 1024 * 1024 * 1024);
+        assert.equal(capabilities.data.maxTotalSize, 5 * 1024 * 1024 * 1024);
+        assert.equal(capabilities.data.technicalMaxTotalSize, 50 * 1024 * 1024 * 1024);
 
         const transferForm = new FormData();
         transferForm.append("title", "Material para retocador");
@@ -191,7 +194,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         const accountWithTransfer = await jsonRequest(`${baseUrl}/account`, { cookie });
         assert.equal(
             accountWithTransfer.data.account.usage.transferStorageLimitBytes,
-            50 * 1024 * 1024 * 1024
+            5 * 1024 * 1024 * 1024
         );
         const individualTransferDownload = await fetch(
             `${transferApi}/files/instrucciones.txt/download`,

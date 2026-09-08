@@ -316,6 +316,13 @@ test("controla archivos multipart y publica la transferencia al completarlos", (
             store.getOwnedTransferFile(fileId, transferId, ownerId).multipartUploadId,
             "upload-id"
         );
+        assert.equal(store.touchTransferUpload(
+            transferId, ownerId, "2026-09-02T12:00:00.000Z"
+        ), true);
+        assert.equal(
+            store.getTransfer(transferId).expiresAt,
+            "2026-09-02T12:00:00.000Z"
+        );
         assert.equal(store.markTransferFileReady(fileId, transferId), true);
         assert.equal(store.transferHasPendingFiles(transferId), false);
         assert.equal(

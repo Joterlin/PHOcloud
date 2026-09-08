@@ -69,8 +69,20 @@ público el bucket: las subidas y descargas usan enlaces firmados de corta durac
 Con las variables R2 guardadas, ejecuta `npm run configure:r2`. Este comando
 comprueba el acceso a objetos usando el mismo token restringido que PHOcloud.
 La política CORS se aplica con `deployment/r2-cors.json` mediante Wrangler y
-la eliminación tras un día se configura en el panel o con Wrangler. `/readyz`
+el aborto de multipart incompletos se define en `deployment/r2-lifecycle.json`:
+
+```text
+npx wrangler r2 bucket lifecycle set TU_BUCKET --file deployment/r2-lifecycle.json
+```
+
+Este archivo no caduca objetos completos. La eliminación tras 24 horas la hace
+la aplicación, conservando una política de recuperación segura. `/readyz`
 también comprueba el bucket cuando R2 está activo.
+
+Para límites, métricas, costes y el procedimiento de emergencia consulta
+`ECONOMIC_SAFETY.md`. La regla imprescindible y no destructiva para archivos
+completos es abortar multipart incompletos al día; no apliques una caducidad al
+bucket de galerías.
 
 ## Privacidad del titular y correos
 

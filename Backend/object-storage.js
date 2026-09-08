@@ -11,6 +11,7 @@ const {
     UploadPartCommand
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { Upload } = require("@aws-sdk/lib-storage");
 
 const DEFAULT_PART_SIZE = 64 * 1024 * 1024;
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
@@ -70,6 +71,10 @@ function createObjectStorage(env = process.env) {
 
     function createKey(transferId, fileId) {
         return `transfers/${transferId}/${fileId}`;
+    }
+
+    function zipKey(transferId) {
+        return `transfers/${transferId}/bundle.zip`;
     }
 
     async function startMultipart({ transferId, fileId, contentType, filename }) {
@@ -157,6 +162,24 @@ function createObjectStorage(env = process.env) {
         return response.Body;
     }
 
+    async function uploadStream({ key, stream, contentType, filename }) {
+        const upload = new Upload({
+            client,
+            params: {
+                Bucket: bucket,
+                Key: key,
+                Body: stream,
+                ContentType: contentType || "application/octet-stream",
+                ContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+            },
+            partSize: DEFAULT_PART_SIZE,
+            queueSize: 1,
+            leavePartsOnError: false
+        });
+        await upload.done();
+        return key;
+    }
+
     async function deleteKeys(keys) {
         await deleteObjectKeys(client, bucket, keys);
     }
@@ -172,12 +195,14 @@ function createObjectStorage(env = process.env) {
         endpointOrigin: new URL(endpoint).origin,
         partSize: DEFAULT_PART_SIZE,
         startMultipart,
+        zipKey,
         signPart,
         completeMultipart,
         abortMultipart,
         listParts,
         downloadUrl,
         getObjectStream,
+        uploadStream,
         deleteKeys,
         healthcheck
     };
