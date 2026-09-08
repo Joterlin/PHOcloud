@@ -540,7 +540,7 @@ test("producción no expone la configuración privilegiada inicial", async () =>
     const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phocloud-production-"));
     const port = 42_000 + (process.pid % 5_000);
     const baseUrl = `http://127.0.0.1:${port}`;
-    const publicUrl = "https://app.phocloud.example";
+    const publicUrl = "https://app.valid-domain.es";
     const child = spawn(process.execPath, [path.join(__dirname, "server.js")], {
         cwd: rootDirectory,
         env: {
@@ -554,10 +554,12 @@ test("producción no expone la configuración privilegiada inicial", async () =>
             SMTP_HOST: "smtp.example.test",
             SMTP_USER: "user",
             SMTP_PASS: "secret",
-            PHOCLOUD_FROM_EMAIL: "PHOcloud <hola@phocloud.example>",
-            PHOCLOUD_LEGAL_NAME: "Titular de prueba",
-            PHOCLOUD_LEGAL_EMAIL: "privacidad@phocloud.example",
+            PHOCLOUD_FROM_EMAIL: "The Real Gallery <noreply@valid-domain.es>",
+            PHOCLOUD_LEGAL_NAME: "Galería Digital SL",
+            PHOCLOUD_LEGAL_EMAIL: "legal@valid-domain.es",
             PHOCLOUD_LEGAL_COUNTRY: "España",
+            PHOCLOUD_LEGAL_ADDRESS: "Calle Mayor 1, Madrid",
+            PHOCLOUD_LEGAL_TAX_ID: "B12345678",
             PHOCLOUD_TRANSFER_STORAGE: "local"
         },
         stdio: "ignore"

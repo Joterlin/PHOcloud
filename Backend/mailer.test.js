@@ -4,12 +4,15 @@ const test = require("node:test");
 const {
     emailConfigured,
     resendConfigured,
-    sendAccountLink
+    sendAccountLink,
+    sendGalleryDelivery,
+    sendTransferDelivery
 } = require("./mailer");
 
 const variableNames = [
     "RESEND_API_KEY",
     "PHOCLOUD_FROM_EMAIL",
+    "PHOCLOUD_LEGAL_EMAIL",
     "SMTP_HOST",
     "SMTP_USER",
     "SMTP_PASS"
@@ -28,7 +31,8 @@ test("envía la verificación por la API HTTPS de Resend", async () => {
     let request;
     try {
         process.env.RESEND_API_KEY = "re_test_secret";
-        process.env.PHOCLOUD_FROM_EMAIL = "PHOcloud <onboarding@resend.dev>";
+        process.env.PHOCLOUD_FROM_EMAIL = "The Real Gallery <noreply@valid-domain.es>";
+        process.env.PHOCLOUD_LEGAL_EMAIL = "legal@valid-domain.es";
         delete process.env.SMTP_HOST;
         delete process.env.SMTP_USER;
         delete process.env.SMTP_PASS;
@@ -54,6 +58,8 @@ test("envía la verificación por la API HTTPS de Resend", async () => {
         assert.equal(request.options.headers.Authorization, "Bearer re_test_secret");
         const body = JSON.parse(request.options.body);
         assert.deepEqual(body.to, ["jose@example.com"]);
+        assert.equal(body.from, "The Real Gallery <noreply@valid-domain.es>");
+        assert.doesNotMatch(JSON.stringify(body), /legal@valid-domain\.es/);
         assert.match(body.subject, /Confirma tu cuenta/);
         assert.match(body.html, /mode=verify/);
     } finally {
@@ -86,6 +92,47 @@ test("informa un rechazo de Resend sin exponer la clave", async () => {
                 return true;
             }
         );
+    } finally {
+        global.fetch = originalFetch;
+        restoreEnvironment(snapshot);
+    }
+});
+
+test("usa remitentes genéricos si el fotógrafo no publica una marca", async () => {
+    const snapshot = Object.fromEntries(variableNames.map((name) => [name, process.env[name]]));
+    const originalFetch = global.fetch;
+    const messages = [];
+    try {
+        process.env.RESEND_API_KEY = "re_test_secret";
+        process.env.PHOCLOUD_FROM_EMAIL = "The Real Gallery <noreply@valid-domain.es>";
+        global.fetch = async (url, options) => {
+            messages.push(JSON.parse(options.body));
+            return new Response(JSON.stringify({ id: "email_123" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
+        };
+
+        await sendGalleryDelivery({
+            to: "client@recipient.test",
+            clientName: "Cliente",
+            photographerName: "",
+            galleryName: "Evento",
+            link: "https://app.valid-domain.es/s/gallery",
+            protectedGallery: false
+        });
+        await sendTransferDelivery({
+            to: "client@recipient.test",
+            senderName: "",
+            title: "Archivos",
+            message: "",
+            link: "https://app.valid-domain.es/t/transfer",
+            protectedTransfer: false,
+            expiresAt: "2026-09-09T10:00:00.000Z"
+        });
+
+        assert.match(messages[0].subject, /^Tu fotógrafo/);
+        assert.match(messages[1].subject, /^The Real Gallery/);
     } finally {
         global.fetch = originalFetch;
         restoreEnvironment(snapshot);

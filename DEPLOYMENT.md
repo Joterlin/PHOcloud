@@ -26,7 +26,10 @@ En producción son obligatorias:
   `PHOCLOUD_TRANSFERS_DIRECTORY` dentro del volumen
 - `RESEND_API_KEY` y `PHOCLOUD_FROM_EMAIL`; como alternativa, todas las
   variables `SMTP_*` y `PHOCLOUD_FROM_EMAIL`
-- `PHOCLOUD_LEGAL_NAME`, `PHOCLOUD_LEGAL_EMAIL` y `PHOCLOUD_LEGAL_COUNTRY`
+- `PHOCLOUD_LEGAL_EMAIL` y `PHOCLOUD_LEGAL_COUNTRY`
+- `PHOCLOUD_LEGAL_NAME`, `PHOCLOUD_LEGAL_ADDRESS` y `PHOCLOUD_LEGAL_TAX_ID`
+  son opcionales y quedan reservadas para un aviso legal revisado; no aparecen en
+  Términos ni Privacidad.
 - `PHOCLOUD_TRANSFER_STORAGE=r2` y las variables `PHOCLOUD_R2_*`
 - `PHOCLOUD_GALLERY_STORAGE=r2`,
   `PHOCLOUD_GALLERY_R2_ACCESS_KEY_ID`,
@@ -68,6 +71,44 @@ comprueba el acceso a objetos usando el mismo token restringido que PHOcloud.
 La política CORS se aplica con `deployment/r2-cors.json` mediante Wrangler y
 la eliminación tras un día se configura en el panel o con Wrangler. `/readyz`
 también comprueba el bucket cuando R2 está activo.
+
+## Privacidad del titular y correos
+
+No uses la dirección personal del titular en `PHOCLOUD_FROM_EMAIL` ni en
+`PHOCLOUD_LEGAL_EMAIL`. El servicio exige que las direcciones visibles sean
+profesionales y correspondan al mismo dominio base que `PHOCLOUD_PUBLIC_URL`.
+También bloquea dominios personales, `.local`, `.invalid`, dominios de ejemplo y
+textos como “pendiente de configurar”.
+
+Los dos correos cumplen funciones diferentes:
+
+- `PHOCLOUD_FROM_EMAIL`: remitente visible de verificaciones, recuperaciones,
+  galerías y transferencias. Debe estar autorizado por Resend o por el servidor SMTP.
+- `PHOCLOUD_LEGAL_EMAIL`: contacto público de privacidad y asuntos legales. No
+  se utiliza como remitente transaccional.
+- `PHOCLOUD_SECURITY_EMAIL`: contacto público opcional para `security.txt`.
+
+Pasos en Railway, solo después de crear y probar los buzones del dominio:
+
+1. En Resend, verifica el dominio y confirma que el remitente profesional puede enviar.
+2. Comprueba desde otro correo que el buzón legal recibe y permite responder.
+3. Abre el servicio de Railway y entra en **Variables** del entorno de producción.
+4. Configura `PHOCLOUD_FROM_EMAIL` con el nombre de marca y el remitente verificado.
+5. Configura `PHOCLOUD_LEGAL_EMAIL` con el buzón profesional operativo.
+6. Añade `PHOCLOUD_LEGAL_COUNTRY` y un correo profesional del dominio en
+   `PHOCLOUD_LEGAL_EMAIL`. Conserva los datos de identidad legal fuera de las
+   páginas públicas hasta que un profesional determine qué aviso legal necesitas.
+7. Añade `PHOCLOUD_LEGAL_REGISTRY` solo si corresponde y
+   `PHOCLOUD_SECURITY_EMAIL` solo si atenderás ese canal.
+8. Ejecuta `npm run preflight` y `npm run validate` antes de desplegar.
+9. Revisa `/privacidad`, `/terminos` y, si se configuró, `/.well-known/security.txt`
+   sin iniciar sesión. Confirma también que un correo transaccional muestra el
+   remitente profesional y no el correo legal.
+
+No guardes direcciones no operativas “para probar”: las páginas legales y los
+correos son información pública. La aplicación no puede determinar por sí sola
+qué identidad, domicilio o NIF corresponde publicar; debe confirmarlo un
+profesional jurídico o fiscal.
 
 ## Galerías permanentes con R2
 

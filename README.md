@@ -67,11 +67,17 @@ la carpeta `uploads` no está publicada directamente.
 
 ## Verificación por correo
 
-En desarrollo, si no hay un servicio de correo configurado, PHOcloud muestra el
+En desarrollo, si no hay un servicio de correo configurado, The Real Gallery muestra el
 enlace de verificación o recuperación en la propia pantalla. Para enviar
 correos reales en Railway configura `RESEND_API_KEY`, `PHOCLOUD_FROM_EMAIL` y
 `PHOCLOUD_PUBLIC_URL`. Como alternativa, en un servidor que permita SMTP,
 configura `SMTP_HOST`, `SMTP_USER` y `SMTP_PASS`.
+
+`PHOCLOUD_FROM_EMAIL` identifica al remitente de los correos transaccionales y
+no se reutiliza como contacto legal. `PHOCLOUD_LEGAL_EMAIL` es el buzón público
+para privacidad y cuestiones legales. En producción ambos deben ser direcciones
+profesionales del dominio público; las cuentas personales, dominios de ejemplo y
+marcadores se rechazan antes de iniciar el servicio.
 
 El mismo servicio de correo permite enviar una galería con visualización activa al correo guardado
 del cliente. Las contraseñas de galerías nunca se incluyen en el mensaje porque
@@ -92,8 +98,8 @@ volumen de la aplicación para responder rápidamente.
 ## Planes
 
 - `free`: 3 galerías activas y 5 GB.
-- `professional`: preparado para 100 galerías y 250 GB.
-- `studio`: preparado para 500 galerías y 1 TB.
+- `professional`: 25 galerías activas, 100 GB para galerías y 250 GB para transferencias.
+- `studio`: 100 galerías activas, 300 GB para galerías y 1 TB para transferencias.
 
 El servidor comprueba los límites; no dependen de ocultar botones en el
 navegador. El cobro real se conectará al proveedor de pagos al publicar el
@@ -109,7 +115,29 @@ La arquitectura actual requiere una única instancia y un volumen persistente:
 SQLite y las fotografías no deben desplegarse en un disco efímero. Para crear
 una copia manual ejecuta `npm run backup`.
 
-Los enlaces locales siguen dependiendo de que este ordenador permanezca
-encendido. Para que funcionen permanentemente todavía hay que contratar y
-conectar alojamiento, dominio HTTPS, SMTP y una ubicación externa de backups.
-Los pagos se integrarán después de elegir proveedor y probar la beta.
+La instalación pública utiliza Railway, el dominio HTTPS configurado, correo
+transaccional y almacenamiento externo. Los enlaces locales siguen dependiendo
+de que este ordenador permanezca encendido. Antes de activar cambios de
+facturación o configuración legal en producción hay que ejecutar las pruebas y
+el preflight y revisar el resultado en un entorno de prueba.
+
+## Datos públicos y privacidad del titular
+
+Las páginas legales no incorporan nombres, correos, domicilios ni identificadores
+hardcodeados. Se generan desde variables separadas. Si falta un valor obligatorio
+o se detecta un placeholder, la página se bloquea y no publica datos de ejemplo.
+
+- `PHOCLOUD_LEGAL_NAME`: dato opcional reservado para un futuro aviso legal revisado
+  revisada; no se inserta en Privacidad ni Términos.
+- `PHOCLOUD_LEGAL_EMAIL`: correo profesional público para privacidad y asuntos legales.
+- `PHOCLOUD_LEGAL_COUNTRY`: país de establecimiento.
+- `PHOCLOUD_LEGAL_ADDRESS`: domicilio legal para revisión; no se inserta en
+  Privacidad ni Términos.
+- `PHOCLOUD_LEGAL_TAX_ID`: NIF para revisión; no se inserta en esas páginas.
+- `PHOCLOUD_LEGAL_REGISTRY`: datos registrales, únicamente cuando sean aplicables.
+- `PHOCLOUD_SECURITY_EMAIL`: contacto público opcional de seguridad; si falta,
+  `/.well-known/security.txt` no se publica.
+
+La identidad, domicilio, NIF, datos registrales aplicables, información de
+consumo, fiscalidad y tratamiento de imágenes deben revisarse con un profesional
+jurídico antes de cobrar o abrir el servicio a terceros.

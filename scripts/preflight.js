@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
+const { validatePublicConfiguration } = require("../Backend/public-config");
 
 const production = process.env.NODE_ENV === "production";
 const errors = [];
@@ -42,10 +43,10 @@ const publicUrl = required("PHOCLOUD_PUBLIC_URL");
 const databasePath = required("PHOCLOUD_DATABASE_PATH");
 const uploadsDirectory = required("PHOCLOUD_UPLOADS_DIRECTORY");
 const transfersDirectory = required("PHOCLOUD_TRANSFERS_DIRECTORY");
-required("PHOCLOUD_FROM_EMAIL");
-required("PHOCLOUD_LEGAL_NAME");
-required("PHOCLOUD_LEGAL_EMAIL");
-required("PHOCLOUD_LEGAL_COUNTRY");
+errors.push(...validatePublicConfiguration(process.env, {
+    requireLegal: true,
+    requireTransactional: true
+}));
 
 const resendConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
 const smtpFields = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"];

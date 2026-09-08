@@ -14,6 +14,11 @@ const {
 const { createBilling } = require("./billing");
 const { createAutomaticBackupService } = require("./automatic-backup");
 const {
+    configuredSecurityEmail,
+    renderLegalTemplate,
+    validatePublicConfiguration
+} = require("./public-config");
+const {
     sendAccountLink,
     sendGalleryDelivery,
     sendTransferDelivery,
@@ -98,9 +103,7 @@ function validateRuntimeConfig() {
 
     const required = [
         "PHOCLOUD_PUBLIC_URL", "PHOCLOUD_DATABASE_PATH",
-        "PHOCLOUD_UPLOADS_DIRECTORY", "PHOCLOUD_TRANSFERS_DIRECTORY",
-        "PHOCLOUD_FROM_EMAIL", "PHOCLOUD_LEGAL_NAME",
-        "PHOCLOUD_LEGAL_EMAIL", "PHOCLOUD_LEGAL_COUNTRY"
+        "PHOCLOUD_UPLOADS_DIRECTORY", "PHOCLOUD_TRANSFERS_DIRECTORY"
     ];
     const missing = required.filter((key) => !process.env[key]);
     if (missing.length) {
@@ -109,6 +112,15 @@ function validateRuntimeConfig() {
     if (!emailConfigured()) {
         throw new Error(
             "Configura RESEND_API_KEY o SMTP_HOST, SMTP_USER y SMTP_PASS para enviar correos"
+        );
+    }
+    const publicConfigurationErrors = validatePublicConfiguration(process.env, {
+        requireLegal: true,
+        requireTransactional: true
+    });
+    if (publicConfigurationErrors.length) {
+        throw new Error(
+            `Configuración pública no válida: ${publicConfigurationErrors.join("; ")}`
         );
     }
     const galleryStorageMode = (process.env.PHOCLOUD_GALLERY_STORAGE || "local")
@@ -1531,7 +1543,10 @@ app.get("/robots.txt", (req, res) => {
 });
 
 app.get("/.well-known/security.txt", (req, res) => {
-    const email = process.env.PHOCLOUD_LEGAL_EMAIL || "privacidad@therealgallery.local";
+    const email = configuredSecurityEmail(process.env);
+    if (!email) {
+        return res.status(404).type("text/plain").send("Not found\n");
+    }
     res.type("text/plain").send([
         `Contact: mailto:${email}`,
         `Canonical: ${publicBaseUrl(req)}/.well-known/security.txt`,
@@ -1544,27 +1559,18 @@ app.get("/legal.css", (req, res) => {
     res.sendFile(path.join(publicDirectory, "legal.css"));
 });
 
-function escapeLegalValue(value) {
-    return String(value || "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
-}
-
 function sendLegalPage(res, filename) {
     const template = fs.readFileSync(path.join(publicDirectory, filename), "utf8");
-    const values = {
-        LEGAL_NAME: process.env.PHOCLOUD_LEGAL_NAME || "Responsable de The Real Gallery (pendiente de configurar)",
-        LEGAL_EMAIL: process.env.PHOCLOUD_LEGAL_EMAIL || "privacidad@therealgallery.local",
-        LEGAL_COUNTRY: process.env.PHOCLOUD_LEGAL_COUNTRY || "España",
-        UPDATED_DATE: "28 de agosto de 2026"
-    };
-    const html = Object.entries(values).reduce(
-        (result, [key, value]) => result.replaceAll(`{{${key}}}`, escapeLegalValue(value)),
-        template
-    );
-    res.type("html").send(html);
+    try {
+        const html = renderLegalTemplate(template, process.env);
+        res.set("Cache-Control", "no-store");
+        res.type("html").send(html);
+    } catch (error) {
+        console.error("Página legal bloqueada por configuración incompleta", error.message);
+        res.status(503).set("Cache-Control", "no-store").type("html").send(
+            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><meta name=\"robots\" content=\"noindex,nofollow\"><title>Información legal no disponible</title><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><h1>Información legal no disponible</h1><p>La instalación todavía no tiene una configuración legal publicable. No se muestran datos provisionales ni de ejemplo.</p><a href=\"/login\">Volver</a></article></body></html>"
+        );
+    }
 }
 
 app.get("/privacidad", (req, res) => {
@@ -2390,11 +2396,10 @@ app.post("/transfers/:transferId/send", requireAuth, requireSameOrigin, limitSen
         return res.status(400).json({ error: "Añade un correo válido del destinatario" });
     }
     try {
-        const owner = deliveryStore.getUserById(req.auth.userId);
         const profile = deliveryStore.getBrandProfile(req.auth.userId);
         const mail = await sendTransferDelivery({
             to: recipientEmail,
-            senderName: profile.brandName || owner?.displayName || owner?.username,
+            senderName: profile.brandName || "The Real Gallery",
             title: transfer.title,
             message: transfer.message,
             link: `${publicBaseUrl(req)}/t/${transfer.id}`,
@@ -2645,14 +2650,11 @@ app.post("/deliveries/:folderId/send", requireAuth, requireSameOrigin, async (re
     }
 
     try {
-        const owner = deliveryStore.getUserById(req.auth.userId);
         const link = `${publicBaseUrl(req)}/s/${delivery.id}`;
         const mail = await sendGalleryDelivery({
             to: clientEmail,
             clientName: delivery.clientName,
-            photographerName: delivery.brandName
-                || owner?.displayName
-                || owner?.username,
+            photographerName: delivery.brandName || "Tu fotógrafo",
             galleryName: delivery.clientName,
             link,
             protectedGallery: delivery.hasPassword
