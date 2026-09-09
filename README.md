@@ -1,4 +1,4 @@
-# PHOcloud
+# Straclase
 
 Plataforma para crear galerías fotográficas privadas y transferir archivos de
 trabajo con enlaces seguros, identidad propia y control desde una sola cuenta.
@@ -77,7 +77,7 @@ la carpeta `uploads` no está publicada directamente.
 
 ## Verificación por correo
 
-En desarrollo, si no hay un servicio de correo configurado, The Real Gallery muestra el
+En desarrollo, si no hay un servicio de correo configurado, Straclase muestra el
 enlace de verificación o recuperación en la propia pantalla. Para enviar
 correos reales en Railway configura `RESEND_API_KEY`, `PHOCLOUD_FROM_EMAIL` y
 `PHOCLOUD_PUBLIC_URL`. Como alternativa, en un servidor que permita SMTP,
@@ -91,7 +91,7 @@ marcadores se rechazan antes de iniciar el servicio.
 
 El mismo servicio de correo permite enviar una galería con visualización activa al correo guardado
 del cliente. Las contraseñas de galerías nunca se incluyen en el mensaje porque
-PHOcloud no conserva una versión legible de ellas.
+Straclase no conserva una versión legible de ellas.
 
 El archivo `.env` contiene secretos y está excluido del control de versiones.
 

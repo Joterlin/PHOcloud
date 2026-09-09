@@ -1,8 +1,8 @@
-const PHOCLOUD_THEME_KEY = "phocloud-theme";
+const STRACLASE_THEME_KEY = "straclase-theme";
 
 function savedTheme() {
     try {
-        const value = localStorage.getItem(PHOCLOUD_THEME_KEY);
+        const value = localStorage.getItem(STRACLASE_THEME_KEY);
         if (value === "light" || value === "dark") return value;
     } catch {}
     return "light";
@@ -33,7 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
             ? "light"
             : "dark";
         applyTheme(next);
-        try { localStorage.setItem(PHOCLOUD_THEME_KEY, next); } catch {}
+        try { localStorage.setItem(STRACLASE_THEME_KEY, next); } catch {}
         updateButton();
     });
 

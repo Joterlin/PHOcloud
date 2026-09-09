@@ -9,8 +9,8 @@ async function main() {
 
     const transferId = randomUUID();
     const fileId = randomUUID();
-    const filename = "comprobacion-phocloud.txt";
-    const payload = Buffer.from("PHOcloud R2 multipart smoke test");
+    const filename = "comprobacion-straclase.txt";
+    const payload = Buffer.from("Straclase R2 multipart smoke test");
     const origin = new URL(process.env.PHOCLOUD_PUBLIC_URL).origin;
     let key;
     let uploadId;
@@ -34,7 +34,7 @@ async function main() {
             throw new Error(`R2 rechazó la subida con HTTP ${response.status}`);
         }
         if (response.headers.get("access-control-allow-origin") !== origin) {
-            throw new Error("R2 no devolvió permiso CORS para PHOcloud");
+            throw new Error("R2 no devolvió permiso CORS para Straclase");
         }
         const parts = await storage.listParts({ key, uploadId });
         if (parts.length !== 1 || !parts[0].etag) {

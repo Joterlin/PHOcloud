@@ -31,7 +31,7 @@ test("envía la verificación por la API HTTPS de Resend", async () => {
     let request;
     try {
         process.env.RESEND_API_KEY = "re_test_secret";
-        process.env.PHOCLOUD_FROM_EMAIL = "The Real Gallery <noreply@valid-domain.es>";
+        process.env.PHOCLOUD_FROM_EMAIL = "Nombre anterior <noreply@valid-domain.es>";
         process.env.PHOCLOUD_LEGAL_EMAIL = "legal@valid-domain.es";
         delete process.env.SMTP_HOST;
         delete process.env.SMTP_USER;
@@ -48,7 +48,7 @@ test("envía la verificación por la API HTTPS de Resend", async () => {
             to: "jose@example.com",
             displayName: "José",
             purpose: "verify_email",
-            link: "https://phocloud.example/login?mode=verify&token=abc"
+            link: "https://straclase.example/login?mode=verify&token=abc"
         });
 
         assert.equal(result.delivered, true);
@@ -58,7 +58,7 @@ test("envía la verificación por la API HTTPS de Resend", async () => {
         assert.equal(request.options.headers.Authorization, "Bearer re_test_secret");
         const body = JSON.parse(request.options.body);
         assert.deepEqual(body.to, ["jose@example.com"]);
-        assert.equal(body.from, "The Real Gallery <noreply@valid-domain.es>");
+        assert.equal(body.from, "Straclase <noreply@valid-domain.es>");
         assert.doesNotMatch(JSON.stringify(body), /legal@valid-domain\.es/);
         assert.match(body.subject, /Confirma tu cuenta/);
         assert.match(body.html, /mode=verify/);
@@ -73,7 +73,7 @@ test("informa un rechazo de Resend sin exponer la clave", async () => {
     const originalFetch = global.fetch;
     try {
         process.env.RESEND_API_KEY = "re_muy_secreta";
-        process.env.PHOCLOUD_FROM_EMAIL = "PHOcloud <onboarding@resend.dev>";
+        process.env.PHOCLOUD_FROM_EMAIL = "Straclase <onboarding@resend.dev>";
         global.fetch = async () => new Response(
             JSON.stringify({ message: "Remitente no permitido" }),
             { status: 403, headers: { "Content-Type": "application/json" } }
@@ -84,7 +84,7 @@ test("informa un rechazo de Resend sin exponer la clave", async () => {
                 to: "jose@example.com",
                 displayName: "José",
                 purpose: "verify_email",
-                link: "https://phocloud.example/verify"
+                link: "https://straclase.example/verify"
             }),
             (error) => {
                 assert.match(error.message, /Resend rechazó el correo \(403\)/);
@@ -104,7 +104,7 @@ test("usa remitentes genéricos si el fotógrafo no publica una marca", async ()
     const messages = [];
     try {
         process.env.RESEND_API_KEY = "re_test_secret";
-        process.env.PHOCLOUD_FROM_EMAIL = "The Real Gallery <noreply@valid-domain.es>";
+        process.env.PHOCLOUD_FROM_EMAIL = "Straclase <noreply@valid-domain.es>";
         global.fetch = async (url, options) => {
             messages.push(JSON.parse(options.body));
             return new Response(JSON.stringify({ id: "email_123" }), {
@@ -132,7 +132,7 @@ test("usa remitentes genéricos si el fotógrafo no publica una marca", async ()
         });
 
         assert.match(messages[0].subject, /^Tu fotógrafo/);
-        assert.match(messages[1].subject, /^The Real Gallery/);
+        assert.match(messages[1].subject, /^Straclase/);
     } finally {
         global.fetch = originalFetch;
         restoreEnvironment(snapshot);

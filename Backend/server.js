@@ -2135,7 +2135,7 @@ app.get("/healthz", (req, res) => {
     res.set("Cache-Control", "no-store");
     res.json({
         status: "ok",
-        service: "phocloud",
+        service: "straclase",
         version: (
             process.env.RAILWAY_GIT_COMMIT_SHA
             || process.env.SOURCE_VERSION
@@ -3466,7 +3466,7 @@ app.post("/transfers/:transferId/send", requireAuth, requireSameOrigin, limitSen
         const profile = deliveryStore.getBrandProfile(req.auth.userId);
         const mail = await sendTransferDelivery({
             to: recipientEmail,
-            senderName: profile.brandName || "The Real Gallery",
+            senderName: profile.brandName || "Straclase",
             title: transfer.title,
             message: transfer.message,
             link: `${publicBaseUrl(req)}/t/${transfer.id}`,
@@ -4832,7 +4832,7 @@ app.get("/transfer/:transferId", (req, res) => {
         fileCount: context.transfer.fileCount,
         totalBytes: context.transfer.totalBytes,
         files,
-        brandName: profile.brandName || "The Real Gallery",
+        brandName: profile.brandName || "Straclase",
         accentColor: profile.accentColor || "#c9aa70",
         backgroundColor: profile.backgroundColor || "#ffffff",
         hasLogo: fs.existsSync(logoPath),
@@ -5077,7 +5077,7 @@ app.get("/s/:folderId", (req, res) => {
 app.use((req, res) => {
     if (req.accepts("html")) {
         return res.status(404).type("html").send(
-            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><meta name=\"theme-color\" content=\"#171715\"><title>No encontrado · The Real Gallery</title><link rel=\"icon\" href=\"/assets/favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><h1>Página no encontrada</h1><p>No hemos encontrado la dirección que buscas.</p><a href=\"/login\">Volver a The Real Gallery</a></article></body></html>"
+            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><meta name=\"theme-color\" content=\"#171715\"><title>No encontrado · Straclase</title><link rel=\"icon\" href=\"/assets/favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><h1>Página no encontrada</h1><p>No hemos encontrado la dirección que buscas.</p><a href=\"/\">Volver a Straclase</a></article></body></html>"
         );
     }
     res.status(404).json({ error: "Ruta no encontrada" });
@@ -5097,7 +5097,7 @@ app.use((error, req, res, next) => {
 });
 
 const server = app.listen(PORT, () => {
-    console.log(`The Real Gallery iniciado en ${process.env.PHOCLOUD_PUBLIC_URL || `http://localhost:${PORT}`}`);
+    console.log(`Straclase iniciado en ${process.env.PHOCLOUD_PUBLIC_URL || `http://localhost:${PORT}`}`);
     automaticBackups.start();
     migrateLocalGalleriesToR2().catch((error) => {
         console.error("No se pudo completar la migración de galerías a R2", error);

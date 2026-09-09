@@ -688,7 +688,7 @@ test("producción no expone la configuración privilegiada inicial", async () =>
             SMTP_HOST: "smtp.example.test",
             SMTP_USER: "user",
             SMTP_PASS: "secret",
-            PHOCLOUD_FROM_EMAIL: "The Real Gallery <noreply@valid-domain.es>",
+            PHOCLOUD_FROM_EMAIL: "Straclase <noreply@valid-domain.es>",
             PHOCLOUD_LEGAL_NAME: "Galería Digital SL",
             PHOCLOUD_LEGAL_EMAIL: "legal@valid-domain.es",
             PHOCLOUD_LEGAL_COUNTRY: "España",

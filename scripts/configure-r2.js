@@ -14,7 +14,7 @@ async function main() {
     await storage.healthcheck();
     const origin = new URL(publicUrl).origin;
     console.log(
-        `R2 validado: ${storage.bucket} acepta las credenciales de PHOcloud. CORS debe permitir ${origin} y la regla de ciclo de vida debe eliminar objetos tras 24 horas.`
+        `R2 validado: ${storage.bucket} acepta las credenciales de Straclase. CORS debe permitir ${origin} y la regla de ciclo de vida debe eliminar objetos tras 24 horas.`
     );
 }
 

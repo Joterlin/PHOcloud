@@ -1,4 +1,4 @@
-# PHOcloud — mapa del proyecto
+# Straclase — mapa del proyecto
 
 ## Objetivo
 
@@ -25,7 +25,7 @@ FOTÓGRAFO
    └── Subida de fotografías
           │
           ▼
-SERVIDOR PHOCLOUD
+SERVIDOR STRACLASE
    ├── Guarda los datos de la entrega
    ├── Guarda y organiza las fotografías
    ├── Genera un identificador privado

@@ -1254,7 +1254,7 @@ function updateEditGalleryPreview() {
     }
     const brandName = byId("editBrandName").value.trim();
     const brandText = byId("editLiveBrandName");
-    brandText.textContent = brandName || (hasLogo ? "" : "The Real Gallery");
+    brandText.textContent = brandName || (hasLogo ? "" : "Straclase");
     brandText.hidden = !brandText.textContent;
 
     const links = [...byId("editLinksList").querySelectorAll(".link-row")]

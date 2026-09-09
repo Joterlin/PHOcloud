@@ -115,7 +115,7 @@ async function loadGallery() {
         clientName.textContent = data.clientName || "Galería";
         galleryMessage.textContent = data.message || "";
         galleryMessage.hidden = !data.message;
-        document.title = `${data.clientName || "Galería"} · The Real Gallery`;
+        document.title = `${data.clientName || "Galería"} · Straclase`;
         updateInfo();
 
         downloadGalleryOriginal.href = galleryUrl("/download");
@@ -173,9 +173,9 @@ function applyBrand(data) {
         "--cover-y", `${data.coverPositionY ?? 50}%`
     );
     const brandName = data.brandName?.trim() || "";
-    brandText.textContent = brandName || (data.logoUrl ? "" : "The Real Gallery");
+    brandText.textContent = brandName || (data.logoUrl ? "" : "Straclase");
     brandText.hidden = Boolean(data.logoUrl && !brandName);
-    footerBrand.textContent = brandName || "The Real Gallery";
+    footerBrand.textContent = brandName || "Straclase";
     brandLogo.hidden = !data.logoUrl;
     if (data.logoUrl) {
         brandLogo.src = data.logoUrl;

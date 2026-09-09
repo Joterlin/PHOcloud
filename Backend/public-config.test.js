@@ -13,7 +13,7 @@ function validEnvironment() {
     return {
         NODE_ENV: "production",
         PHOCLOUD_PUBLIC_URL: "https://app.valid-domain.es",
-        PHOCLOUD_FROM_EMAIL: "The Real Gallery <noreply@valid-domain.es>",
+        PHOCLOUD_FROM_EMAIL: "Straclase <noreply@valid-domain.es>",
         PHOCLOUD_LEGAL_NAME: "Galería Digital SL",
         PHOCLOUD_LEGAL_EMAIL: "legal@valid-domain.es",
         PHOCLOUD_LEGAL_COUNTRY: "España",
@@ -27,7 +27,7 @@ test("rechaza placeholders, dominios personales y correos ajenos al dominio púb
     const placeholder = validEnvironment();
     placeholder.PHOCLOUD_LEGAL_NAME = "Responsable pendiente de configurar";
     placeholder.PHOCLOUD_LEGAL_EMAIL = "personal@gmail.com";
-    placeholder.PHOCLOUD_FROM_EMAIL = "The Real Gallery <onboarding@resend.dev>";
+    placeholder.PHOCLOUD_FROM_EMAIL = "Straclase <onboarding@resend.dev>";
 
     const errors = validatePublicConfiguration(placeholder, {
         requireLegal: true,

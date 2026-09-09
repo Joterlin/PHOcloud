@@ -35,7 +35,7 @@ function ensureWritableDirectory(target, label) {
 }
 
 if (!production) {
-    console.log("The Real Gallery: configuración local detectada; las exigencias de publicación no se aplican.");
+    console.log("Straclase: configuración local detectada; las exigencias de publicación no se aplican.");
     process.exit(0);
 }
 
@@ -96,7 +96,7 @@ if (!enabledValue(process.env.PHOCLOUD_ZIP_ENABLED ?? "true")) {
 try {
     const url = new URL(publicUrl);
     if (url.protocol !== "https:") errors.push("PHOCLOUD_PUBLIC_URL debe usar HTTPS");
-    if (url.pathname !== "/") warnings.push("Se recomienda publicar PHOcloud en la raíz del dominio");
+if (url.pathname !== "/") warnings.push("Se recomienda publicar Straclase en la raíz del dominio");
 } catch {
     errors.push("PHOCLOUD_PUBLIC_URL no es una URL válida");
 }
@@ -178,4 +178,4 @@ if (errors.length) {
     process.exit(1);
 }
 
-console.log("The Real Gallery: configuración de producción válida.");
+console.log("Straclase: configuración de producción válida.");

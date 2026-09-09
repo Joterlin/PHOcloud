@@ -210,11 +210,11 @@ function createAutomaticBackupService({
                     Date.now() - configuration.retentionDays * 24 * 60 * 60 * 1000
                 );
                 lastSuccessAt = createdAt.toISOString();
-                console.info(`[PHOcloud backup] Copia externa completada: ${objectName}`);
+                console.info(`[Straclase backup] Copia externa completada: ${objectName}`);
                 return { objectName, size, checksum, createdAt: lastSuccessAt };
             } catch (error) {
                 lastErrorAt = new Date().toISOString();
-                console.error(`[PHOcloud backup] No se pudo completar la copia: ${error.message}`);
+                console.error(`[Straclase backup] No se pudo completar la copia: ${error.message}`);
                 throw error;
             } finally {
                 if (archiveResult?.stageDirectory

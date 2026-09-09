@@ -1,6 +1,6 @@
-# Publicar PHOcloud
+# Publicar Straclase
 
-PHOcloud está preparado para ejecutarse como una única instancia Node dentro de
+Straclase está preparado para ejecutarse como una única instancia Node dentro de
 Docker, detrás de un proxy con HTTPS y con un volumen persistente. SQLite y los
 archivos locales hacen que **no deba ejecutarse en varias instancias** ni en un
 servidor cuyo disco se borre al reiniciar.
@@ -46,7 +46,7 @@ solo pueda leer y escribir objetos en ese bucket. Configura:
 - `PHOCLOUD_R2_SECRET_ACCESS_KEY`
 - `PHOCLOUD_R2_BUCKET`
 
-En el bucket, permite CORS desde el dominio exacto que elijas para PHOcloud. Para
+En el bucket, permite CORS desde el dominio exacto que elijas para Straclase. Para
 una instalación de ejemplo en `https://app.tudominio.com`:
 
 ```json
@@ -67,7 +67,7 @@ segunda protección si el proceso estuviera apagado en ese momento. No hagas
 público el bucket: las subidas y descargas usan enlaces firmados de corta duración.
 
 Con las variables R2 guardadas, ejecuta `npm run configure:r2`. Este comando
-comprueba el acceso a objetos usando el mismo token restringido que PHOcloud.
+comprueba el acceso a objetos usando el mismo token restringido que Straclase.
 La política CORS se aplica con `deployment/r2-cors.json` mediante Wrangler y
 el aborto de multipart incompletos se define en `deployment/r2-lifecycle.json`:
 
@@ -182,13 +182,13 @@ El archivo `railway.json` hace que Railway construya el `Dockerfile`, espere a
 1. Crea un servicio desde este repositorio.
 2. Añade un volumen y móntalo exactamente en `/app/storage`.
 3. Copia las variables de `.env.example` en Railway, usando como
-   `PHOCLOUD_PUBLIC_URL` el dominio que elijas para PHOcloud.
+   `PHOCLOUD_PUBLIC_URL` el dominio que elijas para Straclase.
 4. Configura R2 y SMTP antes de cambiar `NODE_ENV` a `production`.
 5. Genera primero el dominio temporal de Railway y completa todas las pruebas.
-6. Añade el dominio de PHOcloud como dominio personalizado y copia en tu proveedor
+6. Añade el dominio de Straclase como dominio personalizado y copia en tu proveedor
    DNS los registros CNAME y TXT que Railway muestre.
 
-No aumentes el número de réplicas: PHOcloud usa SQLite y debe ejecutar una sola
+No aumentes el número de réplicas: Straclase usa SQLite y debe ejecutar una sola
 instancia. El volumen guarda la base de datos y las galerías; R2 guarda únicamente
 las transferencias temporales grandes.
 

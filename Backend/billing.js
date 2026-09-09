@@ -84,7 +84,7 @@ function createBilling(env = process.env) {
         apiVersion: STRIPE_API_VERSION,
         maxNetworkRetries: 2,
         timeout: 10_000,
-        appInfo: { name: "The Real Gallery", version: "1.0.0" }
+        appInfo: { name: "Straclase", version: "1.0.0" }
     }) : null;
 
     function requireConfigured() {

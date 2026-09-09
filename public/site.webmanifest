@@ -1,8 +1,8 @@
 {
-  "name": "The Real Gallery",
-  "short_name": "Real Gallery",
+  "name": "Straclase",
+  "short_name": "Straclase",
   "description": "Galerías privadas y transferencias de archivos para profesionales creativos.",
-  "start_url": "/login",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f6f2",
   "theme_color": "#171715",
