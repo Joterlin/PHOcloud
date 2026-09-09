@@ -1174,7 +1174,7 @@ function ownerPlan(ownerId) {
 }
 
 function transferZipObjectName(transfer) {
-    return `The-Real-Gallery-${safeDownloadName(transfer.title)}.zip`;
+    return `Straclase-${safeDownloadName(transfer.title)}.zip`;
 }
 
 function lazyObjectStream(objectKey) {
@@ -4315,7 +4315,7 @@ app.get("/gallery/:folderId/download", async (req, res) => {
         details: { fileCount: files.length }
     });
 
-    res.attachment(`The-Real-Gallery-${archiveName}.zip`);
+    res.attachment(`Straclase-${archiveName}.zip`);
 
     const archive = new ZipArchive({ store: true });
     let released = false;
@@ -4418,7 +4418,7 @@ app.get("/gallery/:folderId/download/web", async (req, res) => {
     deliveryStore.logActivity(context.delivery.id, "download_gallery_web", {
         details: { fileCount: files.length }
     });
-    res.attachment(`The-Real-Gallery-${archiveName}-web.zip`);
+    res.attachment(`Straclase-${archiveName}-web.zip`);
     const archive = new ZipArchive({ store: true });
     let released = false;
     const releaseOnce = () => {
@@ -5011,7 +5011,7 @@ app.get("/transfer/:transferId/download", async (req, res) => {
     deliveryStore.recordTransferDownload(
         context.transfer.id, new Date().toISOString()
     );
-    res.attachment(`The-Real-Gallery-${safeDownloadName(context.transfer.title)}.zip`);
+    res.attachment(`Straclase-${safeDownloadName(context.transfer.title)}.zip`);
     const archive = new ZipArchive({ store: true });
     let released = false;
     const releaseOnce = () => {

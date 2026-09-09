@@ -458,6 +458,36 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         }
     }
 
+    const straclaseBrandMigration = "straclase-brand-v1";
+    const brandAlreadyMigrated = database.prepare(
+        "SELECT 1 FROM app_migrations WHERE name = ?"
+    ).get(straclaseBrandMigration);
+    if (!brandAlreadyMigrated) {
+        database.exec("BEGIN IMMEDIATE");
+        try {
+            const legacyBrandNames = "('the real gallery', 'real gallery', 'phocloud', 'pho cloud')";
+            database.prepare(`
+                UPDATE deliveries SET brand_name = 'Straclase'
+                WHERE lower(trim(brand_name)) IN ${legacyBrandNames}
+            `).run();
+            database.prepare(`
+                UPDATE brand_profiles SET brand_name = 'Straclase'
+                WHERE lower(trim(brand_name)) IN ${legacyBrandNames}
+            `).run();
+            database.prepare(`
+                UPDATE users SET display_name = 'Straclase'
+                WHERE lower(trim(display_name)) IN ${legacyBrandNames}
+            `).run();
+            database.prepare(
+                "INSERT INTO app_migrations (name, applied_at) VALUES (?, ?)"
+            ).run(straclaseBrandMigration, new Date().toISOString());
+            database.exec("COMMIT");
+        } catch (error) {
+            database.exec("ROLLBACK");
+            throw error;
+        }
+    }
+
     const projection = `
         id,
         client_name AS clientName,

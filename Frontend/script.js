@@ -2197,7 +2197,7 @@ deleteDialog.addEventListener("close", () => {
     deleteDialogError.hidden = true;
 });
 
-const PENDING_DB_NAME = "the-real-gallery-pending";
+const PENDING_DB_NAME = "straclase-pending";
 const PENDING_STORE_NAME = "pending-transfers";
 const PENDING_RECORD_KEY = "guest-selection";
 

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { DatabaseSync } = require("node:sqlite");
 const { createDeliveryStore } = require("./database");
 
 function createTestEnvironment() {
@@ -105,6 +106,51 @@ test("importa una galería antigua desde metadata.json", () => {
         assert.equal(delivery.clientName, "Cliente antiguo");
         assert.equal(delivery.createdAt, "2026-08-20T09:00:00.000Z");
         assert.equal(delivery.photoCount, 1);
+    } finally {
+        store.close();
+        fs.rmSync(environment.root, { recursive: true, force: true });
+    }
+});
+
+test("migra la marca histórica de cuentas y galerías existentes a Straclase", () => {
+    const environment = createTestEnvironment();
+    let store = createDeliveryStore(environment);
+    const ownerId = store.createUser({
+        username: "marca-antigua",
+        displayName: "The Real Gallery",
+        passwordHash: "hash",
+        passwordSalt: "salt",
+        createdAt: "2026-09-09T10:00:00.000Z"
+    });
+    store.upsertBrandProfile({
+        userId: ownerId,
+        brandName: "PHOcloud",
+        updatedAt: "2026-09-09T10:00:00.000Z"
+    });
+    store.createDelivery({
+        id: "00000000-0000-4000-8000-000000000003",
+        clientName: "Cliente existente",
+        brandName: "Real Gallery",
+        photoCount: 0,
+        createdAt: "2026-09-09T10:00:00.000Z",
+        ownerId
+    });
+    store.close();
+
+    const database = new DatabaseSync(environment.databasePath);
+    database.prepare(
+        "DELETE FROM app_migrations WHERE name = 'straclase-brand-v1'"
+    ).run();
+    database.close();
+
+    store = createDeliveryStore(environment);
+    try {
+        assert.equal(store.getUserById(ownerId).displayName, "Straclase");
+        assert.equal(store.getBrandProfile(ownerId).brandName, "Straclase");
+        assert.equal(
+            store.getDelivery("00000000-0000-4000-8000-000000000003").brandName,
+            "Straclase"
+        );
     } finally {
         store.close();
         fs.rmSync(environment.root, { recursive: true, force: true });

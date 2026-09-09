@@ -24,7 +24,7 @@ function enabledValue(value) {
 function integrationIdentifier() {
     const alphabet = "abcdefghijklmnopqrstuvwxyz";
     const bytes = randomBytes(8);
-    return `realgallery_${Array.from(bytes, (byte) => (
+    return `straclase_${Array.from(bytes, (byte) => (
         alphabet[byte % alphabet.length]
     )).join("")}`;
 }
