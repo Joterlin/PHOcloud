@@ -36,9 +36,10 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     const sendScript = read("public/send.js");
     const transfer = read("public/transfer.html");
     const gallery = read("public/gallery.html");
-    assert.match(dashboard, /id="showHome"/);
+    assert.doesNotMatch(dashboard, /id="showHome"|TU ESPACIO DE TRABAJO|ACTIVIDAD RECIENTE/);
     assert.match(dashboard, /id="showTransfers"/);
     assert.match(dashboard, /id="showGalleries"/);
+    assert.doesNotMatch(dashboard, /id="workspaceBrandButton"|id="workspaceAccountButton"/);
     assert.match(dashboard, /id="convertDialog"/);
     assert.match(dashboardScript, /selectedFileIds/);
     assert.match(dashboardScript, /\/conversions/);
@@ -49,8 +50,11 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(conversionSubmit, /Content-Type": "application\/json"/);
     assert.doesNotMatch(conversionSubmit, /FormData|append\("files"/);
     assert.match(send, /id="guestFiles"/);
-    assert.match(sendScript, /indexedDB\.open/);
-    assert.match(sendScript, /requiresAccount|login\?mode=register/);
+    assert.match(send, /No necesitas registrarte ni iniciar sesión/);
+    assert.match(sendScript, /\/transfers\/multipart/);
+    assert.match(sendScript, /retryPart/);
+    assert.match(sendScript, /id="resultLink"|resultLink/);
+    assert.doesNotMatch(sendScript, /indexedDB|login\?mode=register/);
     assert.match(transfer, /href="\/enviar"/);
     assert.match(gallery, /href="\/enviar"/);
 });

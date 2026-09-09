@@ -19,14 +19,17 @@ permanente de galerías y del abuso mediante cuentas múltiples.
 
 | Cuenta | Transferencia | Subidas/mes | Temporales simultáneas | Subidas simultáneas | ZIP | ZIP/mes |
 |---|---:|---:|---:|---:|---:|---:|
-| Invitado | 0 | 0 | 0 | 0 | 0 | 0 |
+| Invitado | 2 GiB | 5 GiB por navegador | 5 GiB por navegador | 1 | Según acceso público | Según acceso público |
 | Gratis | 5 GiB | 5 GiB | 5 GiB | 1 | 1 GiB | 1 trabajo / 1 GiB |
 | Creador (4,99 €) | 25 GiB | 250 GiB | 50 GiB | 2 | 5 GiB | 5 trabajos / 10 GiB |
 | Pro (9,99 €) | 50 GiB | 1 TiB | 250 GiB | 4 | 10 GiB | 20 trabajos / 50 GiB |
 
-No existe subida anónima. Los 50 GiB siguen siendo una capacidad técnica del
-plan Pro. Para paquetes mayores que el límite ZIP se mantienen las descargas
-individuales firmadas.
+La subida anónima usa una sesión temporal sin acceso al panel. Tiene un máximo
+predeterminado de 2 GiB por envío, conserva la cuota gratuita de 5 GiB por
+navegador y añade topes compartidos de 25 GiB almacenados y 100 GiB subidos al
+mes. Estos contadores son defensas de aplicación y una persona puede intentar
+eludir la cuota borrando cookies; el rate limiting y los umbrales globales siguen
+siendo necesarios. Los 50 GiB permanecen como capacidad técnica del plan Pro.
 
 Globalmente se admiten por defecto 8 subidas, 2 ZIP y 2 conversiones simultáneas, 2 TiB subidos
 al mes, 250 GiB temporales activos, 4 TiB de descargas estimadas, 250 GiB
@@ -60,6 +63,8 @@ reduce CPU y hace que el coste dependa principalmente de mover bytes.
 
 - `PHOCLOUD_ACCEPT_NEW_TRANSFERS=false`: rechaza nuevas reservas, pero conserva
   las transferencias existentes, sus descargas y todo el acceso administrativo.
+- `PHOCLOUD_GUEST_TRANSFERS_ENABLED=false`: pausa solo los envíos nuevos sin
+  cuenta; las cuentas registradas y todos los enlaces existentes siguen funcionando.
 - `PHOCLOUD_ZIP_ENABLED=false`: suspende todos los ZIP. Las descargas
   individuales, login, galerías existentes y panel siguen funcionando.
 - `PHOCLOUD_CONVERSION_ENABLED=false`: impide reservar conversiones nuevas.

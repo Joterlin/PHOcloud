@@ -119,6 +119,24 @@ test("guarda usuarios y sesiones con expiración", () => {
     try {
         assert.equal(store.hasUsers(), false);
 
+        const guestId = store.createGuestUser({
+            username: "guest_temporal",
+            passwordHash: "hash-inaccesible",
+            passwordSalt: "salt-inaccesible",
+            createdAt: "2026-08-26T09:00:00.000Z"
+        });
+        store.createGuestUploadSession({
+            tokenHash: "token-invitado",
+            userId: guestId,
+            createdAt: now,
+            expiresAt: now + 60_000
+        });
+        assert.equal(store.hasUsers(), false);
+        assert.equal(store.getUserById(guestId).isGuest, 1);
+        assert.equal(store.getGuestUploadSession("token-invitado", now).userId, guestId);
+        assert.equal(store.deleteOrphanGuestUsers(), 1);
+        assert.equal(store.getGuestUploadSession("token-invitado", now), null);
+
         const userId = store.createUser({
             username: "fotografo",
             email: "foto@example.com",

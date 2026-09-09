@@ -12,18 +12,22 @@
 </head>
 <body>
     <header class="public-bar">
-        <a href="/enviar" class="wordmark">The Real Gallery</a>
-        <nav><a href="/login">Entrar</a><a class="nav-primary" href="/login?mode=register">Crear cuenta</a></nav>
+        <a href="/" class="wordmark">The Real Gallery</a>
+        <nav id="publicAccountNav">
+            <a id="loginLink" href="/login">Entrar</a>
+            <a id="registerLink" class="nav-primary" href="/login?mode=register">Crear cuenta</a>
+            <a id="workspaceLink" class="nav-primary" href="/app" hidden>Mis entregas</a>
+        </nav>
     </header>
     <main>
         <section class="send-copy">
             <p class="eyebrow">TRANSFERENCIAS DURANTE 24 HORAS</p>
             <h1>Envía archivos grandes.<br><em>Sin complicaciones.</em></h1>
-            <p class="lead">Selecciona tu material, revisa el envío y continúa con una cuenta gratuita. Tus archivos no salen del navegador hasta que tú confirmas.</p>
+            <p class="lead">Selecciona tus archivos y obtén un enlace privado al terminar. No necesitas registrarte ni iniciar sesión.</p>
             <div class="trust-row"><span>Enlace privado</span><span>Caduca automáticamente</span><span>Descarga individual o ZIP</span></div>
         </section>
         <section class="send-card" aria-labelledby="sendTitle">
-            <div class="step"><span>01</span><div><p class="eyebrow">NUEVO ENVÍO</p><h2 id="sendTitle">Prepara tus archivos</h2></div></div>
+            <div class="step"><span>01</span><div><p class="eyebrow">NUEVO ENVÍO</p><h2 id="sendTitle">Enviar archivos</h2></div></div>
             <label id="dropZone" class="drop-zone" for="guestFiles">
                 <input id="guestFiles" type="file" multiple>
                 <span class="drop-icon">＋</span>
@@ -35,10 +39,31 @@
                 <ul id="fileList"></ul>
                 <button id="clearFiles" class="text-button" type="button">Quitar selección</button>
             </div>
+            <div id="sendOptions" class="send-options" hidden>
+                <label>Título <span>(opcional)</span>
+                    <input id="sendTitleInput" type="text" maxlength="100" placeholder="Ej. Material de la sesión">
+                </label>
+                <label>Mensaje <span>(opcional)</span>
+                    <textarea id="sendMessage" maxlength="500" placeholder="Añade una nota para quien reciba el enlace"></textarea>
+                </label>
+                <label>Contraseña <span>(opcional)</span>
+                    <input id="sendPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="Protege el acceso al enlace">
+                </label>
+            </div>
             <p id="limits" class="limits">Consultando límites actuales…</p>
             <p id="sendError" class="error" role="alert" hidden></p>
-            <button id="continueButton" class="continue" type="button" disabled>Continuar para enviar</button>
-            <p class="account-note">El envío para invitados está en preparación. La cuenta gratuita protege tus enlaces y te permite gestionarlos.</p>
+            <div id="uploadStatus" class="upload-status" hidden>
+                <div><span id="uploadProgress"></span></div><p id="uploadText">Preparando transferencia…</p>
+            </div>
+            <button id="continueButton" class="continue" type="button" disabled>Enviar archivos</button>
+            <p class="account-note">Al enviar aceptas los <a href="/terminos">términos</a>. Los archivos se eliminarán automáticamente después de 24 horas.</p>
+            <div id="sendResult" class="send-result" hidden>
+                <span class="success-mark">✓</span>
+                <h3>Tu transferencia está lista</h3>
+                <p id="resultSummary"></p>
+                <input id="resultLink" type="text" readonly aria-label="Enlace de la transferencia">
+                <div><button id="copyLink" type="button" class="continue">Copiar enlace</button><button id="newTransfer" type="button" class="text-button">Crear otra</button></div>
+            </div>
         </section>
     </main>
     <footer><span>© The Real Gallery</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>

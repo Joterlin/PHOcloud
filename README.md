@@ -47,11 +47,11 @@ npm run validate
 - Registrar cuándo se envió por última vez una entrega.
 - Mostrar términos y privacidad configurables y exigir su aceptación al registrarse.
 - Crear transferencias independientes de las galerías con cualquier archivo permitido.
-- Entrada pública en `/enviar` para preparar un envío. La subida anónima
-  permanece desactivada: la selección se conserva localmente al pasar por el
-  registro o acceso y se restaura en el panel.
-- Espacio registrado separado en Inicio, Transferencias, Galerías, Mi marca y
-  Cuenta, con acciones rápidas, actividad reciente y consumo del plan.
+- Portada pública en `/` y `/enviar` para subir, obtener y copiar un enlace sin
+  registro. Usa una identidad temporal no visible, caduca en 24 horas y mantiene
+  cuotas, concurrencia, rate limiting e interruptores independientes.
+- Espacio registrado en `/app`, con una navegación sencilla entre
+  Transferencias y Galerías; marca y plan se gestionan desde los controles de cuenta.
 - Convertir una transferencia propia en galería sin volver a subir los
   originales: filtra formatos incompatibles, permite elegir portada, conserva
   la transferencia de 24 horas y crea una galería independiente.

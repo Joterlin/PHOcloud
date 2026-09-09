@@ -25,6 +25,10 @@ test("aplica límites conservadores y conserva 50 GiB como capacidad técnica", 
     assert.equal(config.conversionEnabled, true);
     assert.equal(config.accountConcurrentConversions, 1);
     assert.equal(config.globalConcurrentConversions, 2);
+    assert.equal(config.guestTransfersEnabled, true);
+    assert.equal(config.guestTransferMaxBytes, 2 * GIB);
+    assert.equal(config.guestGlobalMonthlyUploadBytes, 100 * GIB);
+    assert.equal(config.guestGlobalStorageBytes, 25 * GIB);
 });
 
 test("los interruptores y umbrales se configuran sin permitir superar el máximo técnico", () => {
@@ -32,6 +36,8 @@ test("los interruptores y umbrales se configuran sin permitir superar el máximo
         PHOCLOUD_ACCEPT_NEW_TRANSFERS: "false",
         PHOCLOUD_ZIP_ENABLED: "0",
         PHOCLOUD_CONVERSION_ENABLED: "false",
+        PHOCLOUD_GUEST_TRANSFERS_ENABLED: "false",
+        PHOCLOUD_GUEST_TRANSFER_MAX_GIB: "3",
         PHOCLOUD_GLOBAL_CONCURRENT_CONVERSIONS: "3",
         PHOCLOUD_FREE_TRANSFER_MAX_GIB: "500",
         PHOCLOUD_GLOBAL_CONCURRENT_UPLOADS: "3"
@@ -40,6 +46,8 @@ test("los interruptores y umbrales se configuran sin permitir superar el máximo
     assert.equal(config.zipEnabled, false);
     assert.equal(config.conversionEnabled, false);
     assert.equal(config.globalConcurrentConversions, 3);
+    assert.equal(config.guestTransfersEnabled, false);
+    assert.equal(config.guestTransferMaxBytes, 3 * GIB);
     assert.equal(config.plans.free.transferMaxBytes, 5 * GIB);
     assert.equal(config.globalConcurrentUploads, 3);
 });

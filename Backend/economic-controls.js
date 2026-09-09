@@ -96,6 +96,17 @@ function createEconomicConfig(env = process.env) {
 
     return Object.freeze({
         acceptNewTransfers: enabled(env.PHOCLOUD_ACCEPT_NEW_TRANSFERS, true),
+        guestTransfersEnabled: enabled(env.PHOCLOUD_GUEST_TRANSFERS_ENABLED, true),
+        guestTransferMaxBytes: gibibytes(
+            env.PHOCLOUD_GUEST_TRANSFER_MAX_GIB, 2,
+            TECHNICAL_MAX_TRANSFER_BYTES / GIB
+        ),
+        guestGlobalMonthlyUploadBytes: gibibytes(
+            env.PHOCLOUD_GUEST_GLOBAL_MONTHLY_UPLOAD_GIB, 100
+        ),
+        guestGlobalStorageBytes: gibibytes(
+            env.PHOCLOUD_GUEST_GLOBAL_STORAGE_GIB, 25
+        ),
         zipEnabled: enabled(env.PHOCLOUD_ZIP_ENABLED, true),
         conversionEnabled: enabled(env.PHOCLOUD_CONVERSION_ENABLED, true),
         uploadLeaseMs: positiveInteger(

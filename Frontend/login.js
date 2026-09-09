@@ -19,7 +19,7 @@ const requestedNext = params.get("next") || "";
 const redirectTarget = requestedNext.startsWith("/")
     && !requestedNext.startsWith("//")
     ? requestedNext
-    : "/";
+    : "/app";
 
 let setupRequired = false;
 let mode = params.get("mode") || "login";

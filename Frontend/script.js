@@ -880,7 +880,6 @@ async function loadDeliveries() {
         for (const delivery of data.deliveries) {
             deliveriesList.appendChild(createDeliveryCard(delivery));
         }
-        renderHome();
     } catch (error) {
         deliveriesList.replaceChildren();
         const message = document.createElement("p");
@@ -1513,78 +1512,25 @@ function showProduct(product) {
 }
 
 function showWorkspaceView(view, updateUrl = true) {
-    const selected = ["home", "transfers", "galleries"].includes(view) ? view : "home";
-    byId("workspaceHome").hidden = selected !== "home";
-    byId("workspaceIntro").hidden = selected !== "home";
+    const selected = ["transfers", "galleries"].includes(view) ? view : "transfers";
     byId("galleryCreator").hidden = selected !== "galleries";
     byId("deliveriesPanel").hidden = selected !== "galleries";
     transferCreator.hidden = selected !== "transfers";
     transfersPanel.hidden = selected !== "transfers";
     for (const [id, name] of [
-        ["showHome", "home"], ["showTransfers", "transfers"],
-        ["showGalleries", "galleries"]
+        ["showTransfers", "transfers"], ["showGalleries", "galleries"]
     ]) byId(id).classList.toggle("is-active", selected === name);
     if (updateUrl) {
         const url = new URL(window.location.href);
-        if (selected === "home") url.searchParams.delete("view");
+        if (selected === "transfers") url.searchParams.delete("view");
         else url.searchParams.set("view", selected);
         window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
 }
 
-byId("showHome").addEventListener("click", () => showWorkspaceView("home"));
 byId("showGalleries").addEventListener("click", () => showWorkspaceView("galleries"));
 byId("showTransfers").addEventListener("click", () => showWorkspaceView("transfers"));
-byId("workspaceBrandButton").addEventListener("click", openBrandDialog);
-byId("workspaceAccountButton").addEventListener("click", () => accountDialog.showModal());
-byId("homeOpenAccount").addEventListener("click", () => accountDialog.showModal());
-byId("homeNewTransfer").addEventListener("click", () => showWorkspaceView("transfers"));
-byId("homeNewGallery").addEventListener("click", () => showWorkspaceView("galleries"));
-showWorkspaceView(new URLSearchParams(window.location.search).get("view") || "home", false);
-
-function renderHome() {
-    if (accountData) {
-        byId("homePlanName").textContent = planLabel(accountData.usage.plan);
-        byId("homeGalleryUsage").textContent =
-            `${accountData.usage.galleryCount} de ${accountData.usage.galleryLimit} galerías utilizadas`;
-        byId("homeTransferUsage").textContent =
-            `${formatBytes(accountData.usage.monthlyUploadBytes + accountData.usage.monthlyReservedUploadBytes)} de ${formatBytes(accountData.usage.monthlyUploadLimitBytes)} enviados este mes`;
-    }
-    const recent = [
-        ...latestTransfers.map((item) => ({
-            type: "Transferencia", title: item.title, date: item.createdAt,
-            detail: item.expired ? "Caducada" : "Disponible 24 horas",
-            action: () => showWorkspaceView("transfers")
-        })),
-        ...latestDeliveries.map((item) => ({
-            type: "Galería", title: item.clientName, date: item.createdAt,
-            detail: `${item.photoCount} archivo${item.photoCount === 1 ? "" : "s"}`,
-            action: () => openEditDelivery(item.id)
-        }))
-    ].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 5);
-    const container = byId("homeRecent");
-    container.replaceChildren();
-    if (!recent.length) {
-        const empty = document.createElement("p");
-        empty.className = "home-empty";
-        empty.textContent = "Todavía no hay actividad. Tu primer envío aparecerá aquí.";
-        container.appendChild(empty);
-        return;
-    }
-    for (const item of recent) {
-        const button = document.createElement("button");
-        button.type = "button";
-        const label = document.createElement("span");
-        label.innerHTML = `<small>${item.type}</small><strong></strong><em></em>`;
-        label.querySelector("strong").textContent = item.title;
-        label.querySelector("em").textContent = item.detail;
-        const date = document.createElement("time");
-        date.textContent = formatDate(item.date);
-        button.append(label, date);
-        button.addEventListener("click", item.action);
-        container.appendChild(button);
-    }
-}
+showWorkspaceView(new URLSearchParams(window.location.search).get("view") || "transfers", false);
 
 async function loadGalleryCapabilities() {
     const data = await readResponse(await fetch("/galleries/capabilities"));
@@ -1890,7 +1836,6 @@ async function loadTransfers() {
     container.replaceChildren();
     byId("transfersEmpty").hidden = data.transfers.length !== 0;
     for (const transfer of data.transfers) container.appendChild(createTransferCard(transfer));
-    renderHome();
 }
 
 function createTransferCard(transfer) {

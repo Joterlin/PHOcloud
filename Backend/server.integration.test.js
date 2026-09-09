@@ -221,11 +221,40 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             `${baseUrl}/guest-transfer-capabilities`
         );
         assert.equal(guestCapabilities.response.status, 200);
-        assert.equal(guestCapabilities.data.enabled, false);
-        assert.equal(guestCapabilities.data.requiresAccount, true);
+        assert.equal(guestCapabilities.data.enabled, true);
+        assert.equal(guestCapabilities.data.requiresAccount, false);
+        assert.equal(guestCapabilities.data.uploadMode, "local");
         const guestPage = await fetch(`${baseUrl}/enviar`);
         assert.equal(guestPage.status, 200);
         assert.match(await guestPage.text(), /id="guestFiles"/);
+        const rootPage = await fetch(`${baseUrl}/`);
+        assert.equal(rootPage.status, 200);
+        assert.match(await rootPage.text(), /No necesitas registrarte/);
+
+        const guestForm = new FormData();
+        guestForm.append("title", "Envío sin cuenta");
+        guestForm.append("files", new File(
+            [Buffer.from("archivo invitado")], "invitado.txt",
+            { type: "text/plain" }
+        ));
+        const guestUpload = await fetch(`${baseUrl}/transfers`, {
+            method: "POST",
+            body: guestForm
+        });
+        const guestUploadData = await guestUpload.json();
+        assert.equal(guestUpload.status, 201);
+        const guestCookie = guestUpload.headers.getSetCookie()
+            .map((value) => value.split(";", 1)[0]).join("; ");
+        assert.match(guestCookie, /phocloud_guest_sender=/);
+        assert.equal((await fetch(`${baseUrl}/t/${guestUploadData.transferId}`)).status, 200);
+        assert.equal((await jsonRequest(
+            `${baseUrl}/transfers/${guestUploadData.transferId}`,
+            { method: "DELETE" }
+        )).response.status, 401);
+        assert.equal((await jsonRequest(
+            `${baseUrl}/transfers/${guestUploadData.transferId}`,
+            { method: "DELETE", cookie: guestCookie }
+        )).response.status, 200);
 
         const convertibleForm = new FormData();
         convertibleForm.append("title", "Boda para convertir");

@@ -65,6 +65,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_environment TEXT CHECK (stripe_environment IN ('test', 'live')),
             stripe_current_period_end TEXT,
             terms_accepted_at TEXT,
+            is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
             created_at TEXT NOT NULL
         ) STRICT;
 
@@ -150,7 +151,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         ["stripe_subscription_id", "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT"],
         ["stripe_environment", "ALTER TABLE users ADD COLUMN stripe_environment TEXT CHECK (stripe_environment IN ('test', 'live'))"],
         ["stripe_current_period_end", "ALTER TABLE users ADD COLUMN stripe_current_period_end TEXT"],
-        ["terms_accepted_at", "ALTER TABLE users ADD COLUMN terms_accepted_at TEXT"]
+        ["terms_accepted_at", "ALTER TABLE users ADD COLUMN terms_accepted_at TEXT"],
+        ["is_guest", "ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1))"]
     ];
     for (const [column, statement] of userMigrations) {
         if (!userColumns.has(column)) database.exec(statement);
@@ -339,6 +341,17 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
 
         CREATE INDEX IF NOT EXISTS transfer_sessions_expires_at
         ON transfer_sessions(expires_at);
+
+        CREATE TABLE IF NOT EXISTS guest_upload_sessions (
+            token_hash TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL UNIQUE,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS guest_upload_sessions_expires_at
+        ON guest_upload_sessions(expires_at);
 
         CREATE TABLE IF NOT EXISTS usage_counters (
             scope TEXT NOT NULL CHECK (scope IN ('global', 'account')),
@@ -541,12 +554,15 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     const countDeliveries = database.prepare(
         "SELECT COUNT(*) AS count FROM deliveries WHERE owner_id = ?"
     );
-    const countUsers = database.prepare("SELECT COUNT(*) AS count FROM users");
+    const countUsers = database.prepare(
+        "SELECT COUNT(*) AS count FROM users WHERE is_guest = 0"
+    );
     const insertUser = database.prepare(`
         INSERT INTO users (
             username, email, display_name, password_hash, password_salt,
-            email_verified_at, plan, plan_status, terms_accepted_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            email_verified_at, plan, plan_status, terms_accepted_at, is_guest,
+            created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const selectUser = database.prepare(`
         SELECT id, username, email, display_name AS displayName,
@@ -556,7 +572,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
-            stripe_current_period_end AS stripeCurrentPeriodEnd,
+            stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
             created_at AS createdAt
         FROM users WHERE username = ? COLLATE NOCASE
     `);
@@ -568,7 +584,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
-            stripe_current_period_end AS stripeCurrentPeriodEnd,
+            stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
             created_at AS createdAt
         FROM users WHERE email = ? COLLATE NOCASE
     `);
@@ -580,7 +596,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
-            stripe_current_period_end AS stripeCurrentPeriodEnd,
+            stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
             created_at AS createdAt
         FROM users WHERE id = ?
     `);
@@ -614,7 +630,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
-            stripe_current_period_end AS stripeCurrentPeriodEnd,
+            stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
             created_at AS createdAt
         FROM users WHERE stripe_customer_id = ?
     `);
@@ -626,7 +642,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_customer_id AS stripeCustomerId,
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
-            stripe_current_period_end AS stripeCurrentPeriodEnd,
+            stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
             created_at AS createdAt
         FROM users WHERE stripe_subscription_id = ?
     `);
@@ -906,6 +922,23 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     const removeExpiredTransferSessions = database.prepare(
         "DELETE FROM transfer_sessions WHERE expires_at <= ?"
     );
+    const insertGuestUploadSession = database.prepare(`
+        INSERT INTO guest_upload_sessions (token_hash, user_id, created_at, expires_at)
+        VALUES (?, ?, ?, ?)
+    `);
+    const selectGuestUploadSession = database.prepare(`
+        SELECT user_id AS userId, expires_at AS expiresAt
+        FROM guest_upload_sessions
+        WHERE token_hash = ? AND expires_at > ?
+    `);
+    const removeExpiredGuestUploadSessions = database.prepare(
+        "DELETE FROM guest_upload_sessions WHERE expires_at <= ?"
+    );
+    const removeOrphanGuestUsers = database.prepare(`
+        DELETE FROM users
+        WHERE is_guest = 1
+          AND NOT EXISTS (SELECT 1 FROM transfers WHERE owner_id = users.id)
+    `);
     const upsertUsageCounter = database.prepare(`
         INSERT INTO usage_counters (
             scope, scope_id, period, metric, value, updated_at
@@ -1331,7 +1364,13 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         }) {
             return Number(insertUser.run(
                 username, email, displayName, passwordHash, passwordSalt,
-                emailVerifiedAt, plan, planStatus, termsAcceptedAt, createdAt
+                emailVerifiedAt, plan, planStatus, termsAcceptedAt, 0, createdAt
+            ).lastInsertRowid);
+        },
+        createGuestUser({ username, passwordHash, passwordSalt, createdAt }) {
+            return Number(insertUser.run(
+                username, null, "", passwordHash, passwordSalt,
+                createdAt, "free", "active", null, 1, createdAt
             ).lastInsertRowid);
         },
         getUserByUsername: (username) => selectUser.get(username) || null,
@@ -1884,6 +1923,18 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         },
         deleteExpiredTransferSessions(now) {
             return Number(removeExpiredTransferSessions.run(now).changes);
+        },
+        createGuestUploadSession({ tokenHash, userId, createdAt, expiresAt }) {
+            insertGuestUploadSession.run(tokenHash, userId, createdAt, expiresAt);
+        },
+        getGuestUploadSession(tokenHash, now) {
+            return selectGuestUploadSession.get(tokenHash, now) || null;
+        },
+        deleteExpiredGuestUploadSessions(now) {
+            return Number(removeExpiredGuestUploadSessions.run(now).changes);
+        },
+        deleteOrphanGuestUsers() {
+            return Number(removeOrphanGuestUsers.run().changes);
         },
         recordUsageMetric(ownerId, metric, value, at = new Date().toISOString()) {
             const period = String(at).slice(0, 7);

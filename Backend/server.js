@@ -76,6 +76,8 @@ const economicConfig = createEconomicConfig();
 const billingEnvironment = billing.publicConfiguration().mode;
 const secureCookies = isProduction;
 const GALLERY_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
+const GUEST_UPLOAD_COOKIE_NAME = "phocloud_guest_sender";
+const GUEST_UPLOAD_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PHOTOS_PER_DELIVERY = 500;
 const MAX_PHOTO_SIZE_BYTES = 50 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024;
@@ -190,6 +192,8 @@ deliveryStore.deleteExpiredSessions(Date.now());
 deliveryStore.deleteExpiredGallerySessions(Date.now());
 deliveryStore.deleteExpiredAccountTokens(Date.now());
 deliveryStore.deleteExpiredTransferSessions(Date.now());
+deliveryStore.deleteExpiredGuestUploadSessions(Date.now());
+deliveryStore.deleteOrphanGuestUsers();
 deliveryStore.resetStaleZipJobs(
     new Date(Date.now() - economicConfig.zipLeaseMs).toISOString()
 );
@@ -231,6 +235,7 @@ async function cleanupExpiredTransfers() {
             recordUsage(transfer.ownerId, "errors", 1);
         }
     }
+    deliveryStore.deleteOrphanGuestUsers();
 }
 cleanupExpiredTransfers().catch(console.error);
 
@@ -1081,15 +1086,23 @@ function accountUsage(userId, plan = "free", planStatus = "active") {
     };
 }
 
-function transferAdmissionLimits(plan) {
+function transferAdmissionLimits(plan, guest = false) {
     const limits = economicPlanLimits(plan);
     return {
-        transferMaxBytes: limits.transferMaxBytes,
+        transferMaxBytes: guest
+            ? Math.min(limits.transferMaxBytes, economicConfig.guestTransferMaxBytes)
+            : limits.transferMaxBytes,
         accountStorageBytes: limits.transferStorageBytes,
         accountMonthlyUploadBytes: limits.monthlyUploadBytes,
         accountConcurrentUploads: limits.concurrentUploads,
-        globalStorageBytes: economicConfig.globalTransferStorageBytes,
-        globalMonthlyUploadBytes: economicConfig.globalMonthlyUploadBytes,
+        globalStorageBytes: guest
+            ? Math.min(economicConfig.globalTransferStorageBytes,
+                economicConfig.guestGlobalStorageBytes)
+            : economicConfig.globalTransferStorageBytes,
+        globalMonthlyUploadBytes: guest
+            ? Math.min(economicConfig.globalMonthlyUploadBytes,
+                economicConfig.guestGlobalMonthlyUploadBytes)
+            : economicConfig.globalMonthlyUploadBytes,
         globalConcurrentUploads: economicConfig.globalConcurrentUploads,
         globalMonthlyDownloadBytes: economicConfig.globalMonthlyDownloadBytes,
         globalMonthlyErrorLimit: economicConfig.globalMonthlyErrorLimit
@@ -1454,6 +1467,74 @@ function requireAuth(req, res, next) {
     }
 
     req.auth = session;
+    next();
+}
+
+function guestUploadOwner(req) {
+    const token = readCookie(req.headers.cookie, GUEST_UPLOAD_COOKIE_NAME);
+    if (!token) return null;
+    return deliveryStore.getGuestUploadSession(hashSessionToken(token), Date.now());
+}
+
+function allowTransferCreator(req, res, next) {
+    const session = getSessionFromRequest(req);
+    if (session) {
+        req.auth = session;
+        req.guestTransfer = false;
+        return next();
+    }
+    if (!economicConfig.guestTransfersEnabled) {
+        return res.status(503).json({
+            error: "Los envíos sin cuenta están pausados temporalmente",
+            code: "GUEST_TRANSFERS_PAUSED"
+        });
+    }
+    const currentGuest = guestUploadOwner(req);
+    if (currentGuest) {
+        req.auth = { userId: currentGuest.userId };
+        req.guestTransfer = true;
+        return next();
+    }
+    const now = Date.now();
+    const token = createSessionToken();
+    const password = createPasswordRecord(`${uuidv4()}${uuidv4()}`);
+    const userId = deliveryStore.createGuestUser({
+        username: `guest_${uuidv4()}`,
+        passwordHash: password.passwordHash,
+        passwordSalt: password.passwordSalt,
+        createdAt: new Date(now).toISOString()
+    });
+    deliveryStore.createGuestUploadSession({
+        tokenHash: token.tokenHash,
+        userId,
+        createdAt: now,
+        expiresAt: now + GUEST_UPLOAD_SESSION_DURATION_MS
+    });
+    res.cookie(GUEST_UPLOAD_COOKIE_NAME, token.token, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: secureCookies,
+        path: "/",
+        maxAge: GUEST_UPLOAD_SESSION_DURATION_MS
+    });
+    req.auth = { userId };
+    req.guestTransfer = true;
+    next();
+}
+
+function requireTransferUploadOwner(req, res, next) {
+    const session = getSessionFromRequest(req);
+    const guest = session ? null : guestUploadOwner(req);
+    const userId = session?.userId || guest?.userId;
+    const transfer = userId
+        ? deliveryStore.getOwnedTransfer(req.params.transferId, userId)
+        : null;
+    if (!transfer) {
+        return res.status(401).json({ error: "No tienes acceso a esta subida" });
+    }
+    req.auth = session || { userId };
+    req.guestTransfer = !session;
+    req.ownedTransfer = transfer;
     next();
 }
 
@@ -2212,7 +2293,7 @@ app.get("/login", (req, res) => {
     res.sendFile(path.join(frontendDirectory, "login.html"));
 });
 
-app.get(["/enviar", "/send"], (req, res) => {
+app.get(["/", "/enviar", "/send"], (req, res) => {
     res.set("Cache-Control", "no-store");
     res.sendFile(path.join(publicDirectory, "send.html"));
 });
@@ -2221,13 +2302,21 @@ app.get("/guest-transfer-capabilities", (req, res) => {
     const limits = economicPlanLimits("free");
     res.set("Cache-Control", "no-store");
     res.json({
-        enabled: false,
-        requiresAccount: true,
+        enabled: economicConfig.acceptNewTransfers
+            && economicConfig.guestTransfersEnabled,
+        requiresAccount: false,
+        uploadMode: objectStorage.enabled ? "multipart" : "local",
+        acceptingNewTransfers: economicConfig.acceptNewTransfers,
         retentionHours: 24,
         maxFiles: MAX_TRANSFER_FILES,
-        maxFileSize: Math.min(MAX_TRANSFER_FILE_SIZE_BYTES, limits.transferMaxBytes),
-        maxTotalSize: limits.transferMaxBytes,
-        message: "Crea una cuenta gratuita para completar el envío. Conservaremos tu selección en este navegador."
+        maxFileSize: Math.min(MAX_TRANSFER_FILE_SIZE_BYTES, limits.transferMaxBytes,
+            economicConfig.guestTransferMaxBytes),
+        maxTotalSize: Math.min(limits.transferMaxBytes,
+            economicConfig.guestTransferMaxBytes),
+        message: economicConfig.acceptNewTransfers
+            && economicConfig.guestTransfersEnabled
+            ? "Puedes enviar sin crear una cuenta. El enlace caducará en 24 horas."
+            : "Las nuevas transferencias están pausadas temporalmente."
     });
 });
 
@@ -2502,7 +2591,7 @@ app.post("/auth/logout", requireSameOrigin, (req, res) => {
 
 app.use(express.static(publicDirectory));
 
-app.get(["/", "/index.html"], requirePageAuth, (req, res) => {
+app.get(["/app", "/app/", "/index.html"], requirePageAuth, (req, res) => {
     res.set("Cache-Control", "no-store");
     res.sendFile(path.join(frontendDirectory, "index.html"));
 });
@@ -3000,7 +3089,7 @@ app.post("/transfers/:transferId/conversions/:jobId/retry", requireAuth,
         });
     });
 
-app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveAction, (req, res) => {
+app.post("/transfers/multipart", requireSameOrigin, limitSensitiveAction, allowTransferCreator, (req, res) => {
     if (!economicConfig.acceptNewTransfers) {
         return res.status(503).json({
             error: "Las nuevas transferencias están pausadas temporalmente",
@@ -3080,7 +3169,7 @@ app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveA
                 storageProvider: "r2"
             },
             files: files.map((file) => ({ ...file, createdAt })),
-            limits: transferAdmissionLimits(plan),
+            limits: transferAdmissionLimits(plan, req.guestTransfer),
             nowIso: createdAt,
             period: monthKey(createdAt)
         });
@@ -3106,7 +3195,7 @@ app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveA
     });
 });
 
-app.post("/transfers/:transferId/files/:fileId/start", requireAuth, requireSameOrigin, async (req, res) => {
+app.post("/transfers/:transferId/files/:fileId/start", requireSameOrigin, requireTransferUploadOwner, async (req, res) => {
     if (!objectStorage.enabled) return res.status(409).json({ error: "R2 no está configurado" });
     const transfer = deliveryStore.getOwnedTransfer(req.params.transferId, req.auth.userId);
     const file = deliveryStore.getOwnedTransferFile(
@@ -3149,7 +3238,7 @@ app.post("/transfers/:transferId/files/:fileId/start", requireAuth, requireSameO
     }
 });
 
-app.post("/transfers/:transferId/files/:fileId/parts", requireAuth, requireSameOrigin, async (req, res) => {
+app.post("/transfers/:transferId/files/:fileId/parts", requireSameOrigin, requireTransferUploadOwner, async (req, res) => {
     if (!objectStorage.enabled) return res.status(409).json({ error: "R2 no está configurado" });
     const file = deliveryStore.getOwnedTransferFile(
         req.params.fileId, req.params.transferId, req.auth.userId
@@ -3190,7 +3279,7 @@ app.post("/transfers/:transferId/files/:fileId/parts", requireAuth, requireSameO
     }
 });
 
-app.post("/transfers/:transferId/files/:fileId/complete", requireAuth, requireSameOrigin, async (req, res) => {
+app.post("/transfers/:transferId/files/:fileId/complete", requireSameOrigin, requireTransferUploadOwner, async (req, res) => {
     if (!objectStorage.enabled) return res.status(409).json({ error: "R2 no está configurado" });
     const file = deliveryStore.getOwnedTransferFile(
         req.params.fileId, req.params.transferId, req.auth.userId
@@ -3226,7 +3315,7 @@ app.post("/transfers/:transferId/files/:fileId/complete", requireAuth, requireSa
     }
 });
 
-app.post("/transfers/:transferId/complete", requireAuth, requireSameOrigin, (req, res) => {
+app.post("/transfers/:transferId/complete", requireSameOrigin, requireTransferUploadOwner, (req, res) => {
     const transfer = deliveryStore.getOwnedTransfer(req.params.transferId, req.auth.userId);
     if (!transfer || transfer.storageProvider !== "r2") {
         return res.status(404).json({ error: "Transferencia no encontrada" });
@@ -3248,7 +3337,7 @@ app.post("/transfers/:transferId/complete", requireAuth, requireSameOrigin, (req
     });
 });
 
-app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (req, res) => {
+app.post("/transfers", requireSameOrigin, limitSensitiveAction, allowTransferCreator, (req, res) => {
     if (!economicConfig.acceptNewTransfers) {
         return res.status(503).json({
             error: "Las nuevas transferencias están pausadas temporalmente",
@@ -3316,7 +3405,7 @@ app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (re
                     status: "ready",
                     storageProvider: "local"
                 },
-                limits: transferAdmissionLimits(plan),
+                limits: transferAdmissionLimits(plan, req.guestTransfer),
                 nowIso: createdAt,
                 period: monthKey(createdAt)
             });
@@ -3343,7 +3432,7 @@ app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (re
     });
 });
 
-app.delete("/transfers/:transferId", requireAuth, requireSameOrigin, async (req, res) => {
+app.delete("/transfers/:transferId", requireSameOrigin, requireTransferUploadOwner, async (req, res) => {
     const transfer = deliveryStore.getOwnedTransfer(req.params.transferId, req.auth.userId);
     if (!transfer) return res.status(404).json({ error: "Transferencia no encontrada" });
     if (deliveryStore.hasActiveTransferConversion(transfer.id)) {
@@ -5027,6 +5116,7 @@ const cleanupTimer = setInterval(() => {
     deliveryStore.deleteExpiredGallerySessions(now);
     deliveryStore.deleteExpiredAccountTokens(now);
     deliveryStore.deleteExpiredTransferSessions(now);
+    deliveryStore.deleteExpiredGuestUploadSessions(now);
     cleanupExpiredTransfers().catch(console.error);
     for (const attempts of [loginAttempts, galleryAttempts, sensitiveActionAttempts]) {
         for (const [key, value] of attempts) {

@@ -1,7 +1,4 @@
 const byId = (id) => document.getElementById(id);
-const DB_NAME = "the-real-gallery-pending";
-const STORE_NAME = "pending-transfers";
-const RECORD_KEY = "guest-selection";
 let capabilities = null;
 let selectedFiles = [];
 
@@ -12,36 +9,28 @@ function formatBytes(bytes) {
     return `${(bytes / 1024 ** index).toFixed(index > 1 ? 1 : 0)} ${units[index]}`;
 }
 
-function openDatabase() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onupgradeneeded = () => {
-            if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-                request.result.createObjectStore(STORE_NAME);
-            }
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
+async function readResponse(response) {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "No se pudo completar la operación");
+    return data;
 }
 
-async function saveSelection() {
-    const database = await openDatabase();
-    await new Promise((resolve, reject) => {
-        const transaction = database.transaction(STORE_NAME, "readwrite");
-        transaction.objectStore(STORE_NAME).put({
-            files: selectedFiles,
-            savedAt: Date.now()
-        }, RECORD_KEY);
-        transaction.oncomplete = resolve;
-        transaction.onerror = () => reject(transaction.error);
-    });
-    database.close();
+function showError(message) {
+    byId("sendError").textContent = message;
+    byId("sendError").hidden = false;
+}
+
+function setProgress(percent, message) {
+    byId("uploadStatus").hidden = false;
+    byId("uploadProgress").style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    byId("uploadText").textContent = message;
 }
 
 function renderSelection() {
     const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-    byId("selection").hidden = selectedFiles.length === 0;
+    const hasFiles = selectedFiles.length > 0;
+    byId("selection").hidden = !hasFiles;
+    byId("sendOptions").hidden = !hasFiles;
     byId("selectionCount").textContent = `${selectedFiles.length} archivo${selectedFiles.length === 1 ? "" : "s"}`;
     byId("selectionSize").textContent = formatBytes(total);
     byId("fileList").replaceChildren(...selectedFiles.slice(0, 30).map((file) => {
@@ -53,7 +42,7 @@ function renderSelection() {
         item.append(name, size);
         return item;
     }));
-    byId("continueButton").disabled = selectedFiles.length === 0;
+    byId("continueButton").disabled = !hasFiles || !capabilities?.enabled;
 }
 
 function selectFiles(files) {
@@ -61,22 +50,139 @@ function selectFiles(files) {
     const next = Array.from(files);
     const total = next.reduce((sum, file) => sum + file.size, 0);
     if (capabilities && next.length > capabilities.maxFiles) {
-        byId("sendError").textContent = `Puedes seleccionar hasta ${capabilities.maxFiles} archivos.`;
-        byId("sendError").hidden = false;
-        return;
+        return showError(`Puedes seleccionar hasta ${capabilities.maxFiles} archivos.`);
     }
     if (capabilities && next.some((file) => file.size > capabilities.maxFileSize)) {
-        byId("sendError").textContent = "Uno de los archivos supera el tamaño permitido.";
-        byId("sendError").hidden = false;
-        return;
+        return showError("Uno de los archivos supera el tamaño permitido.");
     }
     if (capabilities && total > capabilities.maxTotalSize) {
-        byId("sendError").textContent = `La selección supera ${formatBytes(capabilities.maxTotalSize)}.`;
-        byId("sendError").hidden = false;
-        return;
+        return showError(`La selección supera ${formatBytes(capabilities.maxTotalSize)}.`);
     }
     selectedFiles = next;
     renderSelection();
+}
+
+function defaultTitle() {
+    const first = selectedFiles[0]?.name?.replace(/\.[^.]+$/, "").trim();
+    return first ? first.slice(0, 100) : "Transferencia";
+}
+
+async function retryPart(url, body, attempts = 3) {
+    let lastError;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+            const response = await fetch(url, { method: "PUT", body });
+            if (!response.ok) throw new Error(`Error ${response.status}`);
+            return;
+        } catch (error) {
+            lastError = error;
+            if (attempt < attempts) {
+                await new Promise((resolve) => setTimeout(resolve, attempt * 700));
+            }
+        }
+    }
+    throw new Error(`No se pudo subir un bloque tras ${attempts} intentos: ${lastError?.message || "error de conexión"}`);
+}
+
+async function runPool(items, concurrency, worker) {
+    let nextIndex = 0;
+    async function run() {
+        while (nextIndex < items.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            await worker(items[index]);
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+}
+
+async function createMultipartTransfer(metadata) {
+    let prepared;
+    try {
+        prepared = await readResponse(await fetch("/transfers/multipart", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                ...metadata,
+                files: selectedFiles.map((file) => ({
+                    name: file.name,
+                    size: file.size,
+                    type: file.type
+                }))
+            })
+        }));
+        let uploadedBytes = 0;
+        const totalBytes = prepared.totalBytes || 1;
+        for (let fileIndex = 0; fileIndex < prepared.files.length; fileIndex += 1) {
+            const remoteFile = prepared.files[fileIndex];
+            const sourceFile = selectedFiles[fileIndex];
+            const endpoint = `/transfers/${encodeURIComponent(prepared.transferId)}/files/${encodeURIComponent(remoteFile.id)}`;
+            const start = await readResponse(await fetch(`${endpoint}/start`, { method: "POST" }));
+            if (!start.ready) {
+                const partNumbers = Array.from({ length: start.partCount }, (_, index) => index + 1);
+                for (let index = 0; index < partNumbers.length; index += 9) {
+                    const batch = partNumbers.slice(index, index + 9);
+                    const signed = await readResponse(await fetch(`${endpoint}/parts`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ partNumbers: batch })
+                    }));
+                    await runPool(signed.urls, 3, async ({ partNumber, url }) => {
+                        const startByte = (partNumber - 1) * start.partSize;
+                        const blob = sourceFile.slice(startByte, Math.min(sourceFile.size, startByte + start.partSize));
+                        await retryPart(url, blob);
+                        uploadedBytes += blob.size;
+                        const percent = Math.round(uploadedBytes / totalBytes * 100);
+                        setProgress(percent, `Subiendo ${remoteFile.name}… ${percent}%`);
+                    });
+                }
+                await readResponse(await fetch(`${endpoint}/complete`, { method: "POST" }));
+            }
+        }
+        return await readResponse(await fetch(
+            `/transfers/${encodeURIComponent(prepared.transferId)}/complete`,
+            { method: "POST" }
+        ));
+    } catch (error) {
+        if (prepared?.transferId) {
+            await fetch(`/transfers/${encodeURIComponent(prepared.transferId)}`, {
+                method: "DELETE"
+            }).catch(() => {});
+        }
+        throw error;
+    }
+}
+
+function createLocalTransfer(metadata) {
+    return new Promise((resolve, reject) => {
+        const form = new FormData();
+        for (const [key, value] of Object.entries(metadata)) form.append(key, value);
+        for (const file of selectedFiles) form.append("files", file);
+        const request = new XMLHttpRequest();
+        request.open("POST", "/transfers");
+        request.responseType = "json";
+        request.upload.addEventListener("progress", (event) => {
+            if (!event.lengthComputable) return;
+            const percent = Math.round(event.loaded / event.total * 100);
+            setProgress(percent, `Subiendo archivos… ${percent}%`);
+        });
+        request.addEventListener("load", () => {
+            const data = request.response || {};
+            if (request.status >= 200 && request.status < 300) resolve(data);
+            else reject(new Error(data.error || "No se pudo crear la transferencia"));
+        });
+        request.addEventListener("error", () => reject(new Error("Se perdió la conexión durante la subida")));
+        request.send(form);
+    });
+}
+
+function showResult(data) {
+    for (const id of ["dropZone", "selection", "sendOptions", "limits", "continueButton", "uploadStatus"]) {
+        byId(id).hidden = true;
+    }
+    byId("resultLink").value = data.link;
+    byId("resultSummary").textContent = `${data.fileCount} archivo${data.fileCount === 1 ? "" : "s"} · ${formatBytes(data.totalBytes)} · disponible 24 horas`;
+    byId("sendResult").hidden = false;
 }
 
 byId("guestFiles").addEventListener("change", (event) => selectFiles(event.target.files));
@@ -98,24 +204,56 @@ for (const eventName of ["dragleave", "drop"]) {
     });
 }
 byId("dropZone").addEventListener("drop", (event) => selectFiles(event.dataTransfer.files));
+
 byId("continueButton").addEventListener("click", async () => {
+    if (!selectedFiles.length || !capabilities?.enabled) return;
     const button = byId("continueButton");
     button.disabled = true;
-    button.textContent = "Guardando selección…";
+    button.textContent = "Enviando…";
+    byId("sendError").hidden = true;
+    setProgress(0, "Preparando transferencia…");
+    const metadata = {
+        title: byId("sendTitleInput").value.trim() || defaultTitle(),
+        message: byId("sendMessage").value.trim(),
+        recipientEmail: "",
+        password: byId("sendPassword").value
+    };
     try {
-        await saveSelection();
-        window.location.href = "/login?mode=register&next=%2F%3Fview%3Dtransfers%26resumeGuest%3D1";
-    } catch {
-        byId("sendError").textContent = "Este navegador no pudo conservar los archivos. Inicia sesión y selecciónalos de nuevo.";
-        byId("sendError").hidden = false;
+        const data = capabilities.uploadMode === "multipart"
+            ? await createMultipartTransfer(metadata)
+            : await createLocalTransfer(metadata);
+        showResult(data);
+    } catch (error) {
+        showError(`${error.message || "No se pudo completar el envío"}. Puedes intentarlo de nuevo con los mismos archivos.`);
+        byId("uploadStatus").hidden = true;
         button.disabled = false;
-        button.textContent = "Continuar para enviar";
+        button.textContent = "Enviar archivos";
     }
 });
 
-fetch("/guest-transfer-capabilities").then((response) => response.json()).then((data) => {
-    capabilities = data;
-    byId("limits").textContent = `Hasta ${data.maxFiles} archivos · ${formatBytes(data.maxTotalSize)} por envío · disponibles ${data.retentionHours} horas`;
+byId("copyLink").addEventListener("click", async () => {
+    try {
+        await navigator.clipboard.writeText(byId("resultLink").value);
+        byId("copyLink").textContent = "Enlace copiado ✓";
+    } catch {
+        byId("resultLink").select();
+    }
+});
+byId("newTransfer").addEventListener("click", () => window.location.reload());
+
+Promise.all([
+    fetch("/guest-transfer-capabilities").then(readResponse),
+    fetch("/auth/status").then(readResponse)
+]).then(([limits, auth]) => {
+    capabilities = limits;
+    byId("limits").textContent = `Hasta ${limits.maxFiles} archivos · ${formatBytes(limits.maxTotalSize)} por envío · disponibles ${limits.retentionHours} horas`;
+    if (!limits.enabled) showError(limits.message);
+    if (auth.authenticated) {
+        byId("loginLink").hidden = true;
+        byId("registerLink").hidden = true;
+        byId("workspaceLink").hidden = false;
+    }
+    renderSelection();
 }).catch(() => {
-    byId("limits").textContent = "No pudimos consultar los límites. Inténtalo de nuevo.";
+    showError("No pudimos consultar los límites. Recarga la página para intentarlo de nuevo.");
 });
