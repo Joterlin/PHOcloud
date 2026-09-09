@@ -15,6 +15,11 @@ const emailInput = byId("email");
 const passwordInput = byId("password");
 const confirmPasswordInput = byId("confirmPassword");
 const params = new URLSearchParams(window.location.search);
+const requestedNext = params.get("next") || "";
+const redirectTarget = requestedNext.startsWith("/")
+    && !requestedNext.startsWith("//")
+    ? requestedNext
+    : "/";
 
 let setupRequired = false;
 let mode = params.get("mode") || "login";
@@ -151,7 +156,7 @@ authForm.addEventListener("submit", async (event) => {
                 identifier: usernameInput.value.trim(),
                 password: passwordInput.value
             });
-            window.location.replace("/");
+            window.location.replace(redirectTarget);
             return;
         }
         if (mode === "setup") {
@@ -159,7 +164,7 @@ authForm.addEventListener("submit", async (event) => {
                 username: usernameInput.value.trim(),
                 password: passwordInput.value
             });
-            window.location.replace("/");
+            window.location.replace(redirectTarget);
             return;
         }
         if (mode === "register") {
@@ -208,7 +213,7 @@ async function initialize() {
     try {
         const response = await fetch("/auth/status");
         const status = await response.json();
-        if (status.authenticated) return window.location.replace("/");
+        if (status.authenticated) return window.location.replace(redirectTarget);
         setupRequired = status.setupRequired;
         if (setupRequired) mode = "setup";
         configureMode(mode);

@@ -217,6 +217,7 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
 test("guarda, visualiza, descarga y elimina un original de galería en R2", async () => {
     let storedObject = null;
     let storedContentType = "";
+    let copySource = "";
     const mock = http.createServer(async (req, res) => {
         const url = new URL(req.url, "http://127.0.0.1");
         if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
@@ -229,6 +230,18 @@ test("guarda, visualiza, descarga y elimina un original de galería en R2", asyn
             ].join(""));
         }
         if (req.method === "PUT") {
+            if (req.headers["x-amz-copy-source"]) {
+                copySource = req.headers["x-amz-copy-source"];
+                storedObject = Buffer.from("contenido copiado internamente");
+                storedContentType = req.headers["content-type"];
+                return xml(res, 200, [
+                    '<?xml version="1.0" encoding="UTF-8"?>',
+                    '<CopyObjectResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">',
+                    '<ETag>&quot;copy-etag&quot;</ETag>',
+                    '<LastModified>2026-09-09T10:00:00.000Z</LastModified>',
+                    '</CopyObjectResult>'
+                ].join(""));
+            }
             storedObject = await requestBody(req);
             storedContentType = req.headers["content-type"];
             res.writeHead(200, { ETag: '"gallery-etag"' });
@@ -293,7 +306,24 @@ test("guarda, visualiza, descarga y elimina un original de galería en R2", asyn
         const stream = await storage.getObjectStream(key);
         assert.equal(await stream.transformToString(), "contenido de fotografía");
 
-        await storage.deleteKeys([key]);
+        const copiedKey = await storage.copyObject({
+            sourceBucket: "phocloud-transfers",
+            sourceKey: "transfers/origen/foto.jpg",
+            deliveryId: "00000000-0000-4000-8000-000000000031",
+            filename: "copia.jpg",
+            contentType: "image/jpeg"
+        });
+        assert.equal(
+            copiedKey,
+            "galleries/00000000-0000-4000-8000-000000000031/originals/copia.jpg"
+        );
+        assert.match(copySource, /phocloud-transfers\/transfers\/origen\/foto\.jpg/);
+        assert.equal(
+            await (await fetch(await storage.inlineUrl(copiedKey, "copia.jpg"))).text(),
+            "contenido copiado internamente"
+        );
+
+        await storage.deleteKeys([key, copiedKey]);
         assert.equal((await fetch(inlineUrl)).status, 404);
     } finally {
         mock.close();

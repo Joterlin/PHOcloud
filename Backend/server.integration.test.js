@@ -217,6 +217,90 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal(deletedTransfer.response.status, 200);
         assert.equal((await fetch(transferApi)).status, 404);
 
+        const guestCapabilities = await jsonRequest(
+            `${baseUrl}/guest-transfer-capabilities`
+        );
+        assert.equal(guestCapabilities.response.status, 200);
+        assert.equal(guestCapabilities.data.enabled, false);
+        assert.equal(guestCapabilities.data.requiresAccount, true);
+        const guestPage = await fetch(`${baseUrl}/enviar`);
+        assert.equal(guestPage.status, 200);
+        assert.match(await guestPage.text(), /id="guestFiles"/);
+
+        const convertibleForm = new FormData();
+        convertibleForm.append("title", "Boda para convertir");
+        convertibleForm.append("files", new File(
+            [png], "portada.png", { type: "image/png" }
+        ));
+        convertibleForm.append("files", new File(
+            [Buffer.from("notas")], "notas.txt", { type: "text/plain" }
+        ));
+        const convertibleUpload = await fetch(`${baseUrl}/transfers`, {
+            method: "POST",
+            headers: { Cookie: cookie },
+            body: convertibleForm
+        });
+        const convertible = await convertibleUpload.json();
+        assert.equal(convertibleUpload.status, 201);
+        const conversionOptionsUrl =
+            `${baseUrl}/transfers/${convertible.transferId}/conversion-options`;
+        assert.equal((await fetch(conversionOptionsUrl)).status, 401);
+        const conversionOptions = await jsonRequest(conversionOptionsUrl, { cookie });
+        assert.equal(conversionOptions.response.status, 200);
+        assert.equal(conversionOptions.data.compatible.length, 1);
+        assert.equal(conversionOptions.data.compatible[0].name, "portada.png");
+        assert.equal(conversionOptions.data.excluded.length, 1);
+
+        const conversionBody = {
+            idempotencyKey: "integracion-conversion-001",
+            selectedFileIds: [conversionOptions.data.compatible[0].sourceId],
+            coverFileId: conversionOptions.data.compatible[0].sourceId,
+            clientName: "Boda convertida",
+            clientEmail: "cliente@example.com"
+        };
+        const startedConversion = await jsonRequest(
+            `${baseUrl}/transfers/${convertible.transferId}/conversions`,
+            { method: "POST", cookie, body: conversionBody }
+        );
+        assert.equal(startedConversion.response.status, 202);
+        const replayedConversion = await jsonRequest(
+            `${baseUrl}/transfers/${convertible.transferId}/conversions`,
+            { method: "POST", cookie, body: conversionBody }
+        );
+        assert.ok([200, 202].includes(replayedConversion.response.status));
+        assert.equal(
+            replayedConversion.data.conversion.id,
+            startedConversion.data.conversion.id
+        );
+        let conversion = startedConversion.data.conversion;
+        for (let attempt = 0; attempt < 100 && conversion.status !== "ready";
+            attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            const status = await jsonRequest(
+                `${baseUrl}/transfers/${convertible.transferId}/conversions/${conversion.id}`,
+                { cookie }
+            );
+            conversion = status.data.conversion;
+        }
+        assert.equal(conversion.status, "ready");
+        const convertedGallery = await jsonRequest(
+            `${baseUrl}/deliveries/${conversion.deliveryId}`, { cookie }
+        );
+        assert.equal(convertedGallery.response.status, 200);
+        assert.deepEqual(convertedGallery.data.delivery.files, ["portada.png"]);
+        assert.equal(convertedGallery.data.delivery.clientName, "Boda convertida");
+        assert.equal((await jsonRequest(
+            `${baseUrl}/transfer/${convertible.transferId}`, { cookie }
+        )).response.status, 200);
+        assert.equal((await jsonRequest(
+            `${baseUrl}/deliveries/${conversion.deliveryId}`,
+            { method: "DELETE", cookie }
+        )).response.status, 200);
+        assert.equal((await jsonRequest(
+            `${baseUrl}/transfers/${convertible.transferId}`,
+            { method: "DELETE", cookie }
+        )).response.status, 200);
+
         const form = new FormData();
         form.append("clientName", "Cliente Beta");
         form.append("clientEmail", "cliente@example.com");

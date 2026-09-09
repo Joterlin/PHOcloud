@@ -97,6 +97,7 @@ function createEconomicConfig(env = process.env) {
     return Object.freeze({
         acceptNewTransfers: enabled(env.PHOCLOUD_ACCEPT_NEW_TRANSFERS, true),
         zipEnabled: enabled(env.PHOCLOUD_ZIP_ENABLED, true),
+        conversionEnabled: enabled(env.PHOCLOUD_CONVERSION_ENABLED, true),
         uploadLeaseMs: positiveInteger(
             env.PHOCLOUD_UPLOAD_LEASE_MINUTES, 180,
             { minimum: 15, maximum: 24 * 60 }
@@ -113,6 +114,12 @@ function createEconomicConfig(env = process.env) {
         ),
         accountConcurrentZips: positiveInteger(
             env.PHOCLOUD_ACCOUNT_CONCURRENT_ZIPS, 1, { maximum: 8 }
+        ),
+        globalConcurrentConversions: positiveInteger(
+            env.PHOCLOUD_GLOBAL_CONCURRENT_CONVERSIONS, 2, { maximum: 16 }
+        ),
+        accountConcurrentConversions: positiveInteger(
+            env.PHOCLOUD_ACCOUNT_CONCURRENT_CONVERSIONS, 1, { maximum: 4 }
         ),
         globalMonthlyUploadBytes: gibibytes(
             env.PHOCLOUD_GLOBAL_MONTHLY_UPLOAD_GIB, 2048

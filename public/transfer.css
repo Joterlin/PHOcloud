@@ -61,3 +61,4 @@ footer { padding: 25px; color: color-mix(in srgb, var(--text) 42%, transparent);
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
+footer a{color:inherit;text-underline-offset:3px}

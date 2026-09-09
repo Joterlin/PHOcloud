@@ -28,7 +28,7 @@ No existe subida anónima. Los 50 GiB siguen siendo una capacidad técnica del
 plan Pro. Para paquetes mayores que el límite ZIP se mantienen las descargas
 individuales firmadas.
 
-Globalmente se admiten por defecto 8 subidas y 2 ZIP simultáneos, 2 TiB subidos
+Globalmente se admiten por defecto 8 subidas, 2 ZIP y 2 conversiones simultáneas, 2 TiB subidos
 al mes, 250 GiB temporales activos, 4 TiB de descargas estimadas, 250 GiB
 procesados en ZIP, 1.000 ZIP y 5.000 errores. Todas las cifras son configurables.
 
@@ -50,6 +50,8 @@ como el resto de la aplicación actual.
 | Galería: original R2 individual | No | URL R2 firmada. |
 | Galería: original local o calidad reducida | Sí | El archivo/preview reside en el volumen de Railway. |
 | ZIP de galería | Sí | El ZIP aún se crea al vuelo; queda limitado por plan y concurrencia. |
+| Convertir transferencia R2 → galería R2 | No para el original si `CopyObject` está autorizado | R2 copia internamente; Railway lee 64 bytes de firma y una copia de cada imagen para crear su miniatura. |
+| Conversión con copia R2 no autorizada | Sí, una vez | Se usa streaming secuencial R2 → Railway → R2 como recuperación compatible. |
 
 No se comprimen archivos ya comprimidos: `archiver` usa modo `store`. Esto
 reduce CPU y hace que el coste dependa principalmente de mover bytes.
@@ -60,6 +62,8 @@ reduce CPU y hace que el coste dependa principalmente de mover bytes.
   las transferencias existentes, sus descargas y todo el acceso administrativo.
 - `PHOCLOUD_ZIP_ENABLED=false`: suspende todos los ZIP. Las descargas
   individuales, login, galerías existentes y panel siguen funcionando.
+- `PHOCLOUD_CONVERSION_ENABLED=false`: impide reservar conversiones nuevas.
+  No cancela trabajos ya reservados ni elimina sus fuentes o destinos.
 
 Procedimiento:
 

@@ -369,6 +369,30 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
 
         CREATE INDEX IF NOT EXISTS transfer_zip_jobs_owner_status
         ON transfer_zip_jobs(owner_id, status);
+
+        CREATE TABLE IF NOT EXISTS transfer_conversion_jobs (
+            id TEXT PRIMARY KEY,
+            owner_id INTEGER NOT NULL,
+            transfer_id TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            delivery_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'building', 'ready', 'failed')),
+            selected_files TEXT NOT NULL,
+            settings TEXT NOT NULL,
+            expected_bytes INTEGER NOT NULL DEFAULT 0 CHECK (expected_bytes >= 0),
+            copied_bytes INTEGER NOT NULL DEFAULT 0 CHECK (copied_bytes >= 0),
+            error_code TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE (owner_id, idempotency_key),
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS transfer_conversion_jobs_owner_status
+        ON transfer_conversion_jobs(owner_id, status);
+
+        CREATE INDEX IF NOT EXISTS transfer_conversion_jobs_transfer_status
+        ON transfer_conversion_jobs(transfer_id, status);
     `);
 
     const transferColumns = new Set(
@@ -980,6 +1004,87 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         UPDATE transfer_zip_jobs SET status = 'failed', error_code = ?, updated_at = ?
         WHERE transfer_id = ? AND status = 'building'
     `);
+    const conversionProjection = `
+        id, owner_id AS ownerId, transfer_id AS transferId,
+        idempotency_key AS idempotencyKey, delivery_id AS deliveryId,
+        status, selected_files AS selectedFiles, settings,
+        expected_bytes AS expectedBytes, copied_bytes AS copiedBytes,
+        error_code AS errorCode, created_at AS createdAt,
+        updated_at AS updatedAt
+    `;
+    const selectConversionJob = database.prepare(`
+        SELECT ${conversionProjection} FROM transfer_conversion_jobs WHERE id = ?
+    `);
+    const selectOwnedConversionJob = database.prepare(`
+        SELECT ${conversionProjection} FROM transfer_conversion_jobs
+        WHERE id = ? AND owner_id = ?
+    `);
+    const selectConversionByIdempotency = database.prepare(`
+        SELECT ${conversionProjection} FROM transfer_conversion_jobs
+        WHERE owner_id = ? AND idempotency_key = ?
+    `);
+    const selectLatestTransferConversion = database.prepare(`
+        SELECT ${conversionProjection} FROM transfer_conversion_jobs
+        WHERE transfer_id = ? AND owner_id = ?
+        ORDER BY created_at DESC LIMIT 1
+    `);
+    const selectRecoverableConversions = database.prepare(`
+        SELECT ${conversionProjection} FROM transfer_conversion_jobs
+        WHERE status IN ('pending', 'building') ORDER BY created_at ASC
+    `);
+    const countActiveConversions = database.prepare(`
+        SELECT COUNT(*) AS count FROM transfer_conversion_jobs
+        WHERE status IN ('pending', 'building')
+    `);
+    const countAccountActiveConversions = database.prepare(`
+        SELECT COUNT(*) AS count FROM transfer_conversion_jobs
+        WHERE owner_id = ? AND status IN ('pending', 'building')
+    `);
+    const sumAccountReservedConversionBytes = database.prepare(`
+        SELECT COALESCE(SUM(expected_bytes), 0) AS bytes
+        FROM transfer_conversion_jobs
+        WHERE owner_id = ? AND status IN ('pending', 'building')
+    `);
+    const hasActiveTransferConversion = database.prepare(`
+        SELECT 1 AS active FROM transfer_conversion_jobs
+        WHERE transfer_id = ? AND status IN ('pending', 'building') LIMIT 1
+    `);
+    const insertConversionJob = database.prepare(`
+        INSERT INTO transfer_conversion_jobs (
+            id, owner_id, transfer_id, idempotency_key, delivery_id,
+            status, selected_files, settings, expected_bytes, copied_bytes,
+            error_code, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, 0, NULL, ?, ?)
+    `);
+    const claimConversionJob = database.prepare(`
+        UPDATE transfer_conversion_jobs SET status = 'building',
+            error_code = NULL, updated_at = ?
+        WHERE id = ? AND status = 'pending'
+    `);
+    const updateConversionProgress = database.prepare(`
+        UPDATE transfer_conversion_jobs SET copied_bytes = ?, updated_at = ?
+        WHERE id = ? AND status = 'building'
+    `);
+    const completeConversionJob = database.prepare(`
+        UPDATE transfer_conversion_jobs SET status = 'ready',
+            copied_bytes = expected_bytes, error_code = NULL, updated_at = ?
+        WHERE id = ? AND status IN ('pending', 'building')
+    `);
+    const failConversionJob = database.prepare(`
+        UPDATE transfer_conversion_jobs SET status = 'failed',
+            error_code = ?, updated_at = ?
+        WHERE id = ? AND status IN ('pending', 'building')
+    `);
+    const retryConversionJob = database.prepare(`
+        UPDATE transfer_conversion_jobs SET status = 'pending', copied_bytes = 0,
+            error_code = NULL, updated_at = ?
+        WHERE id = ? AND owner_id = ? AND status = 'failed'
+    `);
+    const resetBuildingConversions = database.prepare(`
+        UPDATE transfer_conversion_jobs SET status = 'pending',
+            copied_bytes = 0, error_code = 'SERVER_RESTART', updated_at = ?
+        WHERE status = 'building'
+    `);
 
     function legacySocialLinks(row) {
         return [
@@ -1016,6 +1121,15 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             allowWebDownload,
             favoritesEnabled: Boolean(row.favoritesEnabled)
         };
+    }
+
+    function normalizeConversion(row) {
+        if (!row) return null;
+        let selectedFiles = [];
+        let settings = {};
+        try { selectedFiles = JSON.parse(row.selectedFiles); } catch {}
+        try { settings = JSON.parse(row.settings); } catch {}
+        return { ...row, selectedFiles, settings };
     }
 
     function migrateExistingDeliveries() {
@@ -1460,6 +1574,138 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         getOwnedTransfer(id, ownerId) {
             const item = selectOwnedTransfer.get(id, ownerId);
             return item ? { ...item, hasPassword: Boolean(item.hasPassword) } : null;
+        },
+        getTransferConversion(id) {
+            return normalizeConversion(selectConversionJob.get(id));
+        },
+        getOwnedTransferConversion(id, ownerId) {
+            return normalizeConversion(selectOwnedConversionJob.get(id, ownerId));
+        },
+        getLatestTransferConversion(transferId, ownerId) {
+            return normalizeConversion(selectLatestTransferConversion.get(
+                transferId, ownerId
+            ));
+        },
+        listRecoverableTransferConversions() {
+            return selectRecoverableConversions.all().map(normalizeConversion);
+        },
+        hasActiveTransferConversion(transferId) {
+            return Boolean(hasActiveTransferConversion.get(transferId));
+        },
+        countActiveTransferConversions(ownerId) {
+            return Number(countAccountActiveConversions.get(ownerId).count);
+        },
+        getReservedTransferConversionBytes(ownerId) {
+            return Number(sumAccountReservedConversionBytes.get(ownerId).bytes);
+        },
+        reserveTransferConversion({ job, limits }) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const existing = selectConversionByIdempotency.get(
+                    job.ownerId, job.idempotencyKey
+                );
+                if (existing) {
+                    database.exec("COMMIT");
+                    return { ok: true, existing: true, job: normalizeConversion(existing) };
+                }
+                const galleryCount = Number(countDeliveries.get(job.ownerId).count);
+                const accountActive = Number(
+                    countAccountActiveConversions.get(job.ownerId).count
+                );
+                const reservedBytes = Number(
+                    sumAccountReservedConversionBytes.get(job.ownerId).bytes
+                );
+                const checks = [
+                    [galleryCount + accountActive >= limits.galleryLimit,
+                        "PLAN_GALLERY_LIMIT"],
+                    [limits.galleryStorageBytes + reservedBytes + job.expectedBytes
+                        > limits.galleryStorageLimitBytes, "PLAN_STORAGE_LIMIT"],
+                    [accountActive >= limits.accountConcurrentConversions,
+                        "ACCOUNT_CONVERSION_CONCURRENCY_LIMIT"],
+                    [Number(countActiveConversions.get().count)
+                        >= limits.globalConcurrentConversions,
+                        "GLOBAL_CONVERSION_CONCURRENCY_LIMIT"]
+                ];
+                const rejection = checks.find(([blocked]) => blocked);
+                if (rejection) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: rejection[1] };
+                }
+                insertConversionJob.run(
+                    job.id, job.ownerId, job.transferId, job.idempotencyKey,
+                    job.deliveryId, JSON.stringify(job.selectedFiles),
+                    JSON.stringify(job.settings), job.expectedBytes,
+                    job.createdAt, job.createdAt
+                );
+                database.exec("COMMIT");
+                return { ok: true, existing: false, job: normalizeConversion(
+                    selectConversionJob.get(job.id)
+                ) };
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
+        claimTransferConversion(id, updatedAt) {
+            return claimConversionJob.run(updatedAt, id).changes > 0;
+        },
+        updateTransferConversionProgress(id, copiedBytes, updatedAt) {
+            return updateConversionProgress.run(
+                Math.max(0, Math.round(copiedBytes)), updatedAt, id
+            ).changes > 0;
+        },
+        completeTransferConversion(id, updatedAt) {
+            return completeConversionJob.run(updatedAt, id).changes > 0;
+        },
+        failTransferConversion(id, errorCode, updatedAt) {
+            return failConversionJob.run(
+                String(errorCode || "CONVERSION_FAILED").slice(0, 80),
+                updatedAt, id
+            ).changes > 0;
+        },
+        retryTransferConversion({ id, ownerId, updatedAt, limits }) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const job = selectOwnedConversionJob.get(id, ownerId);
+                if (!job || job.status !== "failed") {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: "CONVERSION_NOT_RETRYABLE" };
+                }
+                const accountActive = Number(
+                    countAccountActiveConversions.get(ownerId).count
+                );
+                const reservedBytes = Number(
+                    sumAccountReservedConversionBytes.get(ownerId).bytes
+                );
+                const checks = [
+                    [Number(countDeliveries.get(ownerId).count) + accountActive
+                        >= limits.galleryLimit, "PLAN_GALLERY_LIMIT"],
+                    [limits.galleryStorageBytes + reservedBytes
+                        + Number(job.expectedBytes) > limits.galleryStorageLimitBytes,
+                    "PLAN_STORAGE_LIMIT"],
+                    [accountActive >= limits.accountConcurrentConversions,
+                        "ACCOUNT_CONVERSION_CONCURRENCY_LIMIT"],
+                    [Number(countActiveConversions.get().count)
+                        >= limits.globalConcurrentConversions,
+                        "GLOBAL_CONVERSION_CONCURRENCY_LIMIT"]
+                ];
+                const rejection = checks.find(([blocked]) => blocked);
+                if (rejection) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: rejection[1] };
+                }
+                retryConversionJob.run(updatedAt, id, ownerId);
+                database.exec("COMMIT");
+                return { ok: true, job: normalizeConversion(
+                    selectConversionJob.get(id)
+                ) };
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
+        },
+        resetInterruptedTransferConversions(updatedAt = new Date().toISOString()) {
+            return Number(resetBuildingConversions.run(updatedAt).changes);
         },
         createTransfer(transfer) {
             insertTransfer.run(

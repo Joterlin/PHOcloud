@@ -1,6 +1,7 @@
 const {
     AbortMultipartUploadCommand,
     CompleteMultipartUploadCommand,
+    CopyObjectCommand,
     CreateMultipartUploadCommand,
     DeleteObjectsCommand,
     GetObjectCommand,
@@ -177,6 +178,27 @@ function createObjectStorage(env = process.env) {
         return response.Body;
     }
 
+    async function getObjectPrefix(key, length = 64) {
+        const safeLength = Math.max(1, Math.min(4096, Number(length) || 64));
+        const response = await client.send(new GetObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Range: `bytes=0-${safeLength - 1}`
+        }));
+        const chunks = [];
+        let remaining = safeLength;
+        for await (const chunk of response.Body) {
+            const bytes = Buffer.from(chunk);
+            chunks.push(bytes.subarray(0, remaining));
+            remaining -= Math.min(bytes.length, remaining);
+            if (remaining <= 0) {
+                response.Body.destroy?.();
+                break;
+            }
+        }
+        return Buffer.concat(chunks);
+    }
+
     async function uploadStream({ key, stream, contentType, filename }) {
         const upload = new Upload({
             client,
@@ -218,6 +240,7 @@ function createObjectStorage(env = process.env) {
         listParts,
         downloadUrl,
         getObjectStream,
+        getObjectPrefix,
         uploadStream,
         deleteKeys,
         healthcheck
@@ -278,6 +301,44 @@ function createGalleryStorage(env = process.env) {
         return key;
     }
 
+    async function uploadStream({
+        deliveryId, filename, stream, contentType
+    }) {
+        const key = objectKey(deliveryId, filename);
+        const upload = new Upload({
+            client,
+            params: {
+                Bucket: bucket,
+                Key: key,
+                Body: stream,
+                ContentType: contentType || "application/octet-stream",
+                ContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(filename)}`
+            },
+            partSize: DEFAULT_PART_SIZE,
+            queueSize: 1,
+            leavePartsOnError: false
+        });
+        await upload.done();
+        return key;
+    }
+
+    async function copyObject({
+        sourceBucket, sourceKey, deliveryId, filename, contentType
+    }) {
+        const key = objectKey(deliveryId, filename);
+        const encodedSource = [sourceBucket, ...String(sourceKey).split("/")]
+            .map(encodeURIComponent).join("/");
+        await client.send(new CopyObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            CopySource: encodedSource,
+            MetadataDirective: "REPLACE",
+            ContentType: contentType || "application/octet-stream",
+            ContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(filename)}`
+        }));
+        return key;
+    }
+
     async function signedUrl(key, filename, download = false) {
         return getSignedUrl(client, new GetObjectCommand({
             Bucket: bucket,
@@ -302,6 +363,8 @@ function createGalleryStorage(env = process.env) {
         requestOrigins,
         objectKey,
         uploadFile,
+        uploadStream,
+        copyObject,
         inlineUrl: (key, filename) => signedUrl(key, filename, false),
         downloadUrl: (key, filename) => signedUrl(key, filename, true),
         getObjectStream,

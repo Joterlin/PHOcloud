@@ -150,3 +150,4 @@ html[data-theme="light"] .theme-toggle {
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
+.guest-send-link{display:inline-block;margin:-4px 0 20px;color:var(--accent,#9b7442);font-size:13px;text-underline-offset:3px}

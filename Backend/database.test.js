@@ -204,6 +204,117 @@ test("guarda usuarios y sesiones con expiración", () => {
     }
 });
 
+test("reserva conversiones de forma atómica, idempotente y recuperable", () => {
+    const environment = createTestEnvironment();
+    const store = createDeliveryStore(environment);
+    try {
+        const ownerId = store.createUser({
+            username: "conversiones",
+            passwordHash: "hash",
+            passwordSalt: "salt",
+            createdAt: "2026-09-09T09:00:00.000Z"
+        });
+        const transferId = "00000000-0000-4000-8000-000000000071";
+        store.createTransfer({
+            id: transferId,
+            ownerId,
+            title: "Material",
+            createdAt: "2026-09-09T09:00:00.000Z",
+            expiresAt: "2026-09-10T09:00:00.000Z",
+            fileCount: 1,
+            totalBytes: 1024,
+            status: "ready",
+            storageProvider: "local"
+        });
+        const job = {
+            id: "00000000-0000-4000-8000-000000000072",
+            ownerId,
+            transferId,
+            idempotencyKey: "conversion-idempotente-001",
+            deliveryId: "00000000-0000-4000-8000-000000000073",
+            selectedFiles: [{ sourceId: "foto.jpg", name: "foto.jpg", size: 1024 }],
+            settings: { clientName: "Cliente" },
+            expectedBytes: 1024,
+            createdAt: "2026-09-09T09:01:00.000Z"
+        };
+        const limits = {
+            galleryLimit: 3,
+            galleryStorageBytes: 0,
+            galleryStorageLimitBytes: 10_000,
+            accountConcurrentConversions: 1,
+            globalConcurrentConversions: 2
+        };
+        const reserved = store.reserveTransferConversion({ job, limits });
+        assert.equal(reserved.ok, true);
+        assert.equal(reserved.existing, false);
+        assert.equal(store.hasActiveTransferConversion(transferId), true);
+
+        const replay = store.reserveTransferConversion({
+            job: { ...job, id: "00000000-0000-4000-8000-000000000074" },
+            limits
+        });
+        assert.equal(replay.ok, true);
+        assert.equal(replay.existing, true);
+        assert.equal(replay.job.id, job.id);
+
+        const second = store.reserveTransferConversion({
+            job: {
+                ...job,
+                id: "00000000-0000-4000-8000-000000000075",
+                idempotencyKey: "conversion-idempotente-002"
+            },
+            limits
+        });
+        assert.equal(second.ok, false);
+        assert.equal(second.code, "ACCOUNT_CONVERSION_CONCURRENCY_LIMIT");
+
+        assert.equal(store.claimTransferConversion(
+            job.id, "2026-09-09T09:02:00.000Z"
+        ), true);
+        store.updateTransferConversionProgress(
+            job.id, 512, "2026-09-09T09:03:00.000Z"
+        );
+        assert.equal(store.getTransferConversion(job.id).copiedBytes, 512);
+        assert.equal(store.resetInterruptedTransferConversions(), 1);
+        assert.equal(store.getTransferConversion(job.id).status, "pending");
+        assert.equal(store.claimTransferConversion(
+            job.id, "2026-09-09T09:04:00.000Z"
+        ), true);
+        assert.equal(store.completeTransferConversion(
+            job.id, "2026-09-09T09:05:00.000Z"
+        ), true);
+        assert.equal(store.getTransferConversion(job.id).status, "ready");
+        assert.equal(store.hasActiveTransferConversion(transferId), false);
+        const retryableJob = {
+            ...job,
+            id: "00000000-0000-4000-8000-000000000076",
+            idempotencyKey: "conversion-idempotente-003",
+            deliveryId: "00000000-0000-4000-8000-000000000077"
+        };
+        assert.equal(store.reserveTransferConversion({
+            job: retryableJob, limits
+        }).ok, true);
+        store.claimTransferConversion(
+            retryableJob.id, "2026-09-09T09:06:00.000Z"
+        );
+        store.failTransferConversion(
+            retryableJob.id, "R2_TEMPORARY_FAILURE",
+            "2026-09-09T09:07:00.000Z"
+        );
+        const retried = store.retryTransferConversion({
+            id: retryableJob.id,
+            ownerId,
+            updatedAt: "2026-09-09T09:08:00.000Z",
+            limits
+        });
+        assert.equal(retried.ok, true);
+        assert.equal(retried.job.status, "pending");
+    } finally {
+        store.close();
+        fs.rmSync(environment.root, { recursive: true, force: true });
+    }
+});
+
 test("guarda privacidad, sesiones de galería y favoritas", () => {
     const environment = createTestEnvironment();
     const store = createDeliveryStore(environment);

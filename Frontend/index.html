@@ -22,14 +22,47 @@
             <button id="logoutButton" type="button">Cerrar sesión</button>
         </nav>
 
-        <p class="eyebrow">ARCHIVOS Y GALERÍAS PROFESIONALES</p>
-        <h1>The Real Gallery</h1>
-        <p class="intro">Envía archivos grandes en segundos. Cuando necesites presentar tu trabajo, crea una galería profesional con tu propia identidad.</p>
+        <header id="workspaceIntro" class="workspace-intro">
+            <p class="eyebrow">ARCHIVOS Y GALERÍAS PROFESIONALES</p>
+            <h1>The Real Gallery</h1>
+            <p class="intro">Envía archivos grandes en segundos. Cuando necesites presentar tu trabajo, crea una galería profesional con tu propia identidad.</p>
+        </header>
 
-        <nav class="product-switch" aria-label="Productos de The Real Gallery">
-            <button id="showTransfers" class="is-active" type="button">Enviar archivos</button>
-            <button id="showGalleries" type="button">Galerías profesionales</button>
+        <nav class="product-switch workspace-navigation" aria-label="Espacio de trabajo">
+            <button id="showHome" class="is-active" type="button">Inicio</button>
+            <button id="showTransfers" type="button">Transferencias</button>
+            <button id="showGalleries" type="button">Galerías</button>
+            <button id="workspaceBrandButton" type="button">Mi marca</button>
+            <button id="workspaceAccountButton" type="button">Cuenta y plan</button>
         </nav>
+
+        <section id="workspaceHome" class="workspace-home">
+            <div class="home-welcome">
+                <p class="step-label">TU ESPACIO DE TRABAJO</p>
+                <h2>¿Qué quieres entregar hoy?</h2>
+                <p>Empieza con archivos sueltos o crea una experiencia fotográfica completa.</p>
+            </div>
+            <div class="home-actions">
+                <button id="homeNewTransfer" class="home-action primary-home" type="button">
+                    <span>TRANSFERENCIA</span><strong>Enviar archivos</strong>
+                    <small>Enlace temporal durante 24 horas</small><i>→</i>
+                </button>
+                <button id="homeNewGallery" class="home-action" type="button">
+                    <span>GALERÍA</span><strong>Crear una galería</strong>
+                    <small>Entrega visual, privada y personalizable</small><i>→</i>
+                </button>
+            </div>
+            <div class="home-overview">
+                <div><p class="step-label">ACTIVIDAD RECIENTE</p><div id="homeRecent" class="home-recent"></div></div>
+                <aside class="home-usage">
+                    <p class="step-label">USO DEL PLAN</p>
+                    <strong id="homePlanName">Plan gratuito</strong>
+                    <span id="homeGalleryUsage">Consultando galerías…</span>
+                    <span id="homeTransferUsage">Consultando transferencias…</span>
+                    <button id="homeOpenAccount" type="button">Ver cuenta y límites</button>
+                </aside>
+            </div>
+        </section>
 
         <section id="galleryCreator" class="creator-card" hidden aria-labelledby="newDeliveryTitle">
             <div class="section-heading">
@@ -291,6 +324,7 @@
             <div class="actions">
                 <button id="copyTransferLink" class="secondary">Copiar enlace</button>
                 <button id="openTransferLink" class="primary">Abrir transferencia</button>
+                <button id="convertLatestTransfer" class="secondary" type="button">Convertir en galería</button>
             </div>
         </section>
 
@@ -298,11 +332,11 @@
             <div class="deliveries-heading">
                 <div>
                     <p class="step-label">TU ESPACIO</p>
-                    <h2>Mis entregas</h2>
+                    <h2>Mis galerías</h2>
                 </div>
                 <button id="deleteAllDeliveries" type="button" disabled>Eliminar todas</button>
             </div>
-            <p id="deliveriesEmpty" hidden>Todavía no has creado ninguna entrega.</p>
+            <p id="deliveriesEmpty" hidden>Todavía no has creado ninguna galería.</p>
             <div id="deliveriesList" aria-live="polite"></div>
         </section>
 
@@ -456,6 +490,42 @@
                 <button id="confirmDelete" type="button" disabled>Eliminar</button>
             </div>
         </div>
+    </dialog>
+
+    <dialog id="convertDialog" aria-labelledby="convertDialogTitle">
+        <form id="convertForm" class="edit-dialog-content convert-dialog-content">
+            <div class="edit-dialog-heading">
+                <div>
+                    <p class="edit-dialog-eyebrow">SIN VOLVER A SUBIR</p>
+                    <h2 id="convertDialogTitle">Convertir en galería</h2>
+                </div>
+                <button id="closeConvertDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
+            </div>
+            <p class="dialog-intro">Elige las fotografías compatibles. Conservaremos la transferencia original y crearemos una galería independiente.</p>
+            <div class="options-grid">
+                <label class="field" for="convertClientName">Nombre del cliente, empresa o evento
+                    <input id="convertClientName" type="text" maxlength="80" required>
+                </label>
+                <label class="field" for="convertClientEmail">Correo del cliente (opcional)
+                    <input id="convertClientEmail" type="email" maxlength="254">
+                </label>
+                <label class="field field-wide" for="convertMessage">Mensaje (opcional)
+                    <textarea id="convertMessage" maxlength="300" placeholder="Un mensaje para quien reciba la galería"></textarea>
+                </label>
+            </div>
+            <div class="convert-file-heading">
+                <div><strong>Archivos para la galería</strong><span id="convertSelectionSummary"></span></div>
+                <button id="toggleConvertFiles" class="secondary small-button" type="button">Deseleccionar todos</button>
+            </div>
+            <div id="convertFiles" class="convert-files"></div>
+            <div id="convertExcluded" class="convert-excluded" hidden></div>
+            <p id="convertProgress" class="convert-progress" role="status" hidden></p>
+            <p id="convertError" class="delete-dialog-error" role="alert" hidden></p>
+            <div class="edit-dialog-actions">
+                <button id="cancelConvertDialog" type="button" class="secondary">Cancelar</button>
+                <button id="startConversion" type="submit" class="primary">Crear galería</button>
+            </div>
+        </form>
     </dialog>
 
     <dialog id="editDialog" aria-labelledby="editDialogTitle">

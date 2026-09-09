@@ -216,3 +216,4 @@ footer p { margin: 5px 0; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+footer a{color:inherit;text-underline-offset:3px}

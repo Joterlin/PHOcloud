@@ -47,6 +47,14 @@ npm run validate
 - Registrar cuándo se envió por última vez una entrega.
 - Mostrar términos y privacidad configurables y exigir su aceptación al registrarse.
 - Crear transferencias independientes de las galerías con cualquier archivo permitido.
+- Entrada pública en `/enviar` para preparar un envío. La subida anónima
+  permanece desactivada: la selección se conserva localmente al pasar por el
+  registro o acceso y se restaura en el panel.
+- Espacio registrado separado en Inicio, Transferencias, Galerías, Mi marca y
+  Cuenta, con acciones rápidas, actividad reciente y consumo del plan.
+- Convertir una transferencia propia en galería sin volver a subir los
+  originales: filtra formatos incompatibles, permite elegir portada, conserva
+  la transferencia de 24 horas y crea una galería independiente.
 - Transferir hasta 5 GiB en Gratis, 25 GiB en Creador y 50 GiB en Pro, siempre con caducidad a las 24 horas.
 - Descargar un archivo concreto o el paquete completo en ZIP.
 - Enviar el enlace por correo y registrar el número de descargas.
@@ -60,6 +68,8 @@ npm run validate
   guardan en el bucket permanente y las galerías existentes se migran sin
   cambiar sus enlaces.
 - `transfers/<id>/`: archivos originales de cada transferencia temporal.
+- La tabla `transfer_conversion_jobs` conserva el estado, progreso e
+  idempotencia de cada conversión para recuperarla después de un reinicio.
 
 Las contraseñas se guardan como hashes `scrypt`, nunca como texto legible.
 Las fotografías protegidas se sirven mediante rutas que comprueban el acceso;
@@ -104,6 +114,28 @@ volumen de la aplicación para responder rápidamente.
 El servidor comprueba los límites; no dependen de ocultar botones en el
 navegador. El cobro real se conectará al proveedor de pagos al publicar el
 producto.
+
+## Conversión de transferencias a galerías
+
+La conversión solo está disponible para el propietario autenticado y para
+transferencias completas que aún no hayan caducado. Acepta únicamente los
+formatos de foto y vídeo admitidos por galerías, con los mismos límites por
+archivo, un máximo de 500 archivos y 10 GiB por galería. Los demás archivos se
+muestran como excluidos antes de confirmar.
+
+Con R2, el servidor intenta `CopyObject` entre el bucket temporal y el
+permanente, por lo que los originales no atraviesan Railway. Si el token del
+bucket de galerías no puede leer el bucket de transferencias, usa streaming
+secuencial como alternativa. Solo se descargan unos bytes para validar el tipo
+y, en imágenes, una copia temporal para crear la miniatura. La transferencia
+original no se modifica ni se borra.
+
+Las reservas de número de galerías, almacenamiento y concurrencia se realizan
+en SQLite con `BEGIN IMMEDIATE`. `PHOCLOUD_CONVERSION_ENABLED=false` pausa
+trabajos nuevos sin borrar galerías ni transferencias. Los límites recomendados
+son una conversión por cuenta y dos globales. Para que la copia interna R2
+funcione, el token de galerías debe tener lectura sobre el bucket de
+transferencias y escritura sobre el bucket de galerías.
 
 ## Publicación
 

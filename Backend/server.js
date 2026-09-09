@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const { createHash, timingSafeEqual } = require("crypto");
 const { PassThrough, Readable, Transform } = require("stream");
+const { pipeline } = require("stream/promises");
 const { ZipArchive } = require("archiver");
 const { v4: uuidv4 } = require("uuid");
 const { createDeliveryStore } = require("./database");
@@ -112,6 +113,7 @@ const sensitiveActionAttempts = new Map();
 const zipConcurrency = createConcurrencyLimiter();
 const uploadConcurrency = createConcurrencyLimiter();
 const activeZipBuilds = new Map();
+const activeConversionBuilds = new Map();
 
 function validateRuntimeConfig() {
     if (!isProduction) return;
@@ -191,6 +193,7 @@ deliveryStore.deleteExpiredTransferSessions(Date.now());
 deliveryStore.resetStaleZipJobs(
     new Date(Date.now() - economicConfig.zipLeaseMs).toISOString()
 );
+deliveryStore.resetInterruptedTransferConversions();
 
 async function removeTransferStorage(transfer) {
     if (transfer.storageProvider === "r2") {
@@ -219,6 +222,7 @@ async function removeTransferStorage(transfer) {
 
 async function cleanupExpiredTransfers() {
     for (const transfer of deliveryStore.listExpiredTransfers(new Date().toISOString())) {
+        if (deliveryStore.hasActiveTransferConversion(transfer.id)) continue;
         try {
             await removeTransferStorage(transfer);
             deliveryStore.deleteTransferById(transfer.id);
@@ -1043,6 +1047,8 @@ function accountUsage(userId, plan = "free", planStatus = "active") {
     return {
         plan: entitledPlan,
         galleryCount: deliveries.length,
+        reservedGalleryCount:
+            deliveryStore.countActiveTransferConversions(userId),
         totalGalleryCount: deliveries.length,
         galleryLimit: limits.galleries,
         transferCount: transfers.length,
@@ -1069,6 +1075,8 @@ function accountUsage(userId, plan = "free", planStatus = "active") {
         storageBytes: deliveries.reduce(
             (total, delivery) => total + deliveryStorageBytes(delivery), 0
         ),
+        reservedGalleryStorageBytes:
+            deliveryStore.getReservedTransferConversionBytes(userId),
         storageLimitBytes: limits.storageBytes
     };
 }
@@ -1355,6 +1363,10 @@ function isSupportedVideoFile(filePath) {
         fs.closeSync(handle);
     }
     const bytes = header.subarray(0, bytesRead);
+    return isSupportedVideoBuffer(bytes);
+}
+
+function isSupportedVideoBuffer(bytes) {
     const isWebm = bytes.length >= 4
         && bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
     const isIsoVideo = bytes.length >= 12 && bytes.toString("ascii", 4, 8) === "ftyp";
@@ -1735,6 +1747,273 @@ function safeTransferFilename(value, usedNames = new Set()) {
     return filename;
 }
 
+function transferFilesForConversion(transfer) {
+    if (transfer.storageProvider === "r2") {
+        return deliveryStore.listTransferFiles(transfer.id)
+            .filter((file) => file.status === "ready")
+            .map((file) => ({
+                sourceId: file.id,
+                name: file.name,
+                size: Number(file.size),
+                mimeType: file.mimeType || mimeTypeForGalleryFile(file.name),
+                objectKey: file.objectKey,
+                localPath: null
+            }));
+    }
+    const folderPath = transferFolderPath(transfer.id);
+    if (!folderPath || !fs.existsSync(folderPath)) return [];
+    return listTransferFiles(folderPath).map((file) => ({
+        sourceId: file.name,
+        name: file.name,
+        size: Number(file.size),
+        mimeType: mimeTypeForGalleryFile(file.name),
+        objectKey: null,
+        localPath: transferFilePath(transfer.id, file.name)
+    }));
+}
+
+function classifyTransferFilesForGallery(transfer) {
+    const compatible = [];
+    const excluded = [];
+    for (const file of transferFilesForConversion(transfer)) {
+        const mimeType = mimeTypeForGalleryFile(file.name);
+        const isVideo = isVideoFilename(file.name);
+        const supported = mimeType !== "application/octet-stream";
+        const sizeLimit = isVideo ? MAX_VIDEO_SIZE_BYTES : MAX_PHOTO_SIZE_BYTES;
+        if (!supported) {
+            excluded.push({ sourceId: file.sourceId, name: file.name,
+                reason: "Formato no compatible con galerías" });
+        } else if (file.size > sizeLimit) {
+            excluded.push({ sourceId: file.sourceId, name: file.name,
+                reason: `Supera el límite de ${isVideo ? "500 MB por vídeo" : "50 MB por foto"}` });
+        } else {
+            compatible.push({
+                ...file,
+                mimeType,
+                mediaType: isVideo ? "video" : "image"
+            });
+        }
+    }
+    return { compatible, excluded };
+}
+
+function publicConversionJob(job, req) {
+    return {
+        id: job.id,
+        transferId: job.transferId,
+        deliveryId: job.deliveryId,
+        status: job.status,
+        expectedBytes: job.expectedBytes,
+        copiedBytes: job.copiedBytes,
+        progress: job.expectedBytes > 0
+            ? Math.min(100, Math.round(job.copiedBytes / job.expectedBytes * 100))
+            : (job.status === "ready" ? 100 : 0),
+        errorCode: job.errorCode,
+        galleryLink: job.status === "ready"
+            ? `${publicBaseUrl(req)}/s/${job.deliveryId}`
+            : null
+    };
+}
+
+function conversionFailureCode(error) {
+    const known = new Set([
+        "TRANSFER_STORAGE_UNAVAILABLE", "TRANSFER_SOURCE_MISSING",
+        "INVALID_MEDIA_CONTENT"
+    ]);
+    if (known.has(error?.message)) return error.message;
+    if (["AccessDenied", "NoSuchKey", "SlowDown"].includes(error?.name)) {
+        return `R2_${String(error.name).toUpperCase()}`;
+    }
+    return "CONVERSION_FAILED";
+}
+
+async function streamToFile(stream, targetPath) {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    await pipeline(stream, fs.createWriteStream(targetPath, { flags: "wx" }));
+}
+
+async function copyConversionFile(job, transfer, file, folderPath, remoteRecords) {
+    const destinationPath = path.join(folderPath, file.destinationName);
+    const isVideo = file.mediaType === "video";
+    let remoteKey = null;
+
+    if (transfer.storageProvider === "r2") {
+        if (!objectStorage.enabled) throw new Error("TRANSFER_STORAGE_UNAVAILABLE");
+        const header = await objectStorage.getObjectPrefix(file.objectKey, 64);
+        const validMedia = isVideo
+            ? isSupportedVideoBuffer(header)
+            : isSupportedImageBuffer(header);
+        if (!validMedia) throw new Error("INVALID_MEDIA_CONTENT");
+        if (galleryStorage.enabled) {
+            try {
+                remoteKey = await galleryStorage.copyObject({
+                    sourceBucket: objectStorage.bucket,
+                    sourceKey: file.objectKey,
+                    deliveryId: job.deliveryId,
+                    filename: file.destinationName,
+                    contentType: file.mimeType
+                });
+            } catch (copyError) {
+                console.warn(
+                    `Copia interna R2 no disponible para ${file.name}; se usará streaming`,
+                    copyError.message
+                );
+                remoteKey = await galleryStorage.uploadStream({
+                    deliveryId: job.deliveryId,
+                    filename: file.destinationName,
+                    stream: await objectStorage.getObjectStream(file.objectKey),
+                    contentType: file.mimeType
+                });
+            }
+            if (!isVideo) {
+                await streamToFile(
+                    await objectStorage.getObjectStream(file.objectKey),
+                    destinationPath
+                );
+                await createPreview(folderPath, file.destinationName);
+                fs.rmSync(destinationPath, { force: true });
+            }
+        } else {
+            await streamToFile(
+                await objectStorage.getObjectStream(file.objectKey),
+                destinationPath
+            );
+            if (!isVideo) await createPreview(folderPath, file.destinationName);
+        }
+    } else {
+        const sourcePath = transferFilePath(transfer.id, file.name);
+        if (!sourcePath || !fs.existsSync(sourcePath)) {
+            throw new Error("TRANSFER_SOURCE_MISSING");
+        }
+        fs.copyFileSync(sourcePath, destinationPath, fs.constants.COPYFILE_EXCL);
+        const validMedia = isVideo
+            ? isSupportedVideoFile(destinationPath)
+            : isSupportedImageFile(destinationPath);
+        if (!validMedia) throw new Error("INVALID_MEDIA_CONTENT");
+        if (!isVideo) await createPreview(folderPath, file.destinationName);
+        if (galleryStorage.enabled) {
+            remoteKey = await galleryStorage.uploadFile({
+                deliveryId: job.deliveryId,
+                filename: file.destinationName,
+                filePath: destinationPath,
+                contentType: file.mimeType,
+                size: file.size
+            });
+            fs.rmSync(destinationPath, { force: true });
+        }
+    }
+
+    if (remoteKey) {
+        remoteRecords.push({
+            name: file.destinationName,
+            objectKey: remoteKey,
+            size: file.size,
+            mimeType: file.mimeType
+        });
+    }
+}
+
+async function runTransferConversion(jobId) {
+    if (activeConversionBuilds.has(jobId)) return activeConversionBuilds.get(jobId);
+    const task = (async () => {
+        const initial = deliveryStore.getTransferConversion(jobId);
+        if (!initial) return;
+        if (deliveryStore.getDelivery(initial.deliveryId)) {
+            if (!deliveryStore.getSelectionSettings(initial.deliveryId)) {
+                deliveryStore.saveSelectionSettings({
+                    deliveryId: initial.deliveryId,
+                    selectionLimit: initial.settings.selectionLimit || 0,
+                    status: "open",
+                    clientName: "",
+                    clientEmail: "",
+                    submittedAt: null,
+                    updatedAt: new Date().toISOString()
+                });
+            }
+            deliveryStore.completeTransferConversion(jobId, new Date().toISOString());
+            return;
+        }
+        if (!deliveryStore.claimTransferConversion(jobId, new Date().toISOString())) return;
+
+        const job = deliveryStore.getTransferConversion(jobId);
+        const transfer = deliveryStore.getTransfer(job.transferId);
+        const folderPath = galleryFolderPath(job.deliveryId);
+        const remoteRecords = [];
+        try {
+            if (!transfer || transfer.status !== "ready") {
+                throw new Error("TRANSFER_SOURCE_MISSING");
+            }
+            fs.rmSync(folderPath, { recursive: true, force: true });
+            fs.mkdirSync(folderPath, { recursive: true });
+
+            const defaultLogoPath = profileLogoPath(job.ownerId);
+            if (fs.existsSync(defaultLogoPath)) {
+                fs.mkdirSync(path.dirname(galleryLogoPath(folderPath)), {
+                    recursive: true
+                });
+                fs.copyFileSync(defaultLogoPath, galleryLogoPath(folderPath));
+            }
+
+            let copiedBytes = 0;
+            for (const file of job.selectedFiles) {
+                await copyConversionFile(job, transfer, file, folderPath, remoteRecords);
+                copiedBytes += file.size;
+                deliveryStore.updateTransferConversionProgress(
+                    job.id, copiedBytes, new Date().toISOString()
+                );
+            }
+            if (galleryStorage.enabled) writeGalleryManifest(folderPath, remoteRecords);
+
+            const now = new Date().toISOString();
+            deliveryStore.createDelivery({
+                id: job.deliveryId,
+                ownerId: job.ownerId,
+                ...job.settings,
+                passwordHash: null,
+                passwordSalt: null,
+                createdAt: now,
+                publishedAt: job.settings.status === "published" ? now : null,
+                updatedAt: now,
+                photoCount: job.selectedFiles.length
+            });
+            deliveryStore.saveSelectionSettings({
+                deliveryId: job.deliveryId,
+                selectionLimit: job.settings.selectionLimit || 0,
+                status: "open",
+                clientName: "",
+                clientEmail: "",
+                submittedAt: null,
+                updatedAt: now
+            });
+            deliveryStore.completeTransferConversion(job.id, now);
+            recordUsage(job.ownerId, "gallery_converted_bytes", job.expectedBytes);
+            recordUsage(job.ownerId, "gallery_conversions", 1);
+        } catch (error) {
+            console.error(`No se pudo convertir la transferencia ${job.transferId}`, error);
+            if (galleryStorage.enabled) {
+                await galleryStorage.deleteKeys(job.selectedFiles.map((file) => (
+                    galleryStorage.objectKey(job.deliveryId, file.destinationName)
+                ))).catch(() => {});
+            }
+            if (!deliveryStore.getDelivery(job.deliveryId) && folderPath) {
+                fs.rmSync(folderPath, { recursive: true, force: true });
+            }
+            deliveryStore.failTransferConversion(
+                job.id, conversionFailureCode(error), new Date().toISOString()
+            );
+            recordUsage(job.ownerId, "errors", 1);
+        }
+    })().finally(() => activeConversionBuilds.delete(jobId));
+    activeConversionBuilds.set(jobId, task);
+    return task;
+}
+
+function resumeTransferConversions() {
+    for (const job of deliveryStore.listRecoverableTransferConversions()) {
+        runTransferConversion(job.id).catch(console.error);
+    }
+}
+
 const transferStorage = multer.diskStorage({
     destination: (req, file, callback) => {
         const folderPath = transferFolderPath(req.transferId);
@@ -1834,6 +2113,12 @@ app.get("/operations/economics", (req, res) => {
                 + Number(usage.counters.gallery_uploaded_bytes || 0),
             transferUploadedBytes: Number(usage.counters.uploaded_bytes || 0),
             galleryUploadedBytes: Number(usage.counters.gallery_uploaded_bytes || 0),
+            galleryConvertedBytes: Number(
+                usage.counters.gallery_converted_bytes || 0
+            ),
+            galleryConversions: Number(
+                usage.counters.gallery_conversions || 0
+            ),
             reservedUploadBytes: Number(usage.counters.reserved_upload_bytes || 0),
             downloadedBytes: Number(usage.counters.downloaded_bytes || 0),
             zipGeneratedBytes: Number(usage.counters.zip_generated_bytes || 0),
@@ -1850,7 +2135,8 @@ app.get("/operations/economics", (req, res) => {
             uploads: usage.activeUploads,
             localUploadWorkers: uploadConcurrency.snapshot().globalActive,
             readyZips: usage.readyZipCount,
-            zipWorkers: zipConcurrency.snapshot().globalActive
+            zipWorkers: zipConcurrency.snapshot().globalActive,
+            conversionWorkers: activeConversionBuilds.size
         },
         controls: {
             acceptingNewTransfers: economicConfig.acceptNewTransfers,
@@ -1862,7 +2148,10 @@ app.get("/operations/economics", (req, res) => {
             globalMonthlyZipJobs: economicConfig.globalMonthlyZipJobs,
             globalMonthlyErrorLimit: economicConfig.globalMonthlyErrorLimit,
             globalConcurrentUploads: economicConfig.globalConcurrentUploads,
-            globalConcurrentZips: economicConfig.globalConcurrentZips
+            globalConcurrentZips: economicConfig.globalConcurrentZips,
+            conversionEnabled: economicConfig.conversionEnabled,
+            globalConcurrentConversions:
+                economicConfig.globalConcurrentConversions
         },
         note: "Contadores internos estimados; compáralos con Railway y Cloudflare, cuya factura es autoritativa."
     });
@@ -1921,6 +2210,25 @@ app.get("/terms.html", (req, res) => res.redirect(301, "/terminos"));
 app.get("/login", (req, res) => {
     res.set("Cache-Control", "no-store");
     res.sendFile(path.join(frontendDirectory, "login.html"));
+});
+
+app.get(["/enviar", "/send"], (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.sendFile(path.join(publicDirectory, "send.html"));
+});
+
+app.get("/guest-transfer-capabilities", (req, res) => {
+    const limits = economicPlanLimits("free");
+    res.set("Cache-Control", "no-store");
+    res.json({
+        enabled: false,
+        requiresAccount: true,
+        retentionHours: 24,
+        maxFiles: MAX_TRANSFER_FILES,
+        maxFileSize: Math.min(MAX_TRANSFER_FILE_SIZE_BYTES, limits.transferMaxBytes),
+        maxTotalSize: limits.transferMaxBytes,
+        message: "Crea una cuenta gratuita para completar el envío. Conservaremos tu selección en este navegador."
+    });
 });
 
 app.get("/login.css", (req, res) => {
@@ -2385,13 +2693,41 @@ app.put("/brand", requireAuth, requireSameOrigin, (req, res) => {
 
 app.get("/transfers", requireAuth, (req, res) => {
     const baseUrl = publicBaseUrl(req);
-    const transfers = deliveryStore.listTransfers(req.auth.userId).map((transfer) => ({
-        ...transfer,
-        expired: Date.parse(transfer.expiresAt) <= Date.now(),
-        link: `${baseUrl}/t/${transfer.id}`
-    }));
+    const transfers = deliveryStore.listTransfers(req.auth.userId).map((transfer) => {
+        const conversion = deliveryStore.getLatestTransferConversion(
+            transfer.id, req.auth.userId
+        );
+        return {
+            ...transfer,
+            expired: Date.parse(transfer.expiresAt) <= Date.now(),
+            link: `${baseUrl}/t/${transfer.id}`,
+            conversion: conversion ? publicConversionJob(conversion, req) : null
+        };
+    });
     res.set("Cache-Control", "no-store");
     res.json({ transfers });
+});
+
+app.get("/galleries/capabilities", requireAuth, (req, res) => {
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
+    const plan = effectivePlan(account?.plan || "free", account?.planStatus);
+    const usage = accountUsage(req.auth.userId, account?.plan || "free",
+        account?.planStatus);
+    res.set("Cache-Control", "no-store");
+    res.json({
+        maxFiles: MAX_PHOTOS_PER_DELIVERY,
+        maxImageSize: MAX_PHOTO_SIZE_BYTES,
+        maxVideoSize: MAX_VIDEO_SIZE_BYTES,
+        maxTotalSize: MAX_DELIVERY_SIZE_BYTES,
+        galleryLimit: usage.galleryLimit,
+        galleryCount: usage.galleryCount,
+        storageLimitBytes: usage.storageLimitBytes,
+        storageBytes: usage.storageBytes,
+        maxLifetimeDays: planLimits(plan).galleryLifetimeDays,
+        conversionEnabled: economicConfig.conversionEnabled
+    });
 });
 
 app.get("/transfers/capabilities", requireAuth, (req, res) => {
@@ -2416,6 +2752,253 @@ app.get("/transfers/capabilities", requireAuth, (req, res) => {
         zipMaxBytes: limits.zipMaxBytes
     });
 });
+
+app.get("/transfers/:transferId/conversion-options", requireAuth, (req, res) => {
+    const transfer = deliveryStore.getOwnedTransfer(
+        req.params.transferId, req.auth.userId
+    );
+    if (!transfer) return res.status(404).json({ error: "Transferencia no encontrada" });
+    if (transfer.status !== "ready") {
+        return res.status(409).json({ error: "Completa la subida antes de convertirla" });
+    }
+    if (Date.parse(transfer.expiresAt) <= Date.now()) {
+        return res.status(410).json({ error: "La transferencia ha caducado" });
+    }
+    const files = classifyTransferFilesForGallery(transfer);
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
+    res.set("Cache-Control", "no-store");
+    res.json({
+        transfer: {
+            id: transfer.id,
+            title: transfer.title,
+            message: transfer.message.slice(0, 300)
+        },
+        compatible: files.compatible.map((file) => ({
+            sourceId: file.sourceId,
+            name: file.name,
+            size: file.size,
+            mediaType: file.mediaType
+        })),
+        excluded: files.excluded,
+        usage: accountUsage(req.auth.userId, account?.plan || "free",
+            account?.planStatus),
+        conversionEnabled: economicConfig.conversionEnabled
+    });
+});
+
+app.post("/transfers/:transferId/conversions", requireAuth, requireSameOrigin,
+    limitSensitiveAction, (req, res) => {
+        if (!economicConfig.conversionEnabled) {
+            return res.status(503).json({
+                error: "Las conversiones están pausadas temporalmente",
+                code: "CONVERSIONS_PAUSED"
+            });
+        }
+        const transfer = deliveryStore.getOwnedTransfer(
+            req.params.transferId, req.auth.userId
+        );
+        if (!transfer) return res.status(404).json({ error: "Transferencia no encontrada" });
+        if (transfer.status !== "ready") {
+            return res.status(409).json({ error: "Completa la subida antes de convertirla" });
+        }
+        if (Date.parse(transfer.expiresAt) <= Date.now()) {
+            return res.status(410).json({ error: "La transferencia ha caducado" });
+        }
+        const idempotencyKey = typeof req.body?.idempotencyKey === "string"
+            ? req.body.idempotencyKey.trim() : "";
+        if (!/^[a-zA-Z0-9_-]{12,120}$/.test(idempotencyKey)) {
+            return res.status(400).json({ error: "Identificador de operación no válido" });
+        }
+        const requestedIds = Array.isArray(req.body?.selectedFileIds)
+            ? [...new Set(req.body.selectedFileIds.filter(
+                (value) => typeof value === "string"
+            ))] : [];
+        if (!requestedIds.length || requestedIds.length > MAX_PHOTOS_PER_DELIVERY) {
+            return res.status(400).json({
+                error: `Selecciona entre 1 y ${MAX_PHOTOS_PER_DELIVERY} archivos compatibles`
+            });
+        }
+        const classified = classifyTransferFilesForGallery(transfer);
+        const compatibleById = new Map(
+            classified.compatible.map((file) => [file.sourceId, file])
+        );
+        if (requestedIds.some((id) => !compatibleById.has(id))) {
+            return res.status(400).json({
+                error: "La selección contiene archivos no compatibles o que ya no existen"
+            });
+        }
+        const usedNames = new Set();
+        const selectedFiles = requestedIds.map((id) => {
+            const file = compatibleById.get(id);
+            return {
+                sourceId: file.sourceId,
+                name: file.name,
+                size: file.size,
+                mimeType: file.mimeType,
+                objectKey: file.objectKey,
+                mediaType: file.mediaType,
+                destinationName: safeTransferFilename(file.name, usedNames)
+            };
+        });
+        const expectedBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+        if (expectedBytes > MAX_DELIVERY_SIZE_BYTES) {
+            return res.status(400).json({ error: "La galería no puede superar 10 GB" });
+        }
+
+        const account = userForCurrentBillingEnvironment(
+            deliveryStore.getUserById(req.auth.userId)
+        );
+        const plan = effectivePlan(account?.plan || "free", account?.planStatus);
+        const profile = deliveryStore.getBrandProfile(req.auth.userId);
+        const validation = validateDeliverySettings({
+            ...profile,
+            clientName: req.body?.clientName || req.body?.title || transfer.title,
+            clientEmail: req.body?.clientEmail || "",
+            message: typeof req.body?.message === "string"
+                ? req.body.message
+                : transfer.message.slice(0, 300),
+            viewingEnabled: true,
+            allowOriginalDownload: true,
+            allowWebDownload: true,
+            favoritesEnabled: true,
+            selectionLimit: 0
+        }, { maxExpiryDays: planLimits(plan).galleryLifetimeDays });
+        if (validation.error) {
+            return res.status(400).json({ error: validation.error });
+        }
+        const requestedCoverId = typeof req.body?.coverFileId === "string"
+            ? req.body.coverFileId : "";
+        const coverFile = selectedFiles.find((file) => (
+            file.sourceId === requestedCoverId && file.mediaType === "image"
+        )) || selectedFiles.find((file) => file.mediaType === "image");
+        const settings = { ...validation.value, coverFilename: coverFile?.destinationName || null };
+        delete settings.password;
+        const usage = accountUsage(
+            req.auth.userId, account?.plan || "free", account?.planStatus
+        );
+        const now = new Date().toISOString();
+        let reservation;
+        try {
+            reservation = deliveryStore.reserveTransferConversion({
+                job: {
+                    id: uuidv4(),
+                    ownerId: req.auth.userId,
+                    transferId: transfer.id,
+                    idempotencyKey,
+                    deliveryId: uuidv4(),
+                    selectedFiles,
+                    settings,
+                    expectedBytes,
+                    createdAt: now
+                },
+                limits: {
+                    galleryLimit: usage.galleryLimit,
+                    galleryStorageBytes: usage.storageBytes,
+                    galleryStorageLimitBytes: usage.storageLimitBytes,
+                    accountConcurrentConversions:
+                        economicConfig.accountConcurrentConversions,
+                    globalConcurrentConversions:
+                        economicConfig.globalConcurrentConversions
+                }
+            });
+        } catch (error) {
+            console.error(error);
+            recordUsage(req.auth.userId, "errors", 1);
+            return res.status(500).json({ error: "No se pudo reservar la conversión" });
+        }
+        if (!reservation.ok) {
+            const messages = {
+                PLAN_GALLERY_LIMIT: `Ya tienes ${usage.galleryLimit} galerías. Elimina una antes de crear otra.`,
+                PLAN_STORAGE_LIMIT: "La conversión supera el almacenamiento de tu plan",
+                ACCOUNT_CONVERSION_CONCURRENCY_LIMIT: "Ya tienes una conversión en curso",
+                GLOBAL_CONVERSION_CONCURRENCY_LIMIT: "Hay otras conversiones en curso. Inténtalo en unos minutos"
+            };
+            return res.status(reservation.code.includes("CONCURRENCY") ? 429 : 403)
+                .json({ error: messages[reservation.code], code: reservation.code });
+        }
+        if (reservation.job.transferId !== transfer.id) {
+            return res.status(409).json({
+                error: "Este identificador de operación ya se utilizó en otra transferencia",
+                code: "IDEMPOTENCY_KEY_REUSED"
+            });
+        }
+        if (!["ready", "building"].includes(reservation.job.status)) {
+            setImmediate(() => runTransferConversion(reservation.job.id).catch(console.error));
+        }
+        res.status(reservation.job.status === "ready" ? 200 : 202).json({
+            conversion: publicConversionJob(reservation.job, req),
+            idempotentReplay: reservation.existing
+        });
+    });
+
+app.get("/transfers/:transferId/conversions/:jobId", requireAuth, (req, res) => {
+    const job = deliveryStore.getOwnedTransferConversion(
+        req.params.jobId, req.auth.userId
+    );
+    if (!job || job.transferId !== req.params.transferId) {
+        return res.status(404).json({ error: "Conversión no encontrada" });
+    }
+    res.set("Cache-Control", "no-store");
+    res.json({ conversion: publicConversionJob(job, req) });
+});
+
+app.post("/transfers/:transferId/conversions/:jobId/retry", requireAuth,
+    requireSameOrigin, limitSensitiveAction, (req, res) => {
+        const job = deliveryStore.getOwnedTransferConversion(
+            req.params.jobId, req.auth.userId
+        );
+        const transfer = deliveryStore.getOwnedTransfer(
+            req.params.transferId, req.auth.userId
+        );
+        if (!job || job.transferId !== req.params.transferId || !transfer) {
+            return res.status(404).json({ error: "Conversión no encontrada" });
+        }
+        if (job.status !== "failed") {
+            return res.status(409).json({ error: "Esta conversión no necesita reintentarse" });
+        }
+        if (Date.parse(transfer.expiresAt) <= Date.now()) {
+            return res.status(410).json({
+                error: "La transferencia caducó y ya no puede reintentarse"
+            });
+        }
+        const account = userForCurrentBillingEnvironment(
+            deliveryStore.getUserById(req.auth.userId)
+        );
+        const usage = accountUsage(
+            req.auth.userId, account?.plan || "free", account?.planStatus
+        );
+        const retried = deliveryStore.retryTransferConversion({
+            id: job.id,
+            ownerId: req.auth.userId,
+            updatedAt: new Date().toISOString(),
+            limits: {
+                galleryLimit: usage.galleryLimit,
+                galleryStorageBytes: usage.storageBytes,
+                galleryStorageLimitBytes: usage.storageLimitBytes,
+                accountConcurrentConversions:
+                    economicConfig.accountConcurrentConversions,
+                globalConcurrentConversions:
+                    economicConfig.globalConcurrentConversions
+            }
+        });
+        if (!retried.ok) {
+            return res.status(retried.code.includes("CONCURRENCY") ? 429 : 403)
+                .json({
+                    error: retried.code === "PLAN_GALLERY_LIMIT"
+                        ? "No tienes espacio para otra galería"
+                        : "No se puede reintentar mientras haya otra conversión o se supere la cuota",
+                    code: retried.code
+                });
+        }
+        setImmediate(() => runTransferConversion(job.id).catch(console.error));
+        res.status(202).json({
+            conversion: publicConversionJob(
+                retried.job, req
+            )
+        });
+    });
 
 app.post("/transfers/multipart", requireAuth, requireSameOrigin, limitSensitiveAction, (req, res) => {
     if (!economicConfig.acceptNewTransfers) {
@@ -2763,6 +3346,11 @@ app.post("/transfers", requireAuth, requireSameOrigin, limitSensitiveAction, (re
 app.delete("/transfers/:transferId", requireAuth, requireSameOrigin, async (req, res) => {
     const transfer = deliveryStore.getOwnedTransfer(req.params.transferId, req.auth.userId);
     if (!transfer) return res.status(404).json({ error: "Transferencia no encontrada" });
+    if (deliveryStore.hasActiveTransferConversion(transfer.id)) {
+        return res.status(409).json({
+            error: "Espera a que termine la conversión antes de borrar esta transferencia"
+        });
+    }
     try {
         await removeTransferStorage(transfer);
         deliveryStore.deleteTransfer(transfer.id, req.auth.userId);
@@ -3360,7 +3948,8 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
     const usageBeforeUpload = accountUsage(
         req.auth.userId, account?.plan || "free", account?.planStatus
     );
-    if (usageBeforeUpload.galleryCount >= usageBeforeUpload.galleryLimit) {
+    if (usageBeforeUpload.galleryCount + usageBeforeUpload.reservedGalleryCount
+        >= usageBeforeUpload.galleryLimit) {
         return res.status(403).json({
             error: `Ya tienes ${usageBeforeUpload.galleryLimit} galerías. Elimina una antes de crear otra.`,
             code: "PLAN_GALLERY_LIMIT",
@@ -3442,7 +4031,8 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
                 error: "La entrega no puede superar 10 GB"
             });
         }
-        if (usageBeforeUpload.storageBytes + totalSize
+        if (usageBeforeUpload.storageBytes
+            + usageBeforeUpload.reservedGalleryStorageBytes + totalSize
             > usageBeforeUpload.storageLimitBytes) {
             fs.rmSync(folderPath, { recursive: true, force: true });
             return res.status(403).json({
@@ -3486,7 +4076,8 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
             const usageAtSave = accountUsage(
                 req.auth.userId, account?.plan || "free", account?.planStatus
             );
-            if (usageAtSave.galleryCount >= usageAtSave.galleryLimit) {
+            if (usageAtSave.galleryCount + usageAtSave.reservedGalleryCount
+                >= usageAtSave.galleryLimit) {
                 if (remoteRecords.length) {
                     await galleryStorage.deleteKeys(
                         remoteRecords.map((file) => file.objectKey)
@@ -4422,6 +5013,7 @@ const server = app.listen(PORT, () => {
     migrateLocalGalleriesToR2().catch((error) => {
         console.error("No se pudo completar la migración de galerías a R2", error);
     });
+    resumeTransferConversions();
 });
 
 server.requestTimeout = Number(process.env.PHOCLOUD_REQUEST_TIMEOUT_MS)

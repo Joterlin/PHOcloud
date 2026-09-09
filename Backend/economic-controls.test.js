@@ -22,17 +22,24 @@ test("aplica límites conservadores y conserva 50 GiB como capacidad técnica", 
     assert.equal(config.plans.studio.monthlyZipJobs, 20);
     assert.equal(config.plans.studio.monthlyZipBytes, 50 * GIB);
     assert.equal(config.accountConcurrentZips, 1);
+    assert.equal(config.conversionEnabled, true);
+    assert.equal(config.accountConcurrentConversions, 1);
+    assert.equal(config.globalConcurrentConversions, 2);
 });
 
 test("los interruptores y umbrales se configuran sin permitir superar el máximo técnico", () => {
     const config = createEconomicConfig({
         PHOCLOUD_ACCEPT_NEW_TRANSFERS: "false",
         PHOCLOUD_ZIP_ENABLED: "0",
+        PHOCLOUD_CONVERSION_ENABLED: "false",
+        PHOCLOUD_GLOBAL_CONCURRENT_CONVERSIONS: "3",
         PHOCLOUD_FREE_TRANSFER_MAX_GIB: "500",
         PHOCLOUD_GLOBAL_CONCURRENT_UPLOADS: "3"
     });
     assert.equal(config.acceptNewTransfers, false);
     assert.equal(config.zipEnabled, false);
+    assert.equal(config.conversionEnabled, false);
+    assert.equal(config.globalConcurrentConversions, 3);
     assert.equal(config.plans.free.transferMaxBytes, 5 * GIB);
     assert.equal(config.globalConcurrentUploads, 3);
 });

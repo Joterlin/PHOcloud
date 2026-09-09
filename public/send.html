@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="description" content="Envía archivos grandes durante 24 horas con The Real Gallery.">
+    <meta name="theme-color" content="#f6f4ef">
+    <title>Enviar archivos · The Real Gallery</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/send.css">
+</head>
+<body>
+    <header class="public-bar">
+        <a href="/enviar" class="wordmark">The Real Gallery</a>
+        <nav><a href="/login">Entrar</a><a class="nav-primary" href="/login?mode=register">Crear cuenta</a></nav>
+    </header>
+    <main>
+        <section class="send-copy">
+            <p class="eyebrow">TRANSFERENCIAS DURANTE 24 HORAS</p>
+            <h1>Envía archivos grandes.<br><em>Sin complicaciones.</em></h1>
+            <p class="lead">Selecciona tu material, revisa el envío y continúa con una cuenta gratuita. Tus archivos no salen del navegador hasta que tú confirmas.</p>
+            <div class="trust-row"><span>Enlace privado</span><span>Caduca automáticamente</span><span>Descarga individual o ZIP</span></div>
+        </section>
+        <section class="send-card" aria-labelledby="sendTitle">
+            <div class="step"><span>01</span><div><p class="eyebrow">NUEVO ENVÍO</p><h2 id="sendTitle">Prepara tus archivos</h2></div></div>
+            <label id="dropZone" class="drop-zone" for="guestFiles">
+                <input id="guestFiles" type="file" multiple>
+                <span class="drop-icon">＋</span>
+                <strong>Seleccionar archivos</strong>
+                <small>o arrástralos aquí</small>
+            </label>
+            <div id="selection" class="selection" hidden>
+                <div class="selection-head"><strong id="selectionCount"></strong><span id="selectionSize"></span></div>
+                <ul id="fileList"></ul>
+                <button id="clearFiles" class="text-button" type="button">Quitar selección</button>
+            </div>
+            <p id="limits" class="limits">Consultando límites actuales…</p>
+            <p id="sendError" class="error" role="alert" hidden></p>
+            <button id="continueButton" class="continue" type="button" disabled>Continuar para enviar</button>
+            <p class="account-note">El envío para invitados está en preparación. La cuenta gratuita protege tus enlaces y te permite gestionarlos.</p>
+        </section>
+    </main>
+    <footer><span>© The Real Gallery</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>
+    <script src="/send.js"></script>
+</body>
+</html>

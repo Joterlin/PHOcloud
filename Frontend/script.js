@@ -42,10 +42,10 @@ const accountDialog = byId("accountDialog");
 const transferCreator = byId("transferCreator");
 const transfersPanel = byId("transfersPanel");
 
-const MAX_FILES = 500;
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
-const MAX_VIDEO_SIZE = 500 * 1024 * 1024;
-const MAX_TOTAL_SIZE = 10 * 1024 * 1024 * 1024;
+let MAX_FILES = 500;
+let MAX_FILE_SIZE = 50 * 1024 * 1024;
+let MAX_VIDEO_SIZE = 500 * 1024 * 1024;
+let MAX_TOTAL_SIZE = 10 * 1024 * 1024 * 1024;
 let selectedFiles = [];
 let previewUrls = new Map();
 let coverFile = null;
@@ -59,6 +59,10 @@ let resultHideTimer = null;
 let transferResultHideTimer = null;
 let selectedTransferFiles = [];
 let currentTransferLink = "";
+let currentTransferId = "";
+let latestDeliveries = [];
+let latestTransfers = [];
+let conversionContext = null;
 let transferCapabilities = {
     maxFileSize: 5 * 1024 * 1024 * 1024,
     maxTotalSize: 5 * 1024 * 1024 * 1024,
@@ -869,12 +873,14 @@ async function loadDeliveries() {
     try {
         const response = await fetch("/deliveries");
         const data = await readResponse(response);
+        latestDeliveries = data.deliveries;
         deliveriesList.replaceChildren();
         deliveriesEmpty.hidden = data.deliveries.length !== 0;
         deleteAllDeliveriesButton.disabled = data.deliveries.length === 0;
         for (const delivery of data.deliveries) {
             deliveriesList.appendChild(createDeliveryCard(delivery));
         }
+        renderHome();
     } catch (error) {
         deliveriesList.replaceChildren();
         const message = document.createElement("p");
@@ -1503,18 +1509,92 @@ editDialog.addEventListener("close", () => {
 });
 
 function showProduct(product) {
-    const galleries = product === "galleries";
-    byId("showGalleries").classList.toggle("is-active", galleries);
-    byId("showTransfers").classList.toggle("is-active", !galleries);
-    byId("galleryCreator").hidden = !galleries;
-    byId("deliveriesPanel").hidden = !galleries;
-    transferCreator.hidden = galleries;
-    transfersPanel.hidden = galleries;
+    showWorkspaceView(product);
 }
 
-byId("showGalleries").addEventListener("click", () => showProduct("galleries"));
-byId("showTransfers").addEventListener("click", () => showProduct("transfers"));
-showProduct("transfers");
+function showWorkspaceView(view, updateUrl = true) {
+    const selected = ["home", "transfers", "galleries"].includes(view) ? view : "home";
+    byId("workspaceHome").hidden = selected !== "home";
+    byId("workspaceIntro").hidden = selected !== "home";
+    byId("galleryCreator").hidden = selected !== "galleries";
+    byId("deliveriesPanel").hidden = selected !== "galleries";
+    transferCreator.hidden = selected !== "transfers";
+    transfersPanel.hidden = selected !== "transfers";
+    for (const [id, name] of [
+        ["showHome", "home"], ["showTransfers", "transfers"],
+        ["showGalleries", "galleries"]
+    ]) byId(id).classList.toggle("is-active", selected === name);
+    if (updateUrl) {
+        const url = new URL(window.location.href);
+        if (selected === "home") url.searchParams.delete("view");
+        else url.searchParams.set("view", selected);
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+}
+
+byId("showHome").addEventListener("click", () => showWorkspaceView("home"));
+byId("showGalleries").addEventListener("click", () => showWorkspaceView("galleries"));
+byId("showTransfers").addEventListener("click", () => showWorkspaceView("transfers"));
+byId("workspaceBrandButton").addEventListener("click", openBrandDialog);
+byId("workspaceAccountButton").addEventListener("click", () => accountDialog.showModal());
+byId("homeOpenAccount").addEventListener("click", () => accountDialog.showModal());
+byId("homeNewTransfer").addEventListener("click", () => showWorkspaceView("transfers"));
+byId("homeNewGallery").addEventListener("click", () => showWorkspaceView("galleries"));
+showWorkspaceView(new URLSearchParams(window.location.search).get("view") || "home", false);
+
+function renderHome() {
+    if (accountData) {
+        byId("homePlanName").textContent = planLabel(accountData.usage.plan);
+        byId("homeGalleryUsage").textContent =
+            `${accountData.usage.galleryCount} de ${accountData.usage.galleryLimit} galerías utilizadas`;
+        byId("homeTransferUsage").textContent =
+            `${formatBytes(accountData.usage.monthlyUploadBytes + accountData.usage.monthlyReservedUploadBytes)} de ${formatBytes(accountData.usage.monthlyUploadLimitBytes)} enviados este mes`;
+    }
+    const recent = [
+        ...latestTransfers.map((item) => ({
+            type: "Transferencia", title: item.title, date: item.createdAt,
+            detail: item.expired ? "Caducada" : "Disponible 24 horas",
+            action: () => showWorkspaceView("transfers")
+        })),
+        ...latestDeliveries.map((item) => ({
+            type: "Galería", title: item.clientName, date: item.createdAt,
+            detail: `${item.photoCount} archivo${item.photoCount === 1 ? "" : "s"}`,
+            action: () => openEditDelivery(item.id)
+        }))
+    ].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 5);
+    const container = byId("homeRecent");
+    container.replaceChildren();
+    if (!recent.length) {
+        const empty = document.createElement("p");
+        empty.className = "home-empty";
+        empty.textContent = "Todavía no hay actividad. Tu primer envío aparecerá aquí.";
+        container.appendChild(empty);
+        return;
+    }
+    for (const item of recent) {
+        const button = document.createElement("button");
+        button.type = "button";
+        const label = document.createElement("span");
+        label.innerHTML = `<small>${item.type}</small><strong></strong><em></em>`;
+        label.querySelector("strong").textContent = item.title;
+        label.querySelector("em").textContent = item.detail;
+        const date = document.createElement("time");
+        date.textContent = formatDate(item.date);
+        button.append(label, date);
+        button.addEventListener("click", item.action);
+        container.appendChild(button);
+    }
+}
+
+async function loadGalleryCapabilities() {
+    const data = await readResponse(await fetch("/galleries/capabilities"));
+    MAX_FILES = data.maxFiles;
+    MAX_FILE_SIZE = data.maxImageSize;
+    MAX_VIDEO_SIZE = data.maxVideoSize;
+    MAX_TOTAL_SIZE = data.maxTotalSize;
+    byId("selectionHint").textContent =
+        `Hasta ${data.maxFiles} archivos · ${formatBytes(data.maxImageSize)} por foto · ${formatBytes(data.maxVideoSize)} por vídeo · ${formatBytes(data.maxTotalSize)} por galería`;
+}
 
 async function loadTransferCapabilities() {
     const response = await fetch("/transfers/capabilities");
@@ -1769,14 +1849,17 @@ byId("createTransfer").addEventListener("click", async () => {
             data = await uploadTransfer(formData);
         }
         currentTransferLink = data.link;
+        currentTransferId = data.transferId;
         byId("transferLinkInput").value = data.link;
         byId("transferResultSummary").textContent = `${data.fileCount} archivo${data.fileCount === 1 ? "" : "s"} · ${formatBytes(data.totalBytes)}`;
         byId("transferResult").hidden = false;
+        byId("convertLatestTransfer").hidden = false;
         clearTimeout(transferResultHideTimer);
         transferResultHideTimer = setTimeout(() => {
             byId("transferResult").hidden = true;
         }, 8000);
         selectedTransferFiles = [];
+        clearPendingGuestSelection().catch(() => {});
         renderTransferSelection();
         for (const id of ["transferTitle", "transferRecipient", "transferMessage", "transferPassword"]) byId(id).value = "";
         await Promise.all([loadTransfers(), loadAccount()]);
@@ -1802,10 +1885,12 @@ byId("openTransferLink").addEventListener("click", () => window.open(currentTran
 async function loadTransfers() {
     const response = await fetch("/transfers");
     const data = await readResponse(response);
+    latestTransfers = data.transfers;
     const container = byId("transfersList");
     container.replaceChildren();
     byId("transfersEmpty").hidden = data.transfers.length !== 0;
     for (const transfer of data.transfers) container.appendChild(createTransferCard(transfer));
+    renderHome();
 }
 
 function createTransferCard(transfer) {
@@ -1833,6 +1918,31 @@ function createTransferCard(transfer) {
     if (!incomplete) {
         actions.append(open, copy);
         if (transfer.recipientEmail) actions.append(send);
+        if (!transfer.expired) {
+            const convert = actionButton(
+                transfer.conversion?.status === "ready"
+                    ? "Abrir galería creada"
+                    : (["pending", "building"].includes(transfer.conversion?.status)
+                        ? "Conversión en curso…"
+                        : (transfer.conversion?.status === "failed"
+                            ? "Reintentar conversión"
+                            : "Convertir en galería")),
+                "delivery-convert",
+                () => {
+                    if (transfer.conversion?.status === "ready") {
+                        openEditDelivery(transfer.conversion.deliveryId);
+                    } else if (["pending", "building"].includes(transfer.conversion?.status)) {
+                        watchConversion(transfer.id, transfer.conversion.id)
+                            .catch((error) => showTransferError(error.message));
+                    } else if (transfer.conversion?.status === "failed") {
+                        retryConversion(transfer.id, transfer.conversion.id);
+                    } else {
+                        openConvertDialog(transfer.id);
+                    }
+                }
+            );
+            actions.append(convert);
+        }
     }
     actions.append(remove);
     body.append(title, meta, actions);
@@ -1851,6 +1961,207 @@ function createTransferCard(transfer) {
     card.append(body, stats);
     return card;
 }
+
+function conversionSelectedIds() {
+    return [...byId("convertFiles").querySelectorAll(
+        'input[data-convert-file]:checked'
+    )].map((input) => input.value);
+}
+
+function updateConversionSelection() {
+    const selected = conversionSelectedIds();
+    const files = conversionContext?.options?.compatible || [];
+    const total = files.filter((file) => selected.includes(file.sourceId))
+        .reduce((sum, file) => sum + file.size, 0);
+    byId("convertSelectionSummary").textContent =
+        `${selected.length} seleccionados · ${formatBytes(total)}`;
+    byId("startConversion").disabled = selected.length === 0;
+    byId("toggleConvertFiles").textContent = selected.length === files.length
+        ? "Deseleccionar todos" : "Seleccionar todos";
+}
+
+async function openConvertDialog(transferId) {
+    const dialog = byId("convertDialog");
+    const error = byId("convertError");
+    error.hidden = true;
+    byId("convertProgress").hidden = true;
+    byId("convertFiles").replaceChildren();
+    try {
+        const options = await readResponse(await fetch(
+            `/transfers/${encodeURIComponent(transferId)}/conversion-options`
+        ));
+        if (!options.conversionEnabled) {
+            throw new Error("Las conversiones están pausadas temporalmente.");
+        }
+        conversionContext = {
+            transferId,
+            options,
+            idempotencyKey: crypto.randomUUID()
+        };
+        if (options.usage.galleryCount + Number(options.usage.reservedGalleryCount || 0)
+            >= options.usage.galleryLimit) {
+            throw new Error(
+                `Ya tienes ${options.usage.galleryLimit} galerías. Elimina una antes de convertir esta transferencia.`
+            );
+        }
+        byId("convertClientName").value = options.transfer.title || "";
+        byId("convertClientEmail").value = "";
+        byId("convertMessage").value = options.transfer.message || "";
+        for (const file of options.compatible) {
+            const label = document.createElement("label");
+            label.className = "convert-file";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = file.sourceId;
+            checkbox.dataset.convertFile = "true";
+            checkbox.checked = true;
+            checkbox.addEventListener("change", updateConversionSelection);
+            const copy = document.createElement("span");
+            const name = document.createElement("strong");
+            const detail = document.createElement("small");
+            name.textContent = file.name;
+            detail.textContent = `${file.mediaType === "image" ? "Fotografía" : "Vídeo"} · ${formatBytes(file.size)}`;
+            copy.append(name, detail);
+            label.append(checkbox, copy);
+            if (file.mediaType === "image") {
+                const cover = document.createElement("input");
+                cover.type = "radio";
+                cover.name = "convertCover";
+                cover.value = file.sourceId;
+                cover.title = "Usar como portada";
+                cover.setAttribute("aria-label", `Usar ${file.name} como portada`);
+                if (!byId("convertFiles").querySelector('input[name="convertCover"]')) {
+                    cover.checked = true;
+                }
+                const coverText = document.createElement("em");
+                coverText.textContent = "Portada";
+                label.append(cover, coverText);
+            }
+            byId("convertFiles").appendChild(label);
+        }
+        const excluded = byId("convertExcluded");
+        excluded.hidden = options.excluded.length === 0;
+        excluded.replaceChildren();
+        if (options.excluded.length) {
+            const title = document.createElement("strong");
+            title.textContent = `${options.excluded.length} archivo${options.excluded.length === 1 ? "" : "s"} no se incluirán`;
+            const list = document.createElement("ul");
+            for (const file of options.excluded) {
+                const item = document.createElement("li");
+                item.textContent = `${file.name}: ${file.reason}`;
+                list.appendChild(item);
+            }
+            excluded.append(title, list);
+        }
+        if (!options.compatible.length) {
+            error.textContent = "Esta transferencia no contiene fotos o vídeos compatibles.";
+            error.hidden = false;
+        }
+        updateConversionSelection();
+        dialog.showModal();
+    } catch (requestError) {
+        showTransferError(requestError.message);
+    }
+}
+
+async function finishSuccessfulConversion(conversion) {
+    byId("convertProgress").textContent = "Galería creada. Abriendo el editor…";
+    await Promise.all([loadDeliveries(), loadTransfers(), loadAccount()]);
+    byId("convertDialog").close();
+    showWorkspaceView("galleries");
+    await openEditDelivery(conversion.deliveryId);
+}
+
+async function retryConversion(transferId, jobId) {
+    try {
+        const data = await readResponse(await fetch(
+            `/transfers/${encodeURIComponent(transferId)}/conversions/${encodeURIComponent(jobId)}/retry`,
+            { method: "POST" }
+        ));
+        await watchConversion(transferId, data.conversion.id);
+    } catch (error) {
+        showTransferError(error.message);
+    }
+}
+
+async function watchConversion(transferId, jobId) {
+    const dialog = byId("convertDialog");
+    if (!dialog.open) dialog.showModal();
+    const progress = byId("convertProgress");
+    progress.hidden = false;
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+        const data = await readResponse(await fetch(
+            `/transfers/${encodeURIComponent(transferId)}/conversions/${encodeURIComponent(jobId)}`
+        ));
+        const conversion = data.conversion;
+        progress.textContent = conversion.status === "pending"
+            ? "Conversión en cola…"
+            : `Preparando galería… ${conversion.progress}%`;
+        if (conversion.status === "ready") {
+            await finishSuccessfulConversion(conversion);
+            return;
+        }
+        if (conversion.status === "failed") {
+            throw new Error("La conversión se interrumpió. Puedes reintentarlo desde esta transferencia.");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    throw new Error("La conversión continúa en segundo plano. Puedes cerrar esta ventana y volver después.");
+}
+
+byId("convertForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!conversionContext) return;
+    const error = byId("convertError");
+    const button = byId("startConversion");
+    error.hidden = true;
+    button.disabled = true;
+    button.textContent = "Preparando…";
+    try {
+        const cover = byId("convertFiles").querySelector(
+            'input[name="convertCover"]:checked'
+        );
+        const data = await readResponse(await fetch(
+            `/transfers/${encodeURIComponent(conversionContext.transferId)}/conversions`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    idempotencyKey: conversionContext.idempotencyKey,
+                    selectedFileIds: conversionSelectedIds(),
+                    coverFileId: cover?.value || "",
+                    clientName: byId("convertClientName").value.trim(),
+                    clientEmail: byId("convertClientEmail").value.trim(),
+                    message: byId("convertMessage").value.trim()
+                })
+            }
+        ));
+        await watchConversion(conversionContext.transferId, data.conversion.id);
+    } catch (requestError) {
+        error.textContent = requestError.message;
+        error.hidden = false;
+    } finally {
+        button.disabled = false;
+        button.textContent = "Crear galería";
+    }
+});
+
+byId("toggleConvertFiles").addEventListener("click", () => {
+    const boxes = [...byId("convertFiles").querySelectorAll(
+        "input[data-convert-file]"
+    )];
+    const select = boxes.some((box) => !box.checked);
+    for (const box of boxes) box.checked = select;
+    updateConversionSelection();
+});
+function closeConvertDialog() {
+    if (!byId("startConversion").disabled) byId("convertDialog").close();
+}
+byId("closeConvertDialog").addEventListener("click", closeConvertDialog);
+byId("cancelConvertDialog").addEventListener("click", closeConvertDialog);
+byId("convertLatestTransfer").addEventListener("click", () => {
+    if (currentTransferId) openConvertDialog(currentTransferId);
+});
 
 async function sendTransfer(transfer, button) {
     const original = button.textContent;
@@ -1941,12 +2252,70 @@ deleteDialog.addEventListener("close", () => {
     deleteDialogError.hidden = true;
 });
 
+const PENDING_DB_NAME = "the-real-gallery-pending";
+const PENDING_STORE_NAME = "pending-transfers";
+const PENDING_RECORD_KEY = "guest-selection";
+
+function openPendingDatabase() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(PENDING_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains(PENDING_STORE_NAME)) {
+                request.result.createObjectStore(PENDING_STORE_NAME);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function readPendingGuestSelection() {
+    const database = await openPendingDatabase();
+    const record = await new Promise((resolve, reject) => {
+        const request = database.transaction(PENDING_STORE_NAME)
+            .objectStore(PENDING_STORE_NAME).get(PENDING_RECORD_KEY);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return record;
+}
+
+async function clearPendingGuestSelection() {
+    const database = await openPendingDatabase();
+    await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PENDING_STORE_NAME, "readwrite");
+        transaction.objectStore(PENDING_STORE_NAME).delete(PENDING_RECORD_KEY);
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+}
+
+async function restorePendingGuestSelection() {
+    const url = new URL(window.location.href);
+    const record = await readPendingGuestSelection();
+    if (!record || Date.now() - Number(record.savedAt) > 24 * 60 * 60 * 1000
+        || !Array.isArray(record.files) || !record.files.length) {
+        await clearPendingGuestSelection().catch(() => {});
+        return;
+    }
+    addTransferFiles(record.files);
+    showWorkspaceView("transfers");
+    if (url.searchParams.get("resumeGuest") === "1") {
+        byId("transferCreator").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    url.searchParams.delete("resumeGuest");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 Promise.all([
     loadBrandProfile(), loadDeliveries(), loadTransfers(), loadAccount(),
-    loadTransferCapabilities()
+    loadTransferCapabilities(), loadGalleryCapabilities()
 ]).then(() => {
     const url = new URL(window.location.href);
     const billingResult = url.searchParams.get("billing");
+    restorePendingGuestSelection().catch(() => {});
     if (!["success", "cancel"].includes(billingResult)) return;
     accountDialog.showModal();
     byId("billingMessage").textContent = billingResult === "success"
