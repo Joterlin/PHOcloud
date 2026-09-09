@@ -68,7 +68,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
 
         const registration = {
             displayName: "Estudio Beta",
-            username: "estudio-beta",
+            username: "@Estudio.Beta",
             email: "estudio@example.com",
             password: "ContrasenaTemporal123"
         };
@@ -77,6 +77,20 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             body: { ...registration, acceptTerms: false }
         });
         assert.equal(rejected.response.status, 400);
+
+        for (const invalidUsername of [
+            "nombre-con-guion", ".nombre", "nombre..doble", "___", "straclase"
+        ]) {
+            const invalid = await jsonRequest(`${baseUrl}/auth/register`, {
+                method: "POST",
+                body: {
+                    ...registration,
+                    username: invalidUsername,
+                    acceptTerms: true
+                }
+            });
+            assert.equal(invalid.response.status, 400);
+        }
 
         const registered = await jsonRequest(`${baseUrl}/auth/register`, {
             method: "POST",
@@ -103,11 +117,12 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         const login = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
             body: {
-                identifier: registration.email,
+                identifier: "@ESTUDIO.BETA",
                 password: registration.password
             }
         });
         assert.equal(login.response.status, 200);
+        assert.equal(login.data.username, "estudio.beta");
         let cookie = login.response.headers.getSetCookie()
             .map((value) => value.split(";", 1)[0])
             .join("; ");
@@ -559,7 +574,7 @@ test("Stripe actualiza las cuotas mediante webhooks firmados e idempotentes", as
         await waitForServer(baseUrl, child);
         const registration = {
             displayName: "Estudio Stripe",
-            username: "estudio-stripe",
+            username: "estudio.stripe",
             email: "stripe@example.com",
             password: "ContrasenaTemporal123",
             acceptTerms: true

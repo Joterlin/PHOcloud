@@ -67,6 +67,20 @@ label { margin: 17px 0 8px; display: block; color: #d0cbc2; font-size: 13px; }
 .label-row label { margin-bottom: 8px; }
 input { width: 100%; height: 52px; padding: 0 16px; border: 1px solid #343330; border-radius: 12px; outline: 0; background: #111; color: #f5f3ef; }
 input:focus { border-color: #c9aa70; box-shadow: 0 0 0 3px rgba(201, 170, 112, .11); }
+.username-input-shell { position: relative; }
+.username-input-shell > span {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    z-index: 1;
+    transform: translateY(-50%);
+    color: #aaa69e;
+    font-weight: 700;
+    pointer-events: none;
+}
+.username-input-shell.is-handle input { padding-left: 36px; }
+.field-help { margin: 7px 2px 0; color: #85827c; font-size: 11px; line-height: 1.45; }
+.field-help.is-invalid { color: #ff9b94; }
 .text-button { margin-bottom: 7px; border: 0; background: none; color: #a89067; font-size: 12px; cursor: pointer; }
 .primary-button, .secondary-button { width: 100%; height: 52px; min-height: 52px; padding: 0 18px; margin-top: 27px; border: 0; border-radius: 999px; background: #f4f0e8; color: #111; font-weight: 750; line-height: 1; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
 .secondary-button { margin-top: 11px; border: 1px solid #343330; background: transparent; color: #ddd8ce; }
@@ -126,6 +140,9 @@ html[data-theme="light"] input {
     background: #fff;
     color: #1d1c19;
 }
+html[data-theme="light"] .username-input-shell > span { color: #77736b; }
+html[data-theme="light"] .field-help { color: #77736b; }
+html[data-theme="light"] .field-help.is-invalid { color: #b62e27; }
 html[data-theme="light"] .primary-button { background: #22211e; color: #fff; }
 html[data-theme="light"] .secondary-button { border-color: #d1ccc3; color: #2b2925; }
 html[data-theme="light"] .terms,

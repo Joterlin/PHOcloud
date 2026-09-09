@@ -5,7 +5,9 @@
         "origins": [
           "https://phocloud-production.up.railway.app",
           "https://therealgallery.com",
-          "https://www.therealgallery.com"
+          "https://www.therealgallery.com",
+          "https://straclase.com",
+          "https://www.straclase.com"
         ],
         "methods": [
           "GET",

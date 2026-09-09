@@ -1564,12 +1564,41 @@ function isLocalRequest(req) {
         || req.ip === "::ffff:127.0.0.1";
 }
 
-function validateCredentials(username, password) {
-    if (typeof username !== "string"
-        || username.trim().length < 3
-        || username.trim().length > 80) {
-        return "El usuario debe tener entre 3 y 80 caracteres";
+const RESERVED_USERNAMES = new Set([
+    "admin", "administrator", "api", "app", "auth", "billing", "help",
+    "legal", "login", "logout", "privacy", "root", "security", "setup",
+    "straclase", "support", "system", "terms", "www"
+]);
+
+function normalizeUsername(value) {
+    return typeof value === "string"
+        ? value.trim().normalize("NFKC").replace(/^@+/, "").toLowerCase()
+        : "";
+}
+
+function validateUsername(value) {
+    const username = normalizeUsername(value);
+    if (username.length < 1 || username.length > 30) {
+        return "El nombre de usuario debe tener entre 1 y 30 caracteres";
     }
+    if (!/^[a-z0-9._]+$/.test(username)) {
+        return "El nombre de usuario solo puede contener letras, números, puntos y guiones bajos";
+    }
+    if (username.startsWith(".") || username.endsWith(".") || username.includes("..")) {
+        return "El punto no puede estar al principio, al final ni repetirse";
+    }
+    if (!/[a-z0-9]/.test(username)) {
+        return "El nombre de usuario debe contener al menos una letra o un número";
+    }
+    if (RESERVED_USERNAMES.has(username)) {
+        return "Ese nombre de usuario está reservado";
+    }
+    return null;
+}
+
+function validateCredentials(username, password) {
+    const usernameError = validateUsername(username);
+    if (usernameError) return usernameError;
 
     if (typeof password !== "string"
         || password.length < 10
@@ -2368,7 +2397,7 @@ app.post("/auth/setup", requireSameOrigin, (req, res) => {
         });
     }
 
-    const username = req.body?.username?.trim();
+    const username = normalizeUsername(req.body?.username);
     const password = req.body?.password;
     const validationError = validateCredentials(username, password);
 
@@ -2398,7 +2427,7 @@ app.post("/auth/setup", requireSameOrigin, (req, res) => {
 
 app.post("/auth/register", requireSameOrigin, limitSensitiveAction, async (req, res) => {
     const displayName = req.body?.displayName?.trim();
-    const username = req.body?.username?.trim();
+    const username = normalizeUsername(req.body?.username);
     const email = normalizeEmail(req.body?.email);
     const password = req.body?.password;
     if (req.body?.acceptTerms !== true) {
@@ -2537,8 +2566,11 @@ app.post("/auth/login", requireSameOrigin, (req, res) => {
         });
     }
 
-    const identifier = req.body?.identifier?.trim()
+    const rawIdentifier = req.body?.identifier?.trim()
         || req.body?.username?.trim();
+    const identifier = typeof rawIdentifier === "string" && rawIdentifier.startsWith("@")
+        ? normalizeUsername(rawIdentifier)
+        : rawIdentifier;
     const password = req.body?.password;
 
     if (typeof identifier !== "string" || typeof password !== "string") {

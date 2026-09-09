@@ -723,10 +723,12 @@ async function loadAccount() {
             ? usage.transferStorageBytes / usage.transferStorageLimitBytes * 100
             : 0
     );
-    byId("accountName").textContent = accountData.displayName || accountData.username;
+    byId("accountName").textContent = `@${accountData.username}`;
     byId("accountPlan").textContent = `${planLabel(accountData.plan)} · ${usage.galleryCount}/${usage.galleryLimit} galerías`;
     byId("accountDisplayName").textContent = accountData.displayName || accountData.username;
-    byId("accountEmail").textContent = accountData.email || `@${accountData.username}`;
+    byId("accountEmail").textContent = accountData.email
+        ? `@${accountData.username} · ${accountData.email}`
+        : `@${accountData.username}`;
     byId("accountAvatar").textContent = (accountData.displayName || accountData.username).slice(0, 1).toUpperCase();
     byId("accountPlanBadge").textContent = planLabel(accountData.plan).replace("Plan ", "");
     byId("galleryUsageText").textContent = `${usage.galleryCount}/${usage.galleryLimit} galerías`;
