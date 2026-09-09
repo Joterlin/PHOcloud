@@ -137,12 +137,13 @@
                             </label>
                             <label class="field" for="expiresAt">Fecha de caducidad
                                 <input id="expiresAt" type="date">
+                                <small id="createExpiryHelp">La galería dejará de estar disponible al finalizar ese día.</small>
                             </label>
                             <label class="permission-option compact"><input id="favoritesEnabled" type="checkbox" checked>
                                 <span><strong>Selección de favoritas</strong></span></label>
                             <label class="field" for="selectionLimit">Máximo de fotografías seleccionables
-                                <input id="selectionLimit" type="number" min="0" max="500" value="0">
-                                <small>Usa 0 si el cliente puede elegir sin límite.</small>
+                                <input id="selectionLimit" type="number" min="1" max="500" value="20">
+                                <small>Escribe cuántas fotografías puede elegir el cliente.</small>
                             </label>
                         </div>
                     </section>
@@ -476,13 +477,13 @@
                 </label>
                 <label class="field" for="editExpiryChoice">¿Cuánto tiempo estará disponible?
                     <select id="editExpiryChoice">
-                        <option value="">Sin fecha límite</option>
+                        <option value="" data-paid-expiry>Sin fecha límite</option>
                         <option value="7">Durante 7 días</option>
-                        <option value="30">Durante 30 días</option>
-                        <option value="90">Durante 90 días</option>
+                        <option value="30" data-paid-expiry>Durante 30 días</option>
+                        <option value="90" data-paid-expiry>Durante 90 días</option>
                         <option value="custom">Elegir una fecha</option>
                     </select>
-                    <small>Cuando caduque, el enlace dejará de mostrar la galería.</small>
+                    <small id="editExpiryHelp">Cuando caduque, el enlace dejará de mostrar la galería.</small>
                 </label>
                 <label id="editExpiresAtField" class="field" for="editExpiresAt" hidden>Fecha exacta
                     <input id="editExpiresAt" type="date">
@@ -511,12 +512,13 @@
             </div>
             <section class="selection-admin">
                 <div class="selection-admin-heading">
-                    <div><p class="edit-dialog-eyebrow">SELECCIÓN DEL CLIENTE</p><h3 id="editSelectionStatus">Abierta</h3></div>
+                    <div><p class="edit-dialog-eyebrow">FAVORITAS DEL CLIENTE</p><h3 id="editSelectionStatus">Selección abierta</h3>
+                        <span class="selection-explanation">Tu cliente podrá marcar las fotografías que quiere recibir, retocar o escoger.</span></div>
                     <button id="reopenSelection" class="secondary small-button" type="button" hidden>Reabrir selección</button>
                 </div>
-                <label class="field" for="editSelectionLimit">Máximo de fotografías seleccionables
-                    <input id="editSelectionLimit" type="number" min="0" max="500" value="0">
-                    <small>0 permite seleccionar sin límite.</small>
+                <label class="field selection-limit-field" for="editSelectionLimit">¿Cuántas fotografías puede elegir?
+                    <input id="editSelectionLimit" type="number" min="1" max="500" value="20">
+                    <small>Escribe el número exacto. Puedes cambiarlo mientras la selección esté abierta.</small>
                 </label>
                 <p id="editSelectionSummary" class="selection-admin-summary"></p>
                 <div class="selection-insights">
@@ -527,15 +529,35 @@
 
             <section class="edit-brand-section">
                 <h3>Diseño y marca de esta galería</h3>
-                <p class="section-description">Elige una presentación y muestra el nombre de tu marca, una imagen o ambos.</p>
-                <div id="editCoverPreview" class="cover-config-preview">
-                    <img id="editCoverPreviewImage" alt="Previsualización de portada">
-                    <div><small>ENTREGA FOTOGRÁFICA</small><strong id="editCoverPreviewTitle"></strong></div>
-                </div>
-                <div id="editLogoPreview" class="logo-preview" hidden>
-                    <img id="editLogoImage" alt="Imagen de marca de la galería">
-                </div>
-                <div class="options-grid">
+                <p class="section-description">Cada ajuste aparece al momento en la vista previa. Solo se publicará cuando pulses guardar.</p>
+                <div class="gallery-customizer-layout">
+                    <aside id="editGalleryLivePreview" class="gallery-live-preview" aria-label="Vista previa en tiempo real">
+                        <p class="live-preview-label"><span></span> VISTA PREVIA EN TIEMPO REAL</p>
+                        <div id="editCoverPreview" class="cover-config-preview">
+                            <img id="editCoverPreviewImage" alt="Previsualización de portada">
+                            <div class="edit-preview-topbar">
+                                <span class="edit-preview-brand">
+                                    <img id="editLiveLogo" alt="">
+                                    <span id="editLiveBrandName">The Real Gallery</span>
+                                </span>
+                                <span id="editLiveLinks" class="edit-preview-links"></span>
+                            </div>
+                            <div class="edit-preview-copy">
+                                <small>ENTREGA FOTOGRÁFICA</small>
+                                <strong id="editCoverPreviewTitle"></strong>
+                                <span id="editLiveMessage"></span>
+                            </div>
+                        </div>
+                        <div class="edit-preview-collection">
+                            <span>LA COLECCIÓN</span>
+                            <div id="editLivePhotoGrid" class="edit-live-photo-grid"></div>
+                        </div>
+                    </aside>
+                    <div class="gallery-customizer-controls">
+                    <div id="editLogoPreview" class="logo-preview logo-source-preview" hidden>
+                        <img id="editLogoImage" alt="Imagen de marca de la galería">
+                    </div>
+                    <div class="options-grid">
                     <label class="field" for="editBrandName">Nombre de tu marca (opcional)
                         <input id="editBrandName" type="text" maxlength="80" placeholder="Ej. Marta Studio">
                     </label>
@@ -605,10 +627,12 @@
                     <label class="field range-field" for="editLogoPositionY">Posición vertical
                         <input id="editLogoPositionY" type="range" min="0" max="100" value="50">
                     </label>
+                    </div>
+                    <label id="removeEditLogoLabel" class="remove-password" hidden>
+                        <input id="removeEditLogo" type="checkbox"> Quitar imagen de marca de esta galería
+                    </label>
+                    </div>
                 </div>
-                <label id="removeEditLogoLabel" class="remove-password" hidden>
-                    <input id="removeEditLogo" type="checkbox"> Quitar imagen de marca de esta galería
-                </label>
             </section>
 
             <section class="photo-manager">

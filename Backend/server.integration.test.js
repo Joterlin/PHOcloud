@@ -145,6 +145,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             .join("; ");
         const account = await jsonRequest(`${baseUrl}/account`, { cookie });
         assert.equal(account.data.account.usage.galleryLimit, 3);
+        assert.equal(account.data.account.usage.galleryLifetimeDays, 7);
         assert.equal(account.data.account.billing.enabled, false);
         const capabilities = await jsonRequest(
             `${baseUrl}/transfers/capabilities`, { cookie }
@@ -255,6 +256,23 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             `${baseUrl}/deliveries/${uploadData.galleryId}`,
             { cookie }
         );
+        assert.equal(detail.data.policy.galleryLifetimeDays, 7);
+        const defaultLifetime = Date.parse(detail.data.delivery.expiresAt) - Date.now();
+        assert.ok(defaultLifetime > 6 * 24 * 60 * 60 * 1000);
+        assert.ok(defaultLifetime < 8 * 24 * 60 * 60 * 1000);
+        const overlongExpiry = await jsonRequest(
+            `${baseUrl}/deliveries/${uploadData.galleryId}`,
+            {
+                method: "PUT",
+                cookie,
+                body: {
+                    ...detail.data.delivery,
+                    expiresAt: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString()
+                }
+            }
+        );
+        assert.equal(overlongExpiry.response.status, 400);
+        assert.match(overlongExpiry.data.error, /hasta 7 días/);
         const visible = await jsonRequest(
             `${baseUrl}/deliveries/${uploadData.galleryId}`,
             {

@@ -56,6 +56,7 @@ let pendingDeletion = null;
 let deletionInProgress = false;
 let accountData = null;
 let resultHideTimer = null;
+let transferResultHideTimer = null;
 let selectedTransferFiles = [];
 let currentTransferLink = "";
 let transferCapabilities = {
@@ -162,6 +163,53 @@ function updateExpiryChoice() {
 
 byId("editExpiryChoice").addEventListener("change", updateExpiryChoice);
 byId("editExpiresAt").min = dateDaysFromNow(1);
+
+function galleryLifetimeDays() {
+    const days = Number(accountData?.usage?.galleryLifetimeDays);
+    return Number.isFinite(days) && days > 0 ? days : null;
+}
+
+function applyGalleryExpiryPolicy() {
+    const maxDays = galleryLifetimeDays();
+    const createInput = byId("expiresAt");
+    const editInput = byId("editExpiresAt");
+    const maximumDate = maxDays ? dateDaysFromNow(maxDays) : "";
+    createInput.min = dateDaysFromNow(1);
+    createInput.max = maximumDate;
+    editInput.max = maximumDate;
+    for (const option of byId("editExpiryChoice").querySelectorAll("[data-paid-expiry]")) {
+        option.hidden = Boolean(maxDays);
+        option.disabled = Boolean(maxDays);
+    }
+    if (maxDays) {
+        if (!createInput.value || createInput.value > maximumDate) createInput.value = maximumDate;
+        byId("createExpiryHelp").textContent = `El plan gratuito mantiene cada galería un máximo de ${maxDays} días.`;
+        byId("editExpiryHelp").textContent = `En el plan gratuito la galería puede estar disponible un máximo de ${maxDays} días.`;
+        const choice = byId("editExpiryChoice");
+        if (!choice.value || Number(choice.value) > maxDays) choice.value = String(maxDays);
+        if (!editInput.value || editInput.value > maximumDate) editInput.value = maximumDate;
+        updateExpiryChoice();
+    } else {
+        byId("createExpiryHelp").textContent = "La galería dejará de estar disponible al finalizar ese día.";
+        byId("editExpiryHelp").textContent = "Cuando caduque, el enlace dejará de mostrar la galería.";
+    }
+}
+
+function syncSelectionLimit(checkboxId, inputId) {
+    const enabled = byId(checkboxId).checked;
+    const input = byId(inputId);
+    input.disabled = !enabled;
+    input.required = enabled;
+    input.closest("label")?.classList.toggle("is-disabled", !enabled);
+}
+
+for (const [checkboxId, inputId] of [
+    ["favoritesEnabled", "selectionLimit"],
+    ["editFavoritesEnabled", "editSelectionLimit"]
+]) {
+    byId(checkboxId).addEventListener("change", () => syncSelectionLimit(checkboxId, inputId));
+    syncSelectionLimit(checkboxId, inputId);
+}
 
 function formatDate(value) {
     const date = new Date(value);
@@ -298,7 +346,9 @@ function appendDeliverySettings(formData) {
     formData.append("allowOriginalDownload", byId("allowOriginalDownload").checked);
     formData.append("allowWebDownload", byId("allowWebDownload").checked);
     formData.append("favoritesEnabled", byId("favoritesEnabled").checked);
-    formData.append("selectionLimit", byId("selectionLimit").value || "0");
+    formData.append("selectionLimit", byId("favoritesEnabled").checked
+        ? byId("selectionLimit").value
+        : "0");
 }
 
 function linkList(prefix = "") {
@@ -345,7 +395,10 @@ function addLinkRow(prefix = "", link = {}) {
 
     const actions = document.createElement("div");
     actions.className = "link-actions";
-    const remove = actionButton("×", "remove-link", () => row.remove());
+    const remove = actionButton("×", "remove-link", () => {
+        row.remove();
+        if (prefix === "edit") updateEditGalleryPreview();
+    });
     remove.title = "Eliminar enlace";
     remove.setAttribute("aria-label", "Eliminar enlace");
     actions.append(remove);
@@ -367,9 +420,13 @@ function addLinkRow(prefix = "", link = {}) {
         const after = event.clientY > row.getBoundingClientRect().top
             + row.getBoundingClientRect().height / 2;
         container.insertBefore(dragging, after ? row.nextSibling : row);
+        if (prefix === "edit") updateEditGalleryPreview();
     });
 
+    if (prefix === "edit") row.addEventListener("input", updateEditGalleryPreview);
+
     container.appendChild(row);
+    if (prefix === "edit") updateEditGalleryPreview();
     label.focus();
 }
 
@@ -448,6 +505,7 @@ function updateLogoPreview(prefix = "") {
     const y = Number(elements.positionY.value) || 50;
     const scale = Number(elements.scale.value) || 100;
     elements.image.style.transform = `translate(${(x - 50) * .35}%, ${(y - 50) * .35}%) scale(${scale / 100})`;
+    if (prefix === "edit") updateEditGalleryPreview();
 }
 
 function previewSelectedLogo(prefix, file) {
@@ -489,6 +547,12 @@ async function createDelivery() {
     if (!selectedFiles.length) {
         showError("Selecciona fotografías");
         uploadButton.focus();
+        return;
+    }
+    if (byId("favoritesEnabled").checked && !byId("selectionLimit").checkValidity()) {
+        showError("Escribe cuántas fotografías puede seleccionar el cliente (entre 1 y 500)");
+        showBuilderPanel("access", true);
+        byId("selectionLimit").focus();
         return;
     }
 
@@ -717,6 +781,7 @@ async function loadAccount() {
         : "";
     const viewingControl = byId("viewingEnabled");
     viewingControl.disabled = false;
+    applyGalleryExpiryPolicy();
 }
 
 accountButton.addEventListener("click", () => accountDialog.showModal());
@@ -965,6 +1030,7 @@ function fillEditForm() {
     byId("editExpiresAt").value = isoToDateInput(delivery.expiresAt);
     byId("editExpiryChoice").value = delivery.expiresAt ? "custom" : "";
     updateExpiryChoice();
+    applyGalleryExpiryPolicy();
     byId("editPassword").value = "";
     byId("removePassword").checked = false;
     byId("removePasswordLabel").hidden = !delivery.hasPassword;
@@ -972,7 +1038,9 @@ function fillEditForm() {
     byId("editAllowOriginalDownload").checked = delivery.allowOriginalDownload;
     byId("editAllowWebDownload").checked = delivery.allowWebDownload;
     byId("editFavoritesEnabled").checked = delivery.favoritesEnabled;
-    byId("editSelectionLimit").value = delivery.selection?.selectionLimit || 0;
+    byId("editSelectionLimit").value = delivery.selection?.selectionLimit
+        || Math.max(1, Math.min(500, delivery.files?.length || 20));
+    syncSelectionLimit("editFavoritesEnabled", "editSelectionLimit");
     byId("editBrandName").value = delivery.brandName || "";
     byId("editAccentColor").value = delivery.accentColor || "#c9aa70";
     byId("editBackgroundColor").value = delivery.backgroundColor || "#ffffff";
@@ -988,13 +1056,17 @@ function fillEditForm() {
     byId("editLogoScale").value = delivery.logoScale ?? 100;
     byId("editLogoPositionX").value = delivery.logoPositionX ?? 50;
     byId("editLogoPositionY").value = delivery.logoPositionY ?? 50;
-    updateEditCoverPreview();
     byId("editLogo").value = "";
     byId("removeEditLogo").checked = false;
     byId("removeEditLogoLabel").hidden = !delivery.hasLogo;
     byId("editLogoPreview").hidden = !delivery.hasLogo;
-    if (delivery.logoUrl) byId("editLogoImage").src = `${delivery.logoUrl}?v=${Date.now()}`;
+    if (delivery.logoUrl) {
+        byId("editLogoImage").src = `${delivery.logoUrl}?v=${Date.now()}`;
+    } else {
+        byId("editLogoImage").removeAttribute("src");
+    }
     updateLogoPreview("edit");
+    updateEditGalleryPreview();
     renderSelectionAdmin();
     renderSections();
 }
@@ -1112,23 +1184,95 @@ async function deleteSection(sectionId) {
     }
 }
 
-function updateEditCoverPreview() {
+function colorTone(hex) {
+    const value = String(hex || "").replace("#", "");
+    if (!/^[0-9a-f]{6}$/i.test(value)) return "dark";
+    const [red, green, blue] = [0, 2, 4]
+        .map((offset) => parseInt(value.slice(offset, offset + 2), 16));
+    return (red * 299 + green * 587 + blue * 114) / 1000 > 155 ? "light" : "dark";
+}
+
+function renderEditLivePhotos() {
+    const container = byId("editLivePhotoGrid");
+    if (!currentEditDelivery || !container) return;
+    container.replaceChildren();
+    const files = (currentEditDelivery.files || []).slice(0, 6);
+    for (const filename of files) {
+        if (currentEditDelivery.mediaTypes?.[filename] === "video") {
+            const video = document.createElement("span");
+            video.className = "edit-live-video";
+            video.textContent = "▶ Vídeo";
+            container.appendChild(video);
+            continue;
+        }
+        const image = document.createElement("img");
+        image.alt = "";
+        image.src = `/gallery/${encodeURIComponent(currentEditDelivery.id)}/previews/${encodeURIComponent(filename)}`;
+        container.appendChild(image);
+    }
+}
+
+function updateEditGalleryPreview() {
     if (!currentEditDelivery) return;
+    const preview = byId("editGalleryLivePreview");
     const image = byId("editCoverPreviewImage");
     const cover = currentEditDelivery.coverFilename
         || currentEditDelivery.files?.find((filename) => currentEditDelivery.mediaTypes?.[filename] !== "video");
+    const background = byId("editBackgroundColor").value || "#ffffff";
+    const accent = byId("editAccentColor").value || "#c9aa70";
+    preview.style.setProperty("--preview-bg", background);
+    preview.style.setProperty("--preview-accent", accent);
+    preview.dataset.tone = colorTone(background);
+    preview.dataset.galleryStyle = document.querySelector(
+        'input[name="editGalleryStyle"]:checked'
+    )?.value || "masonry";
+    preview.dataset.coverStyle = byId("editCoverStyle").value;
     byId("editCoverPreview").dataset.style = byId("editCoverStyle").value;
     byId("editCoverPreviewTitle").textContent = byId("editClientName").value
         || currentEditDelivery.clientName;
+    byId("editLiveMessage").textContent = byId("editMessage").value.trim();
     image.hidden = !cover || byId("editCoverStyle").value === "none";
     if (cover) {
         image.src = `/gallery/${encodeURIComponent(currentEditDelivery.id)}/previews/${encodeURIComponent(cover)}`;
         image.style.objectPosition = `${byId("editCoverPositionX").value}% ${byId("editCoverPositionY").value}%`;
     }
+
+    const sourceLogo = byId("editLogoImage");
+    const liveLogo = byId("editLiveLogo");
+    const hasLogo = Boolean(sourceLogo.getAttribute("src")) && !byId("removeEditLogo").checked;
+    liveLogo.hidden = !hasLogo;
+    if (hasLogo) {
+        liveLogo.src = sourceLogo.src;
+        liveLogo.style.transform = sourceLogo.style.transform;
+    } else {
+        liveLogo.removeAttribute("src");
+    }
+    const brandName = byId("editBrandName").value.trim();
+    const brandText = byId("editLiveBrandName");
+    brandText.textContent = brandName || (hasLogo ? "" : "The Real Gallery");
+    brandText.hidden = !brandText.textContent;
+
+    const links = [...byId("editLinksList").querySelectorAll(".link-row")]
+        .map((row) => row.querySelector(".link-label")?.value.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+    byId("editLiveLinks").textContent = links.join("   ·   ");
+    renderEditLivePhotos();
 }
 
-for (const id of ["editCoverStyle", "editCoverPositionX", "editCoverPositionY", "editClientName"]) {
-    byId(id).addEventListener("input", updateEditCoverPreview);
+function updateEditCoverPreview() {
+    updateEditGalleryPreview();
+}
+
+for (const id of [
+    "editCoverStyle", "editCoverPositionX", "editCoverPositionY",
+    "editClientName", "editMessage", "editBrandName", "editAccentColor",
+    "editBackgroundColor", "removeEditLogo"
+]) {
+    byId(id).addEventListener("input", updateEditGalleryPreview);
+}
+for (const option of document.querySelectorAll('input[name="editGalleryStyle"]')) {
+    option.addEventListener("change", updateEditGalleryPreview);
 }
 
 function renderEditPhotos() {
@@ -1189,6 +1333,7 @@ function renderEditPhotos() {
         item.append(remove, sectionSelect);
         container.appendChild(item);
     }
+    renderEditLivePhotos();
 }
 
 async function assignPhotoSection(filename, select) {
@@ -1255,6 +1400,7 @@ byId("addPhotosInput").addEventListener("change", async () => {
         currentEditDelivery.files = data.files;
         currentEditDelivery.mediaTypes = data.mediaTypes || {};
         renderEditPhotos();
+        updateEditGalleryPreview();
         await loadDeliveries();
         await loadAccount();
     } catch (error) {
@@ -1277,6 +1423,15 @@ editDeliveryForm.addEventListener("submit", async (event) => {
     saveDeliveryButton.disabled = true;
     editDialogError.hidden = true;
 
+    if (byId("editFavoritesEnabled").checked
+        && !byId("editSelectionLimit").checkValidity()) {
+        editDialogError.textContent = "Escribe cuántas fotografías puede seleccionar el cliente (entre 1 y 500).";
+        editDialogError.hidden = false;
+        byId("editSelectionLimit").focus();
+        saveDeliveryButton.disabled = false;
+        return;
+    }
+
     const settings = {
         clientName: byId("editClientName").value.trim(),
         clientEmail: byId("editClientEmail").value.trim(),
@@ -1288,7 +1443,9 @@ editDeliveryForm.addEventListener("submit", async (event) => {
         allowOriginalDownload: byId("editAllowOriginalDownload").checked,
         allowWebDownload: byId("editAllowWebDownload").checked,
         favoritesEnabled: byId("editFavoritesEnabled").checked,
-        selectionLimit: byId("editSelectionLimit").value || 0,
+        selectionLimit: byId("editFavoritesEnabled").checked
+            ? byId("editSelectionLimit").value
+            : 0,
         galleryStyle: document.querySelector(
             'input[name="editGalleryStyle"]:checked'
         )?.value || "masonry",
@@ -1615,6 +1772,10 @@ byId("createTransfer").addEventListener("click", async () => {
         byId("transferLinkInput").value = data.link;
         byId("transferResultSummary").textContent = `${data.fileCount} archivo${data.fileCount === 1 ? "" : "s"} · ${formatBytes(data.totalBytes)}`;
         byId("transferResult").hidden = false;
+        clearTimeout(transferResultHideTimer);
+        transferResultHideTimer = setTimeout(() => {
+            byId("transferResult").hidden = true;
+        }, 8000);
         selectedTransferFiles = [];
         renderTransferSelection();
         for (const id of ["transferTitle", "transferRecipient", "transferMessage", "transferPassword"]) byId(id).value = "";

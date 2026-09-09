@@ -88,16 +88,19 @@ const RESET_TOKEN_DURATION_MS = 30 * 60 * 1000;
 const PLAN_LIMITS = {
     free: {
         galleries: 3,
+        galleryLifetimeDays: 7,
         storageBytes: economicConfig.plans.free.galleryStorageBytes,
         transferStorageBytes: economicConfig.plans.free.transferStorageBytes
     },
     professional: {
         galleries: 25,
+        galleryLifetimeDays: null,
         storageBytes: economicConfig.plans.professional.galleryStorageBytes,
         transferStorageBytes: economicConfig.plans.professional.transferStorageBytes
     },
     studio: {
         galleries: 100,
+        galleryLifetimeDays: null,
         storageBytes: economicConfig.plans.studio.galleryStorageBytes,
         transferStorageBytes: economicConfig.plans.studio.transferStorageBytes
     }
@@ -881,12 +884,23 @@ function validateBrandSettings(input) {
     };
 }
 
-function validateDeliverySettings(input) {
+function maximumGalleryExpiry(days, now = Date.now()) {
+    const maximum = new Date(now);
+    maximum.setUTCDate(maximum.getUTCDate() + Number(days));
+    maximum.setUTCHours(23, 59, 59, 999);
+    return maximum;
+}
+
+function validateDeliverySettings(input, options = {}) {
     const clientName = input.clientName?.trim();
     const clientEmail = normalizeEmail(input.clientEmail);
     const message = input.message?.trim() || "";
     const password = input.password || "";
     let expiresAt = input.expiresAt || null;
+    const now = Number(options.now) || Date.now();
+    const maxExpiryDays = Number(options.maxExpiryDays) > 0
+        ? Number(options.maxExpiryDays)
+        : null;
 
     if (!clientName) return { error: "El nombre del cliente es obligatorio" };
     if (clientName.length > 80) {
@@ -903,10 +917,15 @@ function validateDeliverySettings(input) {
     }
     if (expiresAt) {
         const timestamp = Date.parse(expiresAt);
-        if (Number.isNaN(timestamp) || timestamp <= Date.now()) {
+        if (Number.isNaN(timestamp) || timestamp <= now) {
             return { error: "La fecha de caducidad debe estar en el futuro" };
         }
+        if (maxExpiryDays && timestamp > maximumGalleryExpiry(maxExpiryDays, now).getTime()) {
+            return { error: `El plan gratuito permite galerías de hasta ${maxExpiryDays} días` };
+        }
         expiresAt = new Date(timestamp).toISOString();
+    } else if (maxExpiryDays) {
+        expiresAt = maximumGalleryExpiry(maxExpiryDays, now).toISOString();
     }
 
     const brandValidation = validateBrandSettings(input);
@@ -1032,6 +1051,7 @@ function accountUsage(userId, plan = "free", planStatus = "active") {
         ),
         transferStorageLimitBytes: limits.transferStorageBytes,
         transferMaxBytes: economicLimits.transferMaxBytes,
+        galleryLifetimeDays: limits.galleryLifetimeDays,
         monthlyUploadBytes: Number(economicUsage.counters.uploaded_bytes || 0),
         monthlyReservedUploadBytes: Number(
             economicUsage.counters.reserved_upload_bytes || 0
@@ -2845,7 +2865,15 @@ app.get("/deliveries/:folderId", requireAuth, (req, res) => {
         return res.status(404).json({ error: "Entrega no encontrada" });
     }
 
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
+    const plan = effectivePlan(account?.plan || "free", account?.planStatus);
     res.json({
+        policy: {
+            plan,
+            galleryLifetimeDays: planLimits(plan).galleryLifetimeDays
+        },
         delivery: {
             ...delivery,
             selection: deliveryStore.getSelectionSettings(delivery.id),
@@ -2944,7 +2972,13 @@ app.put("/deliveries/:folderId", requireAuth, requireSameOrigin, (req, res) => {
         return res.status(404).json({ error: "Entrega no encontrada" });
     }
 
-    const validation = validateDeliverySettings(req.body || {});
+    const account = userForCurrentBillingEnvironment(
+        deliveryStore.getUserById(req.auth.userId)
+    );
+    const plan = effectivePlan(account?.plan || "free", account?.planStatus);
+    const validation = validateDeliverySettings(req.body || {}, {
+        maxExpiryDays: planLimits(plan).galleryLifetimeDays
+    });
     if (validation.error) {
         return res.status(400).json({ error: validation.error });
     }
@@ -3378,6 +3412,8 @@ app.post("/upload", requireAuth, requireSameOrigin, limitSensitiveAction, (req, 
         const validation = validateDeliverySettings({
             ...profile,
             ...req.body
+        }, {
+            maxExpiryDays: planLimits(plan).galleryLifetimeDays
         });
         if (validation.error) {
             fs.rmSync(folderPath, { recursive: true, force: true });
