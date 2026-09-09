@@ -8,8 +8,26 @@ const path = require("node:path");
 const { Readable } = require("node:stream");
 const {
     createGalleryStorage,
-    createObjectStorage
+    createObjectStorage,
+    r2RequestOrigins
 } = require("./object-storage");
+
+test("incluye el origen virtual que usan las URLs firmadas de R2", () => {
+    assert.deepEqual(
+        r2RequestOrigins(
+            "https://cuenta.r2.cloudflarestorage.com",
+            "media-deliveries-production"
+        ),
+        [
+            "https://cuenta.r2.cloudflarestorage.com",
+            "https://media-deliveries-production.cuenta.r2.cloudflarestorage.com"
+        ]
+    );
+    assert.deepEqual(
+        r2RequestOrigins("http://127.0.0.1:9000", "bucket"),
+        ["http://127.0.0.1:9000"]
+    );
+});
 
 async function requestBody(req) {
     const chunks = [];
@@ -143,6 +161,7 @@ test("crea, completa, descarga y elimina una subida multipart compatible con R2"
     try {
         assert.equal(await storage.healthcheck(), true);
         assert.equal(storage.bucket, "phocloud-transfers");
+        assert.deepEqual(storage.requestOrigins, [endpoint]);
 
         const started = await storage.startMultipart({
             transferId: "00000000-0000-4000-8000-000000000020",

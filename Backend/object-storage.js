@@ -17,6 +17,19 @@ const DEFAULT_PART_SIZE = 64 * 1024 * 1024;
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
 
+function r2RequestOrigins(endpoint, bucket) {
+    const endpointUrl = new URL(endpoint);
+    const origins = [endpointUrl.origin];
+    const suffix = ".r2.cloudflarestorage.com";
+    if (bucket && endpointUrl.hostname.endsWith(suffix)
+        && !endpointUrl.hostname.startsWith(`${bucket}.`)) {
+        const bucketUrl = new URL(endpointUrl.origin);
+        bucketUrl.hostname = `${bucket}.${endpointUrl.hostname}`;
+        origins.push(bucketUrl.origin);
+    }
+    return [...new Set(origins)];
+}
+
 function deleteObjectKeys(client, bucket, keys) {
     return Promise.all(
         Array.from({ length: Math.ceil(keys.length / 1000) }, (_, index) => {
@@ -41,6 +54,7 @@ function createObjectStorage(env = process.env) {
         return {
             enabled: false,
             provider: "local",
+            requestOrigins: [],
             partSize: DEFAULT_PART_SIZE,
             healthcheck: async () => true
         };
@@ -68,6 +82,7 @@ function createObjectStorage(env = process.env) {
         requestChecksumCalculation: "WHEN_REQUIRED",
         credentials: { accessKeyId, secretAccessKey }
     });
+    const requestOrigins = r2RequestOrigins(endpoint, bucket);
 
     function createKey(transferId, fileId) {
         return `transfers/${transferId}/${fileId}`;
@@ -192,7 +207,8 @@ function createObjectStorage(env = process.env) {
         enabled: true,
         provider: "r2",
         bucket,
-        endpointOrigin: new URL(endpoint).origin,
+        endpointOrigin: requestOrigins[0],
+        requestOrigins,
         partSize: DEFAULT_PART_SIZE,
         startMultipart,
         zipKey,
@@ -214,6 +230,7 @@ function createGalleryStorage(env = process.env) {
         return {
             enabled: false,
             provider: "local",
+            requestOrigins: [],
             healthcheck: async () => true
         };
     }
@@ -240,6 +257,7 @@ function createGalleryStorage(env = process.env) {
         requestChecksumCalculation: "WHEN_REQUIRED",
         credentials: { accessKeyId, secretAccessKey }
     });
+    const requestOrigins = r2RequestOrigins(endpoint, bucket);
 
     function objectKey(deliveryId, filename) {
         return `galleries/${deliveryId}/originals/${filename}`;
@@ -280,7 +298,8 @@ function createGalleryStorage(env = process.env) {
         enabled: true,
         provider: "r2",
         bucket,
-        endpointOrigin: new URL(endpoint).origin,
+        endpointOrigin: requestOrigins[0],
+        requestOrigins,
         objectKey,
         uploadFile,
         inlineUrl: (key, filename) => signedUrl(key, filename, false),
@@ -294,5 +313,6 @@ function createGalleryStorage(env = process.env) {
 module.exports = {
     createObjectStorage,
     createGalleryStorage,
+    r2RequestOrigins,
     DEFAULT_PART_SIZE
 };

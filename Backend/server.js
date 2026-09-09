@@ -237,8 +237,8 @@ app.use((req, res, next) => {
     const requestId = req.get("X-Request-ID") || uuidv4();
     req.requestId = requestId;
     const storageOrigins = [...new Set([
-        objectStorage.enabled ? objectStorage.endpointOrigin : "",
-        galleryStorage.enabled ? galleryStorage.endpointOrigin : ""
+        ...(objectStorage.requestOrigins || []),
+        ...(galleryStorage.requestOrigins || [])
     ].filter(Boolean))].map((origin) => ` ${origin}`).join("");
     res.set({
         "Content-Security-Policy": `default-src 'self'; img-src 'self' data: blob:${storageOrigins}; media-src 'self' blob:${storageOrigins}; style-src 'self'; script-src 'self'; connect-src 'self'${storageOrigins}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
