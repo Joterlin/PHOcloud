@@ -5340,7 +5340,7 @@ app.get("/s/:folderId", (req, res) => {
 app.use((req, res) => {
     if (req.accepts("html")) {
         return res.status(404).type("html").send(
-            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><meta name=\"theme-color\" content=\"#171715\"><title>No encontrado · Straclase</title><link rel=\"icon\" href=\"/assets/favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/legal.css\"></head><body><article><h1>Página no encontrada</h1><p>No hemos encontrado la dirección que buscas.</p><a href=\"/\">Volver a Straclase</a></article></body></html>"
+            "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><meta name=\"theme-color\" content=\"#171715\"><title>No encontrado · Straclase</title><link rel=\"icon\" href=\"/assets/straclase-favicon.svg\" type=\"image/svg+xml\"><link rel=\"stylesheet\" href=\"/legal.css?v=20260910-1\"></head><body><article><h1>Página no encontrada</h1><p>No hemos encontrado la dirección que buscas.</p><a href=\"/\">Volver a Straclase</a></article></body></html>"
         );
     }
     res.status(404).json({ error: "Ruta no encontrada" });

@@ -16,6 +16,25 @@ body {
         #090909;
 }
 
+.app-wordmark {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #f5f3ef;
+    font: 23px Georgia, serif;
+    letter-spacing: -.035em;
+    text-decoration: none;
+}
+.app-wordmark img {
+    width: 66px;
+    height: 31px;
+    object-fit: contain;
+    filter: invert(1) brightness(1.2);
+}
+
 main {
     width: min(96%, 1280px);
     margin: 0 auto;
@@ -764,6 +783,8 @@ input:focus, textarea:focus, select:focus { border-color: #756443; }
     font-size: 11px;
 }
 .panel-footer span { margin-right: auto; letter-spacing: .12em; }
+.panel-footer .footer-wordmark { display: inline-flex; align-items: center; gap: 8px; letter-spacing: .05em; }
+.footer-wordmark img { width: 42px; height: 20px; object-fit: contain; opacity: .7; filter: invert(1); }
 .panel-footer a { color: inherit; }
 
 dialog {
@@ -903,6 +924,9 @@ html[data-theme="light"] .style-picker legend { color: #37332d; }
 html[data-theme="light"] .panel-footer,
 html[data-theme="light"] #deliveriesPanel,
 html[data-theme="light"] #transfersPanel { border-color: #ded9d0; color: #69655e; }
+html[data-theme="light"] .app-wordmark { color: #24221e; }
+html[data-theme="light"] .app-wordmark img,
+html[data-theme="light"] .footer-wordmark img { filter: none; }
 
 #deleteDialog { width: min(92%, 480px); }
 #editDialog { width: min(96%, 1240px); }
@@ -1088,8 +1112,9 @@ html[data-theme="light"] #transfersPanel { border-color: #ded9d0; color: #69655e
 }
 
 @media (max-width: 760px) {
-    main { width: 100%; padding: 85px 15px 70px; }
-    .top-actions { left: 15px; right: 15px; justify-content: center; }
+    main { width: 100%; padding: 132px 15px 70px; }
+    .app-wordmark { top: 20px; left: 50%; transform: translateX(-50%); }
+    .top-actions { top: 68px; left: 15px; right: 15px; justify-content: center; }
     .options-grid { grid-template-columns: 1fr; }
     .transfer-form-grid { grid-template-columns: 1fr; }
     .delivery-builder { display: block; min-height: 0; }

@@ -8,7 +8,7 @@
   "theme_color": "#171715",
   "icons": [
     {
-      "src": "/assets/favicon.svg",
+      "src": "/assets/straclase-favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

@@ -44,7 +44,8 @@ body { min-height: 100vh; margin: 0; background: #090909; }
         #12110f;
 }
 
-.wordmark { width: fit-content; color: inherit; font: 32px Georgia, serif; letter-spacing: -.05em; text-decoration: none; }
+.wordmark { width: fit-content; display: inline-flex; align-items: center; gap: 13px; color: inherit; font: 32px Georgia, serif; letter-spacing: -.05em; text-decoration: none; }
+.wordmark img { width: 88px; height: 41px; object-fit: contain; filter: invert(1) brightness(1.2); }
 .eyebrow { margin: 0 0 15px; color: #c9aa70; font-size: 11px; font-weight: 800; letter-spacing: .2em; }
 .auth-story h1 { max-width: 680px; margin: 0; font: 400 clamp(52px, 6vw, 92px)/.98 Georgia, serif; letter-spacing: -.055em; }
 .auth-story p:not(.eyebrow) { max-width: 520px; color: #aaa69e; font-size: 18px; line-height: 1.6; }
@@ -159,6 +160,7 @@ html[data-theme="light"] .theme-toggle {
     color: #292722;
     box-shadow: 0 8px 28px rgba(53, 48, 39, .08);
 }
+html[data-theme="light"] .wordmark img { filter: none; }
 
 @media (max-width: 850px) {
     .auth-shell { display: block; }

@@ -6,6 +6,7 @@ const clientName = document.getElementById("clientName");
 const galleryMessage = document.getElementById("galleryMessage");
 const brandLink = document.getElementById("brandLink");
 const brandLogo = document.getElementById("brandLogo");
+const systemBrandLogo = document.getElementById("systemBrandLogo");
 const brandText = document.getElementById("brandText");
 const coverHero = document.getElementById("coverHero");
 const coverImage = document.getElementById("coverImage");
@@ -200,6 +201,11 @@ function applyBrand(data) {
         "--cover-y", `${data.coverPositionY ?? 50}%`
     );
     const brandName = data.brandName?.trim() || "";
+    const usesSystemBrand = !data.logoUrl && (!brandName || brandName.toLowerCase() === "straclase");
+    systemBrandLogo.hidden = !usesSystemBrand;
+    systemBrandLogo.style.filter = hasCover || tone === "dark"
+        ? "invert(1) brightness(1.2)"
+        : "none";
     brandText.textContent = brandName || (data.logoUrl ? "" : "Straclase");
     brandText.hidden = Boolean(data.logoUrl && !brandName);
     footerBrand.textContent = brandName || "Straclase";

@@ -65,7 +65,11 @@ function renderTransfer(data) {
     const light = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 > 150;
     document.documentElement.style.setProperty("--text", light ? "#171717" : "#f5f3ef");
     document.documentElement.style.colorScheme = light ? "light" : "dark";
-    byId("transferBrand").textContent = data.brandName || "Straclase";
+    const brandName = data.brandName?.trim() || "";
+    const usesSystemBrand = !data.logoUrl && (!brandName || brandName.toLowerCase() === "straclase");
+    byId("transferSystemLogo").hidden = !usesSystemBrand;
+    byId("transferSystemLogo").style.filter = light ? "none" : "invert(1) brightness(1.2)";
+    byId("transferBrand").textContent = brandName || "Straclase";
     byId("transferLogo").hidden = !data.logoUrl;
     byId("transferBrand").hidden = Boolean(data.logoUrl);
     if (data.logoUrl) byId("transferLogo").src = data.logoUrl;

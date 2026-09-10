@@ -12,6 +12,7 @@ button, input { font: inherit; }
 :where(a, button, input):focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 72%, white); outline-offset: 3px; }
 .transfer-brand { min-height: 92px; padding: 22px clamp(20px, 5vw, 70px); display: flex; align-items: center; gap: 13px; }
 .transfer-brand img { width: 150px; height: 54px; object-fit: contain; object-position: left center; }
+.transfer-brand .system-logo { width: 76px; height: 35px; transition: filter .2s ease; }
 .transfer-brand span { font: 26px Georgia, serif; letter-spacing: -.04em; }
 main { width: min(100% - 28px, 980px); margin: auto; padding: 35px 0 80px; }
 .transfer-card { padding: clamp(28px, 6vw, 66px); border: 1px solid color-mix(in srgb, var(--text) 13%, transparent); border-radius: 30px; background: color-mix(in srgb, var(--text) 3%, transparent); box-shadow: 0 28px 80px color-mix(in srgb, var(--text) 10%, transparent); }

@@ -35,8 +35,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .cover-topbar { width: 100%; padding: clamp(22px, 4vw, 54px) clamp(20px, 5vw, 76px); position: absolute; top: 0; left: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 30px; }
 .brand { color: inherit; text-decoration: none; }
 .brand-plate { min-height: 54px; display: inline-flex; align-items: center; gap: 14px; }
-.brand:has(img:not([hidden])) .brand-plate { max-width: min(360px, 72vw); min-height: 72px; }
+.brand:has(#brandLogo:not([hidden])) .brand-plate { max-width: min(360px, 72vw); min-height: 72px; }
 .brand img { width: auto; max-width: 190px; height: 64px; display: block; object-fit: contain; transform-origin: center; transition: transform .25s ease; }
+.brand .system-brand-logo { width: 78px; height: 36px; object-fit: contain; transition: filter .2s ease; }
 #brandText { font: 27px Georgia, serif; letter-spacing: -.04em; text-shadow: 0 2px 18px rgba(0,0,0,.28); }
 .cover-copy { width: min(900px, calc(100% - 40px)); margin: 0 0 clamp(105px, 13vh, 150px) clamp(20px, 7vw, 110px); animation: copyReveal .9s .2s both; }
 body[data-has-cover="true"] .cover-copy { color: #fff; }
@@ -184,8 +185,9 @@ footer p { margin: 5px 0; }
     .gallery-header { min-height: max(630px, 100svh); }
     .cover-topbar { padding: 18px; }
     .brand-plate { min-height: 46px; gap: 9px; }
-    .brand:has(img:not([hidden])) .brand-plate { max-width: min(240px, 62vw); min-height: 58px; }
+    .brand:has(#brandLogo:not([hidden])) .brand-plate { max-width: min(240px, 62vw); min-height: 58px; }
     .brand img { max-width: 125px; height: 48px; }
+    .brand .system-brand-logo { width: 62px; height: 29px; }
     #brandText { font-size: 21px; }
     .social-links { max-width: 56%; flex-wrap: nowrap; justify-content: flex-start; gap: 13px; overflow-x: auto; scrollbar-width: none; }
     .social-links::-webkit-scrollbar { display: none; }

@@ -93,3 +93,29 @@ test("el registro y el acceso usan únicamente el correo electrónico", () => {
     assert.match(loginCss, /@media \(min-width: 851px\)[\s\S]*#authError,[\s\S]*#authSuccess[\s\S]*position: fixed/);
     assert.doesNotMatch(dashboardScript, /accountData\.username/);
 });
+
+test("la identidad Straclase usa la figura desplazada sin invadir marcas de clientes", () => {
+    const pages = [
+        "Frontend/index.html",
+        "Frontend/login.html",
+        "public/send.html",
+        "public/gallery.html",
+        "public/transfer.html",
+        "public/privacy.html",
+        "public/terms.html"
+    ];
+    for (const page of pages) {
+        const html = read(page);
+        assert.match(html, /\/assets\/straclase-favicon\.svg/);
+        assert.match(html, /\/assets\/straclase-mark\.png/);
+    }
+    const favicon = read("public/assets/straclase-favicon.svg");
+    assert.match(favicon, /M44 24l7-7 7 7-7 7z/);
+    assert.equal(fs.statSync(path.join(root, "public/assets/straclase-mark.png")).size > 0, true);
+    const galleryScript = read("public/gallery.js");
+    const transferScript = read("public/transfer.js");
+    assert.match(galleryScript, /usesSystemBrand = !data\.logoUrl/);
+    assert.match(galleryScript, /systemBrandLogo\.hidden = !usesSystemBrand/);
+    assert.match(transferScript, /usesSystemBrand = !data\.logoUrl/);
+    assert.match(transferScript, /transferSystemLogo"\)\.hidden = !usesSystemBrand/);
+});
