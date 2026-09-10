@@ -41,16 +41,26 @@ function clearNotices() {
     devLink.hidden = true;
 }
 
+function revealNotice(element) {
+    window.requestAnimationFrame(() => {
+        element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+}
+
 function showError(message) {
+    authSuccess.hidden = true;
     authError.textContent = message;
     authError.hidden = false;
+    revealNotice(authError);
 }
 
 function showSuccess(message, link = null) {
+    authError.hidden = true;
     authSuccessText.textContent = message;
     authSuccess.hidden = false;
     devLink.hidden = !link;
     if (link) devLink.href = link;
+    revealNotice(authSuccess);
 }
 
 function configureMode(nextMode) {

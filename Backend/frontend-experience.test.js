@@ -62,6 +62,7 @@ test("separación de experiencias y conversión sin segunda subida", () => {
 test("el registro y el acceso usan únicamente el correo electrónico", () => {
     const login = read("Frontend/login.html");
     const loginScript = read("Frontend/login.js");
+    const loginCss = read("Frontend/login.css");
     const dashboardScript = read("Frontend/script.js");
     assert.doesNotMatch(login, /id="username"|id="usernamePrefix"|Nombre de usuario/);
     assert.match(login, /id="email" type="email"/);
@@ -69,5 +70,7 @@ test("el registro y el acceso usan únicamente el correo electrónico", () => {
     assert.match(loginScript, /email: emailInput\.value\.trim\(\)/);
     assert.match(loginScript, /AbortSignal\.timeout\(30_000\)/);
     assert.match(loginScript, /Straclase tardó demasiado en responder/);
+    assert.match(loginScript, /scrollIntoView\(\{ behavior: "smooth", block: "nearest" \}\)/);
+    assert.match(loginCss, /@media \(min-width: 851px\)[\s\S]*#authError,[\s\S]*#authSuccess[\s\S]*position: fixed/);
     assert.doesNotMatch(dashboardScript, /accountData\.username/);
 });

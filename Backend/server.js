@@ -2319,6 +2319,7 @@ app.get("/guest-transfer-capabilities", (req, res) => {
 });
 
 app.get("/login.css", (req, res) => {
+    res.set("Cache-Control", "no-cache");
     res.sendFile(path.join(frontendDirectory, "login.css"));
 });
 

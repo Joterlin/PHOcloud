@@ -81,6 +81,25 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .notice.success { border: 1px solid rgba(122, 190, 139, .24); background: rgba(122, 190, 139, .07); color: #b5e4c0; }
 .notice p { margin: 0; }
 .notice a { margin-top: 10px; display: inline-block; color: inherit; font-weight: 750; }
+
+@media (min-width: 851px) {
+    #authError,
+    #authSuccess {
+        position: fixed;
+        z-index: 20;
+        top: 78px;
+        right: 28px;
+        width: min(420px, calc(50vw - 58px));
+        margin: 0;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, .28);
+        animation: notice-in .2s ease-out;
+    }
+}
+
+@keyframes notice-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 .terms {
     margin-top: 16px;
     display: flex;
