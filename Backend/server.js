@@ -2632,7 +2632,11 @@ app.post("/auth/verify-email", requireSameOrigin, (req, res) => {
     }
     deliveryStore.markEmailVerified(record.userId, new Date().toISOString());
     deliveryStore.deleteAccountToken(tokenHash);
-    res.json({ message: "Correo confirmado. Ya puedes iniciar sesión." });
+    startSession(res, record.userId);
+    res.json({
+        message: "Correo confirmado. Tu sesión ya está iniciada.",
+        authenticated: true
+    });
 });
 
 app.post("/auth/resend-verification", requireSameOrigin, limitSensitiveAction, async (req, res) => {
@@ -3009,6 +3013,49 @@ app.get("/transfers/capabilities", requireAuth, (req, res) => {
         zipMaxBytes: limits.zipMaxBytes
     });
 });
+
+app.post("/transfers/:transferId/claim", requireAuth, requireSameOrigin,
+    limitSensitiveAction, (req, res) => {
+        const transferId = req.params.transferId;
+        const alreadyOwned = deliveryStore.getOwnedTransfer(
+            transferId, req.auth.userId
+        );
+        if (alreadyOwned) {
+            return res.json({ claimed: true, transferId, alreadyOwned: true });
+        }
+        const guest = guestUploadOwner(req);
+        if (!guest) {
+            return res.status(403).json({
+                error: "Abre este enlace desde el mismo navegador donde creaste la transferencia",
+                code: "GUEST_TRANSFER_SESSION_REQUIRED"
+            });
+        }
+        const account = userForCurrentBillingEnvironment(
+            deliveryStore.getUserById(req.auth.userId)
+        );
+        const plan = effectivePlan(account?.plan || "free", account?.planStatus);
+        const result = deliveryStore.claimGuestTransfer({
+            id: transferId,
+            guestOwnerId: guest.userId,
+            newOwnerId: req.auth.userId,
+            limits: transferAdmissionLimits(plan, false),
+            nowIso: new Date().toISOString()
+        });
+        if (!result.ok) {
+            const status = result.code === "TRANSFER_EXPIRED" ? 410
+                : result.code === "TRANSFER_NOT_READY" ? 409
+                    : result.code === "GUEST_TRANSFER_NOT_OWNED" ? 404 : 403;
+            const message = ({
+                TRANSFER_EXPIRED: "La transferencia ha caducado",
+                TRANSFER_NOT_READY: "Completa la subida antes de convertirla",
+                GUEST_TRANSFER_NOT_OWNED:
+                    "Esta transferencia no pertenece a este navegador"
+            })[result.code] || quotaMessage(result.code);
+            return res.status(status).json({ error: message, code: result.code });
+        }
+        deliveryStore.deleteOrphanGuestUsers();
+        res.json({ claimed: true, transferId });
+    });
 
 app.get("/transfers/:transferId/conversion-options", requireAuth, (req, res) => {
     const transfer = deliveryStore.getOwnedTransfer(

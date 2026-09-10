@@ -2,6 +2,9 @@ const byId = (id) => document.getElementById(id);
 let capabilities = null;
 let selectedFiles = [];
 let senderVerifiedEmail = "";
+let authenticated = false;
+let latestTransferId = "";
+const PENDING_TRANSFER_CLAIM_KEY = "straclase-pending-transfer-claim";
 
 function shareMethod() {
     return document.querySelector('input[name="shareMethod"]:checked')?.value || "link";
@@ -328,6 +331,13 @@ function showResult(data, deliveryStatus = null) {
     byId("resultDeliveryStatus").classList.toggle(
         "warning", Boolean(deliveryStatus?.warning)
     );
+    latestTransferId = data.transferId;
+    byId("convertGuestTransfer").textContent = authenticated
+        ? "Convertir en galería"
+        : "Crear cuenta y convertir en galería";
+    byId("conversionOfferText").textContent = authenticated
+        ? "Personaliza estas fotos como una galería sin volver a subirlas."
+        : "Crea una cuenta gratis y personaliza estas fotos sin volver a subirlas.";
     byId("sendResult").hidden = false;
 }
 
@@ -449,12 +459,29 @@ byId("copyLink").addEventListener("click", async () => {
     }
 });
 byId("newTransfer").addEventListener("click", () => window.location.reload());
+byId("convertGuestTransfer").addEventListener("click", () => {
+    if (!latestTransferId) return;
+    if (authenticated) {
+        window.location.assign(
+            `/app?convertTransfer=${encodeURIComponent(latestTransferId)}`
+        );
+        return;
+    }
+    try {
+        localStorage.setItem(PENDING_TRANSFER_CLAIM_KEY, latestTransferId);
+    } catch {}
+    const next = `/app?claimTransfer=${encodeURIComponent(latestTransferId)}`;
+    window.location.assign(
+        `/login?mode=register&next=${encodeURIComponent(next)}`
+    );
+});
 
 Promise.all([
     fetch("/guest-transfer-capabilities").then(readResponse),
     fetch("/auth/status").then(readResponse)
 ]).then(([limits, auth]) => {
     capabilities = limits;
+    authenticated = Boolean(auth.authenticated);
     byId("limits").textContent = `Hasta ${limits.maxFiles} archivos · ${formatBytes(limits.maxTotalSize)} por envío · disponibles ${limits.retentionHours} horas`;
     if (!limits.enabled) showError(limits.message);
     if (auth.authenticated) {

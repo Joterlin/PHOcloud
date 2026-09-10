@@ -2254,13 +2254,43 @@ async function restorePendingGuestSelection() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+async function handleRequestedTransferConversion() {
+    const url = new URL(window.location.href);
+    const claimTransferId = url.searchParams.get("claimTransfer") || "";
+    const convertTransferId = url.searchParams.get("convertTransfer") || "";
+    const transferId = claimTransferId || convertTransferId;
+    const validId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!transferId || !validId.test(transferId)) return;
+
+    showWorkspaceView("transfers");
+    if (claimTransferId) {
+        await readResponse(await fetch(
+            "/transfers/" + encodeURIComponent(claimTransferId) + "/claim",
+            { method: "POST" }
+        ));
+        try {
+            localStorage.removeItem("straclase-pending-transfer-claim");
+        } catch {}
+        await Promise.all([loadTransfers(), loadAccount()]);
+    }
+
+    url.searchParams.delete("claimTransfer");
+    url.searchParams.delete("convertTransfer");
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    await openConvertDialog(transferId);
+}
+
 Promise.all([
     loadBrandProfile(), loadDeliveries(), loadTransfers(), loadAccount(),
     loadTransferCapabilities(), loadGalleryCapabilities()
-]).then(() => {
+]).then(async () => {
     const url = new URL(window.location.href);
     const billingResult = url.searchParams.get("billing");
-    restorePendingGuestSelection().catch(() => {});
+    await restorePendingGuestSelection().catch(() => {});
+    await handleRequestedTransferConversion().catch((error) => {
+        showWorkspaceView("transfers");
+        showTransferError(error.message);
+    });
     if (!["success", "cancel"].includes(billingResult)) return;
     accountDialog.showModal();
     byId("billingMessage").textContent = billingResult === "success"

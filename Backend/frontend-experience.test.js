@@ -64,7 +64,10 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(sendScript, /confirmSenderCode/);
     assert.match(sendScript, /async function emailTransfer/);
     assert.match(sendScript, /id="resultLink"|resultLink/);
-    assert.doesNotMatch(sendScript, /indexedDB|login\?mode=register/);
+    assert.match(send, /id="convertGuestTransfer"/);
+    assert.match(sendScript, /login\?mode=register/);
+    assert.match(sendScript, /claimTransfer/);
+    assert.match(dashboardScript, /\/claim/);
     assert.match(transfer, /href="\/enviar"/);
     assert.match(gallery, /href="\/enviar"/);
     assert.match(gallery, /data-gallery-view="compact"/);

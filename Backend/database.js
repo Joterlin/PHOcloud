@@ -1009,6 +1009,12 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     const removeTransfer = database.prepare(
         "DELETE FROM transfers WHERE id = ? AND owner_id = ?"
     );
+    const updateTransferOwner = database.prepare(
+        "UPDATE transfers SET owner_id = ? WHERE id = ? AND owner_id = ?"
+    );
+    const updateTransferZipOwner = database.prepare(
+        "UPDATE transfer_zip_jobs SET owner_id = ? WHERE transfer_id = ? AND owner_id = ?"
+    );
     const selectExpiredTransfers = database.prepare(`
         SELECT ${transferProjection} FROM transfers WHERE expires_at <= ?
     `);
@@ -1135,7 +1141,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     `);
     const selectTransferForQuota = database.prepare(`
         SELECT id, owner_id AS ownerId, total_bytes AS totalBytes,
-            created_at AS createdAt, status
+            created_at AS createdAt, expires_at AS expiresAt, status
         FROM transfers WHERE id = ?
     `);
     const selectZipJob = database.prepare(`
@@ -1908,6 +1914,70 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 transfer.fileCount, transfer.totalBytes,
                 transfer.status || "ready", transfer.storageProvider || "local"
             );
+        },
+        claimGuestTransfer({ id, guestOwnerId, newOwnerId, limits, nowIso }) {
+            database.exec("BEGIN IMMEDIATE");
+            try {
+                const transfer = selectTransferForQuota.get(id);
+                const guest = selectUserById.get(guestOwnerId);
+                const owner = selectUserById.get(newOwnerId);
+                if (!transfer || transfer.ownerId !== guestOwnerId
+                    || !guest || !guest.isGuest || !owner || owner.isGuest) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: "GUEST_TRANSFER_NOT_OWNED" };
+                }
+                if (transfer.status !== "ready") {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: "TRANSFER_NOT_READY" };
+                }
+                if (Date.parse(transfer.expiresAt) <= Date.parse(nowIso)) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: "TRANSFER_EXPIRED" };
+                }
+                const period = String(transfer.createdAt).slice(0, 7);
+                const accountTotals = selectAccountActiveTransferTotals.get(
+                    newOwnerId, nowIso
+                );
+                const accountUploaded = metricValue(
+                    "account", String(newOwnerId), period, "uploaded_bytes"
+                );
+                if (Number(accountTotals.bytes) + Number(transfer.totalBytes)
+                    > limits.accountStorageBytes) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: "PLAN_TRANSFER_STORAGE_LIMIT" };
+                }
+                if (accountUploaded + Number(transfer.totalBytes)
+                    > limits.accountMonthlyUploadBytes) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: "PLAN_MONTHLY_UPLOAD_LIMIT" };
+                }
+                if (!updateTransferOwner.run(newOwnerId, id, guestOwnerId).changes) {
+                    database.exec("ROLLBACK");
+                    return { ok: false, code: "GUEST_TRANSFER_NOT_OWNED" };
+                }
+                updateTransferZipOwner.run(newOwnerId, id, guestOwnerId);
+                decreaseUsageCounter.run(
+                    Number(transfer.totalBytes), nowIso, "account",
+                    String(guestOwnerId), period, "uploaded_bytes"
+                );
+                upsertUsageCounter.run(
+                    "account", String(newOwnerId), period, "uploaded_bytes",
+                    Number(transfer.totalBytes), nowIso
+                );
+                decreaseUsageCounter.run(
+                    1, nowIso, "account", String(guestOwnerId),
+                    period, "transfers_created"
+                );
+                upsertUsageCounter.run(
+                    "account", String(newOwnerId), period,
+                    "transfers_created", 1, nowIso
+                );
+                database.exec("COMMIT");
+                return { ok: true };
+            } catch (error) {
+                database.exec("ROLLBACK");
+                throw error;
+            }
         },
         reserveTransferUpload({ transfer, files = [], limits, nowIso, period }) {
             database.exec("BEGIN IMMEDIATE");

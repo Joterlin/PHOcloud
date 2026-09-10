@@ -15,10 +15,35 @@ const passwordInput = byId("password");
 const confirmPasswordInput = byId("confirmPassword");
 const params = new URLSearchParams(window.location.search);
 const requestedNext = params.get("next") || "";
+const PENDING_TRANSFER_CLAIM_KEY = "straclase-pending-transfer-claim";
+const validTransferId = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value || "");
+function pendingTransferClaim() {
+    try {
+        const value = localStorage.getItem(PENDING_TRANSFER_CLAIM_KEY) || "";
+        return validTransferId(value) ? value : "";
+    } catch {
+        return "";
+    }
+}
+const nextClaim = (() => {
+    if (!requestedNext.startsWith("/") || requestedNext.startsWith("//")) return "";
+    try {
+        const value = new URL(requestedNext, window.location.origin)
+            .searchParams.get("claimTransfer") || "";
+        if (validTransferId(value)) {
+            localStorage.setItem(PENDING_TRANSFER_CLAIM_KEY, value);
+            return value;
+        }
+    } catch {}
+    return "";
+})();
+const savedClaim = nextClaim || pendingTransferClaim();
 const redirectTarget = requestedNext.startsWith("/")
     && !requestedNext.startsWith("//")
     ? requestedNext
-    : "/app";
+    : savedClaim
+        ? `/app?claimTransfer=${encodeURIComponent(savedClaim)}`
+        : "/app";
 
 let setupRequired = false;
 let mode = params.get("mode") || "login";
@@ -135,8 +160,14 @@ async function verifyEmail() {
     }
     try {
         const data = await request("/auth/verify-email", { token: accountToken });
-        showSuccess(data.message);
-        backButton.hidden = false;
+        showSuccess(data.authenticated
+            ? "Correo confirmado. Abriendo tu espacio para convertir la transferencia…"
+            : data.message);
+        if (data.authenticated) {
+            window.setTimeout(() => window.location.replace(redirectTarget), 600);
+        } else {
+            backButton.hidden = false;
+        }
     } catch (error) {
         showError(error.message);
         backButton.hidden = false;

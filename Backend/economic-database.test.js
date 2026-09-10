@@ -82,6 +82,49 @@ test("reserva cuota atómicamente, finaliza una vez y libera una cancelación", 
     }
 });
 
+test("reclama una transferencia invitada sin duplicar métricas globales", () => {
+    const env = environment();
+    const store = createDeliveryStore(env);
+    try {
+        const guestId = store.createGuestUser({
+            username: "guest_reclamable", passwordHash: "hash",
+            passwordSalt: "salt", createdAt: "2026-09-08T09:00:00.000Z"
+        });
+        const ownerId = store.createUser({
+            username: "cuenta_reclamante", passwordHash: "hash",
+            passwordSalt: "salt", createdAt: "2026-09-08T09:00:00.000Z"
+        });
+        const item = transfer(
+            "00000000-0000-4000-8000-000000000109", guestId, 400, "ready"
+        );
+        assert.equal(store.reserveTransferUpload({
+            transfer: item, limits: limits(), nowIso: item.createdAt,
+            period: "2026-09"
+        }).ok, true);
+        const globalBefore = store.getEconomicUsage(
+            null, "2026-09", item.createdAt
+        ).counters;
+        assert.equal(store.claimGuestTransfer({
+            id: item.id, guestOwnerId: guestId, newOwnerId: ownerId,
+            limits: limits(), nowIso: "2026-09-08T10:05:00.000Z"
+        }).ok, true);
+        assert.equal(store.getOwnedTransfer(item.id, guestId), null);
+        assert.equal(store.getOwnedTransfer(item.id, ownerId).id, item.id);
+        assert.equal(
+            store.getEconomicUsage(ownerId, "2026-09", item.createdAt)
+                .counters.uploaded_bytes,
+            400
+        );
+        assert.deepEqual(
+            store.getEconomicUsage(null, "2026-09", item.createdAt).counters,
+            globalBefore
+        );
+    } finally {
+        store.close();
+        fs.rmSync(env.root, { recursive: true, force: true });
+    }
+});
+
 test("reserva ZIP, reutiliza el resultado y recupera trabajos obsoletos", () => {
     const env = environment();
     const store = createDeliveryStore(env);

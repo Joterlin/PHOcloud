@@ -128,6 +128,11 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             body: { token: verificationToken }
         });
         assert.equal(verified.response.status, 200);
+        assert.equal(verified.data.authenticated, true);
+        assert.match(
+            verified.response.headers.get("set-cookie") || "",
+            /phocloud_session=/
+        );
 
         const login = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
@@ -323,8 +328,8 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         guestForm.append("recipientEmail", "destinatario@example.com");
         guestForm.append("senderEmail", "remitente@example.com");
         guestForm.append("files", new File(
-            [Buffer.from("archivo invitado")], "invitado.txt",
-            { type: "text/plain" }
+            [png], "invitado.png",
+            { type: "image/png" }
         ));
         const guestUpload = await fetch(`${baseUrl}/transfers`, {
             method: "POST",
@@ -358,13 +363,30 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             }
         );
         assert.equal(redirectedGuestMail.response.status, 403);
+        const claimUrl =
+            `${baseUrl}/transfers/${guestUploadData.transferId}/claim`;
         assert.equal((await jsonRequest(
-            `${baseUrl}/transfers/${guestUploadData.transferId}`,
-            { method: "DELETE" }
-        )).response.status, 401);
+            claimUrl, { method: "POST", cookie }
+        )).response.status, 403);
+        const claimed = await jsonRequest(claimUrl, {
+            method: "POST",
+            cookie: `${cookie}; ${guestCookie}`
+        });
+        assert.equal(claimed.response.status, 200);
+        assert.equal(claimed.data.claimed, true);
+        const claimedOptions = await jsonRequest(
+            `${baseUrl}/transfers/${guestUploadData.transferId}/conversion-options`,
+            { cookie }
+        );
+        assert.equal(claimedOptions.response.status, 200);
+        assert.equal(claimedOptions.data.compatible[0].name, "invitado.png");
         assert.equal((await jsonRequest(
             `${baseUrl}/transfers/${guestUploadData.transferId}`,
             { method: "DELETE", cookie: guestCookie }
+        )).response.status, 401);
+        assert.equal((await jsonRequest(
+            `${baseUrl}/transfers/${guestUploadData.transferId}`,
+            { method: "DELETE", cookie }
         )).response.status, 200);
 
         const convertibleForm = new FormData();
