@@ -66,6 +66,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_current_period_end TEXT,
             terms_accepted_at TEXT,
             is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1)),
+            auth_disabled INTEGER NOT NULL DEFAULT 0 CHECK (auth_disabled IN (0, 1)),
             created_at TEXT NOT NULL
         ) STRICT;
 
@@ -152,7 +153,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         ["stripe_environment", "ALTER TABLE users ADD COLUMN stripe_environment TEXT CHECK (stripe_environment IN ('test', 'live'))"],
         ["stripe_current_period_end", "ALTER TABLE users ADD COLUMN stripe_current_period_end TEXT"],
         ["terms_accepted_at", "ALTER TABLE users ADD COLUMN terms_accepted_at TEXT"],
-        ["is_guest", "ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1))"]
+        ["is_guest", "ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0 CHECK (is_guest IN (0, 1))"],
+        ["auth_disabled", "ALTER TABLE users ADD COLUMN auth_disabled INTEGER NOT NULL DEFAULT 0 CHECK (auth_disabled IN (0, 1))"]
     ];
     for (const [column, statement] of userMigrations) {
         if (!userColumns.has(column)) database.exec(statement);
@@ -209,7 +211,51 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
 
         CREATE INDEX IF NOT EXISTS stripe_events_processed_at
         ON stripe_events(processed_at);
+
+        CREATE TABLE IF NOT EXISTS application_migrations (
+            name TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        ) STRICT;
     `);
+
+    const emailOnlyResetMigration = "email-only-auth-reset-v1";
+    const emailOnlyResetApplied = database.prepare(
+        "SELECT 1 FROM application_migrations WHERE name = ?"
+    ).get(emailOnlyResetMigration);
+    if (!emailOnlyResetApplied) {
+        database.exec("BEGIN IMMEDIATE");
+        try {
+            database.prepare(`
+                DELETE FROM sessions
+                WHERE user_id IN (
+                    SELECT id FROM users WHERE is_guest = 0
+                )
+            `).run();
+            database.prepare(`
+                DELETE FROM account_tokens
+                WHERE user_id IN (
+                    SELECT id FROM users WHERE is_guest = 0
+                )
+            `).run();
+            database.prepare(`
+                UPDATE users
+                SET username = 'retired_' || id || '_' || lower(hex(randomblob(8))),
+                    password_hash = lower(hex(randomblob(64))),
+                    password_salt = lower(hex(randomblob(16))),
+                    email_verified_at = NULL,
+                    auth_disabled = 1
+                WHERE is_guest = 0
+            `).run();
+            database.prepare(`
+                INSERT INTO application_migrations (name, applied_at)
+                VALUES (?, ?)
+            `).run(emailOnlyResetMigration, new Date().toISOString());
+            database.exec("COMMIT");
+        } catch (error) {
+            database.exec("ROLLBACK");
+            throw error;
+        }
+    }
 
     database.exec(`
         CREATE TABLE IF NOT EXISTS gallery_sessions (
@@ -584,9 +630,10 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     const countDeliveries = database.prepare(
         "SELECT COUNT(*) AS count FROM deliveries WHERE owner_id = ?"
     );
-    const countUsers = database.prepare(
-        "SELECT COUNT(*) AS count FROM users WHERE is_guest = 0"
-    );
+    const countUsers = database.prepare(`
+        SELECT COUNT(*) AS count FROM users
+        WHERE is_guest = 0 AND auth_disabled = 0
+    `);
     const insertUser = database.prepare(`
         INSERT INTO users (
             username, email, display_name, password_hash, password_salt,
@@ -603,6 +650,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
+            auth_disabled AS authDisabled,
             created_at AS createdAt
         FROM users WHERE username = ? COLLATE NOCASE
     `);
@@ -615,6 +663,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
+            auth_disabled AS authDisabled,
             created_at AS createdAt
         FROM users WHERE email = ? COLLATE NOCASE
     `);
@@ -627,6 +676,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
+            auth_disabled AS authDisabled,
             created_at AS createdAt
         FROM users WHERE id = ?
     `);
@@ -635,6 +685,12 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     `);
     const updateUserPassword = database.prepare(`
         UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?
+    `);
+    const reactivateUserStatement = database.prepare(`
+        UPDATE users
+        SET username = ?, display_name = ?, password_hash = ?, password_salt = ?,
+            email_verified_at = NULL, terms_accepted_at = ?, auth_disabled = 0
+        WHERE id = ? AND is_guest = 0 AND auth_disabled = 1
     `);
     const updateUserPlan = database.prepare(`
         UPDATE users SET plan = ?, plan_status = ? WHERE id = ?
@@ -661,6 +717,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
+            auth_disabled AS authDisabled,
             created_at AS createdAt
         FROM users WHERE stripe_customer_id = ?
     `);
@@ -673,6 +730,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             stripe_subscription_id AS stripeSubscriptionId,
             stripe_environment AS stripeEnvironment,
             stripe_current_period_end AS stripeCurrentPeriodEnd, is_guest AS isGuest,
+            auth_disabled AS authDisabled,
             created_at AS createdAt
         FROM users WHERE stripe_subscription_id = ?
     `);
@@ -730,6 +788,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         FROM sessions
         INNER JOIN users ON users.id = sessions.user_id
         WHERE sessions.token_hash = ? AND sessions.expires_at > ?
+            AND users.auth_disabled = 0
     `);
     const removeSession = database.prepare("DELETE FROM sessions WHERE token_hash = ?");
     const removeUserSessions = database.prepare("DELETE FROM sessions WHERE user_id = ?");
@@ -1417,6 +1476,14 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         updateUserPassword(userId, passwordHash, passwordSalt) {
             return updateUserPassword.run(
                 passwordHash, passwordSalt, userId
+            ).changes > 0;
+        },
+        reactivateUser(userId, {
+            username, displayName, passwordHash, passwordSalt, termsAcceptedAt
+        }) {
+            return reactivateUserStatement.run(
+                username, displayName, passwordHash, passwordSalt,
+                termsAcceptedAt, userId
             ).changes > 0;
         },
         updateUserPlan(userId, plan, planStatus = "active") {

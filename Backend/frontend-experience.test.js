@@ -59,14 +59,13 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(gallery, /href="\/enviar"/);
 });
 
-test("el registro usa identificadores con arroba y reglas tipo Instagram", () => {
+test("el registro y el acceso usan únicamente el correo electrónico", () => {
     const login = read("Frontend/login.html");
     const loginScript = read("Frontend/login.js");
     const dashboardScript = read("Frontend/script.js");
-    assert.match(login, /id="usernamePrefix"[^>]*>@<\/span>/);
-    assert.match(login, /Entre 1 y 30 caracteres/);
-    assert.match(loginScript, /\^\[a-z0-9\._\]\+\$/);
-    assert.match(loginScript, /username\.includes\("\.\."\)/);
-    assert.match(loginScript, /RESERVED_USERNAMES/);
-    assert.match(dashboardScript, /`@\$\{accountData\.username\}`/);
+    assert.doesNotMatch(login, /id="username"|id="usernamePrefix"|Nombre de usuario/);
+    assert.match(login, /id="email" type="email"/);
+    assert.doesNotMatch(loginScript, /username|@usuario|RESERVED_USERNAMES/);
+    assert.match(loginScript, /email: emailInput\.value\.trim\(\)/);
+    assert.doesNotMatch(dashboardScript, /accountData\.username/);
 });

@@ -567,3 +567,74 @@ test("persiste la suscripción y evita procesar dos veces un webhook", () => {
         fs.rmSync(environment.root, { recursive: true, force: true });
     }
 });
+
+test("retira una sola vez las cuentas antiguas sin perder galerías ni Stripe", () => {
+    const environment = createTestEnvironment();
+    let store = createDeliveryStore(environment);
+    const userId = store.createUser({
+        username: "cuenta-antigua",
+        email: "cuenta@example.com",
+        displayName: "Cuenta Antigua",
+        passwordHash: "hash-anterior",
+        passwordSalt: "salt-anterior",
+        emailVerifiedAt: "2026-09-01T10:00:00.000Z",
+        createdAt: "2026-09-01T10:00:00.000Z"
+    });
+    store.createDelivery({
+        id: "00000000-0000-4000-8000-000000000099",
+        clientName: "Galería conservada",
+        createdAt: "2026-09-01T11:00:00.000Z",
+        photoCount: 1,
+        ownerId: userId
+    });
+    store.updateUserBilling(userId, {
+        customerId: "cus_preserved",
+        subscriptionId: "sub_preserved",
+        environment: "test",
+        plan: "professional",
+        planStatus: "active"
+    });
+    store.createSession({
+        tokenHash: "sesion-anterior",
+        userId,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 60_000
+    });
+    store.close();
+
+    const database = new DatabaseSync(environment.databasePath);
+    database.prepare(
+        "DELETE FROM application_migrations WHERE name = ?"
+    ).run("email-only-auth-reset-v1");
+    database.close();
+
+    try {
+        store = createDeliveryStore(environment);
+        const retired = store.getUserByEmail("cuenta@example.com");
+        assert.equal(store.hasUsers(), false);
+        assert.equal(Boolean(retired.authDisabled), true);
+        assert.equal(retired.emailVerifiedAt, null);
+        assert.equal(retired.stripeCustomerId, "cus_preserved");
+        assert.equal(retired.stripeSubscriptionId, "sub_preserved");
+        assert.equal(store.getSession("sesion-anterior", Date.now()), null);
+        assert.equal(store.getDelivery(
+            "00000000-0000-4000-8000-000000000099"
+        ).clientName, "Galería conservada");
+
+        assert.equal(store.reactivateUser(userId, {
+            username: "account_reactivated",
+            displayName: "Cuenta Nueva",
+            passwordHash: "hash-nuevo",
+            passwordSalt: "salt-nuevo",
+            termsAcceptedAt: "2026-09-10T06:00:00.000Z"
+        }), true);
+        const reactivated = store.getUserByEmail("cuenta@example.com");
+        assert.equal(store.hasUsers(), true);
+        assert.equal(Boolean(reactivated.authDisabled), false);
+        assert.equal(reactivated.displayName, "Cuenta Nueva");
+        assert.equal(reactivated.stripeSubscriptionId, "sub_preserved");
+    } finally {
+        store?.close();
+        fs.rmSync(environment.root, { recursive: true, force: true });
+    }
+});

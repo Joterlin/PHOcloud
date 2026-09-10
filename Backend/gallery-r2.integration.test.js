@@ -168,7 +168,6 @@ test("una galería conserva originales privados en R2 durante todo su recorrido"
         assert.equal(objects.size, 1);
         const registration = {
             displayName: "Estudio R2",
-            username: "estudio.r2",
             email: "r2@example.com",
             password: "ContrasenaTemporal123"
         };
@@ -184,7 +183,7 @@ test("una galería conserva originales privados en R2 durante todo su recorrido"
         const login = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
             body: {
-                identifier: registration.email,
+                email: registration.email,
                 password: registration.password
             }
         });

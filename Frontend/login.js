@@ -10,7 +10,6 @@ const authError = byId("authError");
 const authSuccess = byId("authSuccess");
 const authSuccessText = byId("authSuccessText");
 const devLink = byId("devLink");
-const usernameInput = byId("username");
 const emailInput = byId("email");
 const passwordInput = byId("password");
 const confirmPasswordInput = byId("confirmPassword");
@@ -20,63 +19,12 @@ const redirectTarget = requestedNext.startsWith("/")
     && !requestedNext.startsWith("//")
     ? requestedNext
     : "/app";
-const usernameInputShell = byId("usernameInputShell");
-const usernamePrefix = byId("usernamePrefix");
-const usernameHelp = byId("usernameHelp");
-const USERNAME_HELP = "Entre 1 y 30 caracteres: letras, números, puntos y guiones bajos.";
-const RESERVED_USERNAMES = new Set([
-    "admin", "administrator", "api", "app", "auth", "billing", "help",
-    "legal", "login", "logout", "privacy", "root", "security", "setup",
-    "straclase", "support", "system", "terms", "www"
-]);
 
 let setupRequired = false;
 let mode = params.get("mode") || "login";
 const accountToken = params.get("token") || "";
 let backTargetMode = "login";
 let backEmail = "";
-
-function normalizeUsername(value) {
-    return String(value || "")
-        .trim()
-        .normalize("NFKC")
-        .replace(/^@+/, "")
-        .toLowerCase();
-}
-
-function usernameValidationError(value) {
-    const username = normalizeUsername(value);
-    if (username.length < 1 || username.length > 30) {
-        return "El nombre de usuario debe tener entre 1 y 30 caracteres.";
-    }
-    if (!/^[a-z0-9._]+$/.test(username)) {
-        return "Solo puede contener letras, números, puntos y guiones bajos.";
-    }
-    if (username.startsWith(".") || username.endsWith(".") || username.includes("..")) {
-        return "El punto no puede estar al principio, al final ni repetirse.";
-    }
-    if (!/[a-z0-9]/.test(username)) {
-        return "Debe contener al menos una letra o un número.";
-    }
-    if (RESERVED_USERNAMES.has(username)) {
-        return "Ese nombre de usuario está reservado.";
-    }
-    return "";
-}
-
-function refreshUsernameHelp() {
-    const handleMode = mode === "register" || mode === "setup";
-    usernameInputShell.classList.toggle("is-handle", handleMode);
-    usernamePrefix.hidden = !handleMode;
-    usernameHelp.hidden = !handleMode;
-    usernameInput.maxLength = handleMode ? 30 : 254;
-    usernameInput.minLength = 1;
-    usernameInput.placeholder = handleMode ? "tu.usuario" : "@usuario o correo";
-    if (!handleMode) return;
-    const error = usernameInput.value ? usernameValidationError(usernameInput.value) : "";
-    usernameHelp.textContent = error || USERNAME_HELP;
-    usernameHelp.classList.toggle("is-invalid", Boolean(error));
-}
 
 function setGroup(id, visible, required = visible) {
     const group = byId(id);
@@ -121,15 +69,10 @@ function configureMode(nextMode) {
     }
 
     setGroup("displayNameGroup", mode === "register");
-    setGroup("emailGroup", ["register", "forgot", "resend"].includes(mode));
-    setGroup("usernameGroup", ["login", "register", "setup"].includes(mode));
+    setGroup("emailGroup", ["login", "register", "setup", "forgot", "resend"].includes(mode));
     setGroup("passwordGroup", ["login", "register", "setup", "reset"].includes(mode));
     setGroup("confirmPasswordGroup", ["register", "setup", "reset"].includes(mode));
     byId("forgotButton").hidden = mode !== "login";
-    byId("usernameLabel").textContent = mode === "login"
-        ? "Usuario o correo"
-        : "Nombre de usuario";
-    refreshUsernameHelp();
     passwordInput.autocomplete = mode === "login" ? "current-password" : "new-password";
 
     const content = {
@@ -182,13 +125,6 @@ authTabs.addEventListener("click", (event) => {
     const targetMode = event.target.dataset.mode;
     if (targetMode) configureMode(targetMode);
 });
-usernameInput.addEventListener("input", () => {
-    if (mode === "register" || mode === "setup") {
-        const normalized = normalizeUsername(usernameInput.value);
-        if (normalized !== usernameInput.value) usernameInput.value = normalized;
-    }
-    refreshUsernameHelp();
-});
 byId("forgotButton").addEventListener("click", () => configureMode("forgot"));
 backButton.addEventListener("click", () => {
     history.replaceState({}, "", "/login");
@@ -206,24 +142,13 @@ authForm.addEventListener("submit", async (event) => {
         showError("Las contraseñas no coinciden");
         return;
     }
-    if (mode === "register" || mode === "setup") {
-        const usernameError = usernameValidationError(usernameInput.value);
-        if (usernameError) {
-            showError(usernameError);
-            usernameHelp.textContent = usernameError;
-            usernameHelp.classList.add("is-invalid");
-            usernameInput.focus();
-            return;
-        }
-        usernameInput.value = normalizeUsername(usernameInput.value);
-    }
     authButton.disabled = true;
     const previousText = authButton.textContent;
     authButton.textContent = "Procesando…";
     try {
         if (mode === "login") {
             await request("/auth/login", {
-                identifier: usernameInput.value.trim(),
+                email: emailInput.value.trim(),
                 password: passwordInput.value
             });
             window.location.replace(redirectTarget);
@@ -231,7 +156,7 @@ authForm.addEventListener("submit", async (event) => {
         }
         if (mode === "setup") {
             await request("/auth/setup", {
-                username: usernameInput.value.trim(),
+                email: emailInput.value.trim(),
                 password: passwordInput.value
             });
             window.location.replace(redirectTarget);
@@ -240,7 +165,6 @@ authForm.addEventListener("submit", async (event) => {
         if (mode === "register") {
             const data = await request("/auth/register", {
                 displayName: byId("displayName").value.trim(),
-                username: usernameInput.value.trim(),
                 email: emailInput.value.trim(),
                 password: passwordInput.value,
                 acceptTerms: byId("acceptTerms").checked

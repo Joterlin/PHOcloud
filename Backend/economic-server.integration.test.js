@@ -46,7 +46,7 @@ async function setup(baseUrl) {
     const response = await fetch(`${baseUrl}/auth/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: "economia", password: "ContrasenaTemporal123" })
+        body: JSON.stringify({ email: "economia@example.com", password: "ContrasenaTemporal123" })
     });
     assert.equal(response.status, 201);
     return response.headers.getSetCookie().map((value) => value.split(";", 1)[0]).join("; ");

@@ -42,19 +42,10 @@
                         <input id="displayName" type="text" minlength="2" maxlength="80" autocomplete="name">
                     </div>
 
-                    <div id="usernameGroup">
-                        <label id="usernameLabel" for="username">Usuario o correo</label>
-                        <div id="usernameInputShell" class="username-input-shell">
-                            <span id="usernamePrefix" aria-hidden="true" hidden>@</span>
-                            <input id="username" type="text" minlength="1" maxlength="254"
-                                autocomplete="username" autocapitalize="none" spellcheck="false" required>
-                        </div>
-                        <p id="usernameHelp" class="field-help" hidden>Entre 1 y 30 caracteres: letras, números, puntos y guiones bajos.</p>
-                    </div>
-
-                    <div id="emailGroup" hidden>
+                    <div id="emailGroup">
                         <label for="email">Correo electrónico</label>
-                        <input id="email" type="email" maxlength="254" autocomplete="email">
+                        <input id="email" type="email" maxlength="254" autocomplete="email"
+                            autocapitalize="none" spellcheck="false" required>
                     </div>
 
                     <div id="passwordGroup">

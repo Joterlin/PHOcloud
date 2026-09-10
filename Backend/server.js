@@ -1564,42 +1564,7 @@ function isLocalRequest(req) {
         || req.ip === "::ffff:127.0.0.1";
 }
 
-const RESERVED_USERNAMES = new Set([
-    "admin", "administrator", "api", "app", "auth", "billing", "help",
-    "legal", "login", "logout", "privacy", "root", "security", "setup",
-    "straclase", "support", "system", "terms", "www"
-]);
-
-function normalizeUsername(value) {
-    return typeof value === "string"
-        ? value.trim().normalize("NFKC").replace(/^@+/, "").toLowerCase()
-        : "";
-}
-
-function validateUsername(value) {
-    const username = normalizeUsername(value);
-    if (username.length < 1 || username.length > 30) {
-        return "El nombre de usuario debe tener entre 1 y 30 caracteres";
-    }
-    if (!/^[a-z0-9._]+$/.test(username)) {
-        return "El nombre de usuario solo puede contener letras, números, puntos y guiones bajos";
-    }
-    if (username.startsWith(".") || username.endsWith(".") || username.includes("..")) {
-        return "El punto no puede estar al principio, al final ni repetirse";
-    }
-    if (!/[a-z0-9]/.test(username)) {
-        return "El nombre de usuario debe contener al menos una letra o un número";
-    }
-    if (RESERVED_USERNAMES.has(username)) {
-        return "Ese nombre de usuario está reservado";
-    }
-    return null;
-}
-
-function validateCredentials(username, password) {
-    const usernameError = validateUsername(username);
-    if (usernameError) return usernameError;
-
+function validatePassword(password) {
     if (typeof password !== "string"
         || password.length < 10
         || password.length > 128) {
@@ -1618,9 +1583,9 @@ function validEmail(email) {
         && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function validateRegistration({ displayName, username, email, password }) {
-    const credentialError = validateCredentials(username, password);
-    if (credentialError) return credentialError;
+function validateRegistration({ displayName, email, password }) {
+    const passwordError = validatePassword(password);
+    if (passwordError) return passwordError;
     if (typeof displayName !== "string"
         || displayName.trim().length < 2
         || displayName.trim().length > 80) {
@@ -1628,6 +1593,10 @@ function validateRegistration({ displayName, username, email, password }) {
     }
     if (!validEmail(email)) return "Escribe un correo electrónico válido";
     return null;
+}
+
+function internalUsername() {
+    return `account_${uuidv4()}`;
 }
 
 async function issueAccountLink(req, user, purpose) {
@@ -1647,7 +1616,7 @@ async function issueAccountLink(req, user, purpose) {
     const link = `${publicBaseUrl(req)}/login?mode=${route}&token=${encodeURIComponent(token.token)}`;
     const result = await sendAccountLink({
         to: user.email,
-        displayName: user.displayName || user.username,
+        displayName: user.displayName || user.email || "Usuario",
         purpose,
         link
     });
@@ -2374,9 +2343,8 @@ app.get("/auth/status", (req, res) => {
             && isLocalRequest(req),
         registrationOpen: true,
         user: session ? {
-            username: session.username,
             email: session.email,
-            displayName: session.displayName,
+            displayName: session.displayName || session.email,
             plan: session.plan,
             planStatus: session.planStatus
         } : null
@@ -2397,9 +2365,11 @@ app.post("/auth/setup", requireSameOrigin, (req, res) => {
         });
     }
 
-    const username = normalizeUsername(req.body?.username);
+    const email = normalizeEmail(req.body?.email);
     const password = req.body?.password;
-    const validationError = validateCredentials(username, password);
+    const validationError = !validEmail(email)
+        ? "Escribe un correo electrónico válido"
+        : validatePassword(password);
 
     if (validationError) {
         return res.status(400).json({ error: validationError });
@@ -2409,8 +2379,9 @@ app.post("/auth/setup", requireSameOrigin, (req, res) => {
 
     try {
         const userId = deliveryStore.createUser({
-            username,
-            displayName: username,
+            username: internalUsername(),
+            email,
+            displayName: email.split("@", 1)[0],
             emailVerifiedAt: new Date().toISOString(),
             termsAcceptedAt: new Date().toISOString(),
             ...passwordRecord,
@@ -2418,7 +2389,7 @@ app.post("/auth/setup", requireSameOrigin, (req, res) => {
         });
 
         startSession(res, userId);
-        res.status(201).json({ username });
+        res.status(201).json({ email });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "No se pudo crear la cuenta" });
@@ -2427,7 +2398,6 @@ app.post("/auth/setup", requireSameOrigin, (req, res) => {
 
 app.post("/auth/register", requireSameOrigin, limitSensitiveAction, async (req, res) => {
     const displayName = req.body?.displayName?.trim();
-    const username = normalizeUsername(req.body?.username);
     const email = normalizeEmail(req.body?.email);
     const password = req.body?.password;
     if (req.body?.acceptTerms !== true) {
@@ -2436,30 +2406,40 @@ app.post("/auth/register", requireSameOrigin, limitSensitiveAction, async (req, 
         });
     }
     const validationError = validateRegistration({
-        displayName, username, email, password
+        displayName, email, password
     });
     if (validationError) {
         return res.status(400).json({ error: validationError });
     }
-    if (deliveryStore.getUserByUsername(username)) {
-        return res.status(409).json({ error: "Ese nombre de usuario ya está en uso" });
-    }
-    if (deliveryStore.getUserByEmail(email)) {
+    const existingUser = deliveryStore.getUserByEmail(email);
+    if (existingUser && !existingUser.authDisabled) {
         return res.status(409).json({ error: "Ese correo ya está registrado" });
     }
 
     try {
         const passwordRecord = createPasswordRecord(password);
-        const userId = deliveryStore.createUser({
-            username,
-            email,
-            displayName,
-            ...passwordRecord,
-            plan: "free",
-            planStatus: "active",
-            termsAcceptedAt: new Date().toISOString(),
-            createdAt: new Date().toISOString()
-        });
+        const termsAcceptedAt = new Date().toISOString();
+        const userId = existingUser?.authDisabled
+            ? existingUser.id
+            : deliveryStore.createUser({
+                username: internalUsername(),
+                email,
+                displayName,
+                ...passwordRecord,
+                plan: "free",
+                planStatus: "active",
+                termsAcceptedAt,
+                createdAt: new Date().toISOString()
+            });
+        if (existingUser?.authDisabled) {
+            const reactivated = deliveryStore.reactivateUser(userId, {
+                username: internalUsername(),
+                displayName,
+                ...passwordRecord,
+                termsAcceptedAt
+            });
+            if (!reactivated) throw new Error("No se pudo reactivar la cuenta retirada");
+        }
         const user = deliveryStore.getUserById(userId);
         const mail = await issueAccountLink(req, user, "verify_email");
         res.status(201).json({
@@ -2498,7 +2478,7 @@ app.post("/auth/resend-verification", requireSameOrigin, limitSensitiveAction, a
     const email = normalizeEmail(req.body?.email);
     const user = validEmail(email) ? deliveryStore.getUserByEmail(email) : null;
     let devLink = null;
-    if (user && !user.emailVerifiedAt) {
+    if (user && !user.authDisabled && !user.emailVerifiedAt) {
         try {
             devLink = (await issueAccountLink(req, user, "verify_email")).devLink;
         } catch (error) {
@@ -2515,7 +2495,7 @@ app.post("/auth/forgot-password", requireSameOrigin, limitSensitiveAction, async
     const email = normalizeEmail(req.body?.email);
     const user = validEmail(email) ? deliveryStore.getUserByEmail(email) : null;
     let devLink = null;
-    if (user) {
+    if (user && !user.authDisabled) {
         try {
             devLink = (await issueAccountLink(req, user, "reset_password")).devLink;
         } catch (error) {
@@ -2566,20 +2546,16 @@ app.post("/auth/login", requireSameOrigin, (req, res) => {
         });
     }
 
-    const rawIdentifier = req.body?.identifier?.trim()
-        || req.body?.username?.trim();
-    const identifier = typeof rawIdentifier === "string" && rawIdentifier.startsWith("@")
-        ? normalizeUsername(rawIdentifier)
-        : rawIdentifier;
+    const email = normalizeEmail(req.body?.email);
     const password = req.body?.password;
 
-    if (typeof identifier !== "string" || typeof password !== "string") {
+    if (!validEmail(email) || typeof password !== "string") {
         recordLoginFailure(req.ip);
-        return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
+        return res.status(401).json({ error: "Correo o contraseña incorrectos" });
     }
 
-    const user = deliveryStore.getUserByIdentifier(identifier);
-    const passwordIsValid = user && verifyPassword(
+    const user = deliveryStore.getUserByEmail(email);
+    const passwordIsValid = user && !user.authDisabled && verifyPassword(
         password,
         user.passwordSalt,
         user.passwordHash
@@ -2587,7 +2563,7 @@ app.post("/auth/login", requireSameOrigin, (req, res) => {
 
     if (!passwordIsValid) {
         recordLoginFailure(req.ip);
-        return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
+        return res.status(401).json({ error: "Correo o contraseña incorrectos" });
     }
     if (user.email && !user.emailVerifiedAt) {
         return res.status(403).json({
@@ -2602,7 +2578,7 @@ app.post("/auth/login", requireSameOrigin, (req, res) => {
     startSession(res, user.id);
 
     const billingUser = userForCurrentBillingEnvironment(user);
-    res.json({ username: billingUser.username, plan: billingUser.plan });
+    res.json({ email: billingUser.email, plan: billingUser.plan });
 });
 
 app.post("/auth/logout", requireSameOrigin, (req, res) => {
@@ -2646,9 +2622,8 @@ app.get("/account", requireAuth, (req, res) => {
     res.set("Cache-Control", "no-store");
     res.json({
         account: {
-            username: user.username,
             email: user.email,
-            displayName: user.displayName || user.username,
+            displayName: user.displayName || user.email,
             emailVerified: !user.email || Boolean(user.emailVerifiedAt),
             plan: user.plan,
             planStatus: user.planStatus,

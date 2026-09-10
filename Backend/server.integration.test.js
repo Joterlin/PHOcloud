@@ -68,7 +68,6 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
 
         const registration = {
             displayName: "Estudio Beta",
-            username: "@Estudio.Beta",
             email: "estudio@example.com",
             password: "ContrasenaTemporal123"
         };
@@ -78,14 +77,14 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         });
         assert.equal(rejected.response.status, 400);
 
-        for (const invalidUsername of [
-            "nombre-con-guion", ".nombre", "nombre..doble", "___", "straclase"
+        for (const invalidEmail of [
+            "correo-invalido", "sin-arroba.example.com", "@example.com"
         ]) {
             const invalid = await jsonRequest(`${baseUrl}/auth/register`, {
                 method: "POST",
                 body: {
                     ...registration,
-                    username: invalidUsername,
+                    email: invalidEmail,
                     acceptTerms: true
                 }
             });
@@ -102,7 +101,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         const unverifiedLogin = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
             body: {
-                identifier: registration.email,
+                email: registration.email,
                 password: registration.password
             }
         });
@@ -117,12 +116,12 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         const login = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
             body: {
-                identifier: "@ESTUDIO.BETA",
+                email: registration.email.toUpperCase(),
                 password: registration.password
             }
         });
         assert.equal(login.response.status, 200);
-        assert.equal(login.data.username, "estudio.beta");
+        assert.equal(login.data.email, registration.email);
         let cookie = login.response.headers.getSetCookie()
             .map((value) => value.split(";", 1)[0])
             .join("; ");
@@ -146,13 +145,13 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal((await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
             body: {
-                identifier: registration.email,
+                email: registration.email,
                 password: registration.password
             }
         })).response.status, 401);
         const loginAfterReset = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
-            body: { identifier: registration.email, password: newPassword }
+            body: { email: registration.email, password: newPassword }
         });
         assert.equal(loginAfterReset.response.status, 200);
         cookie = loginAfterReset.response.headers.getSetCookie()
@@ -574,7 +573,6 @@ test("Stripe actualiza las cuotas mediante webhooks firmados e idempotentes", as
         await waitForServer(baseUrl, child);
         const registration = {
             displayName: "Estudio Stripe",
-            username: "estudio.stripe",
             email: "stripe@example.com",
             password: "ContrasenaTemporal123",
             acceptTerms: true
@@ -590,7 +588,7 @@ test("Stripe actualiza las cuotas mediante webhooks firmados e idempotentes", as
         const login = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
             body: {
-                identifier: registration.email,
+                email: registration.email,
                 password: registration.password
             }
         });
@@ -724,7 +722,7 @@ test("producción no expone la configuración privilegiada inicial", async () =>
                 Origin: publicUrl
             },
             body: JSON.stringify({
-                username: "intruso",
+                email: "intruso@example.com",
                 password: "ContrasenaTemporal123"
             })
         });
