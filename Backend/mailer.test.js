@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const nodemailer = require("nodemailer");
 
 const {
     emailConfigured,
@@ -94,6 +95,42 @@ test("informa un rechazo de Resend sin exponer la clave", async () => {
         );
     } finally {
         global.fetch = originalFetch;
+        restoreEnvironment(snapshot);
+    }
+});
+
+test("usa SMTP como respaldo si Resend rechaza el envío", async () => {
+    const snapshot = Object.fromEntries(variableNames.map((name) => [name, process.env[name]]));
+    const originalFetch = global.fetch;
+    const originalCreateTransport = nodemailer.createTransport;
+    let smtpMessage = null;
+    try {
+        process.env.RESEND_API_KEY = "re_test_secret";
+        process.env.PHOCLOUD_FROM_EMAIL = "Straclase <noreply@valid-domain.es>";
+        process.env.SMTP_HOST = "smtp.valid-domain.es";
+        process.env.SMTP_USER = "usuario";
+        process.env.SMTP_PASS = "secreto";
+        global.fetch = async () => new Response(
+            JSON.stringify({ message: "Dominio pendiente" }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+        );
+        nodemailer.createTransport = () => ({
+            async sendMail(message) { smtpMessage = message; }
+        });
+
+        const result = await sendAccountLink({
+            to: "jose@example.com",
+            displayName: "José",
+            purpose: "verify_email",
+            link: "https://straclase.example/verify"
+        });
+
+        assert.equal(result.delivered, true);
+        assert.equal(smtpMessage.to, "jose@example.com");
+        assert.equal(smtpMessage.from, "Straclase <noreply@valid-domain.es>");
+    } finally {
+        global.fetch = originalFetch;
+        nodemailer.createTransport = originalCreateTransport;
         restoreEnvironment(snapshot);
     }
 });

@@ -67,5 +67,7 @@ test("el registro y el acceso usan únicamente el correo electrónico", () => {
     assert.match(login, /id="email" type="email"/);
     assert.doesNotMatch(loginScript, /username|@usuario|RESERVED_USERNAMES/);
     assert.match(loginScript, /email: emailInput\.value\.trim\(\)/);
+    assert.match(loginScript, /AbortSignal\.timeout\(30_000\)/);
+    assert.match(loginScript, /Straclase tardó demasiado en responder/);
     assert.doesNotMatch(dashboardScript, /accountData\.username/);
 });

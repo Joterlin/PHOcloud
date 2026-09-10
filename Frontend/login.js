@@ -91,12 +91,24 @@ function configureMode(nextMode) {
 }
 
 async function request(url, body) {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-    });
-    const data = await response.json();
+    let response;
+    try {
+        response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(30_000)
+        });
+    } catch (error) {
+        if (error.name === "TimeoutError" || error.name === "AbortError") {
+            throw new Error("Straclase tardó demasiado en responder. Comprueba tu conexión y vuelve a intentarlo.");
+        }
+        throw new Error("No se pudo conectar con Straclase. Vuelve a intentarlo.");
+    }
+    const contentType = response.headers.get("Content-Type") || "";
+    const data = contentType.includes("application/json")
+        ? await response.json().catch(() => ({}))
+        : {};
     if (!response.ok) {
         const error = new Error(data.error || "No se pudo completar la solicitud");
         Object.assign(error, data);

@@ -35,6 +35,9 @@ function createTransport() {
         host: process.env.SMTP_HOST,
         port: Number(process.env.SMTP_PORT) || 587,
         secure: process.env.SMTP_SECURE === "true",
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 15_000,
         auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS
@@ -52,44 +55,59 @@ function escapeHtml(value) {
 }
 
 async function sendEmail({ to, subject, text, html }) {
+    let resendError = null;
     if (resendConfigured()) {
-        const response = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                from: transactionalFrom(),
-                to: [to],
-                subject,
-                text,
-                html
-            }),
-            signal: AbortSignal.timeout(15_000)
-        });
+        try {
+            const response = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    from: transactionalFrom(),
+                    to: [to],
+                    subject,
+                    text,
+                    html
+                }),
+                signal: AbortSignal.timeout(12_000)
+            });
 
-        if (!response.ok) {
-            let detail = "";
-            try {
-                const payload = await response.json();
-                detail = payload?.message ? `: ${payload.message}` : "";
-            } catch {
-                // La respuesta puede no contener JSON. Nunca mostramos la clave.
+            if (!response.ok) {
+                let detail = "";
+                try {
+                    const payload = await response.json();
+                    detail = payload?.message ? `: ${payload.message}` : "";
+                } catch {
+                    // La respuesta puede no contener JSON. Nunca mostramos la clave.
+                }
+                throw new Error(`Resend rechazó el correo (${response.status})${detail}`);
             }
-            throw new Error(`Resend rechazó el correo (${response.status})${detail}`);
+            return;
+        } catch (error) {
+            resendError = error;
         }
-        return;
     }
 
     const transporter = createTransport();
-    await transporter.sendMail({
-        from: transactionalFrom(),
-        to,
-        subject,
-        text,
-        html
-    });
+    if (transporter) {
+        try {
+            await transporter.sendMail({
+                from: transactionalFrom(),
+                to,
+                subject,
+                text,
+                html
+            });
+            return;
+        } catch (smtpError) {
+            if (!resendError) throw smtpError;
+            throw new Error(`${resendError.message}; el SMTP alternativo también falló`);
+        }
+    }
+    if (resendError) throw resendError;
+    throw new Error("No hay un servicio de correo configurado");
 }
 
 async function sendAccountLink({ to, displayName, purpose, link }) {
