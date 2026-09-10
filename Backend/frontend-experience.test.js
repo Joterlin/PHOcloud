@@ -37,6 +37,8 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     const transfer = read("public/transfer.html");
     const gallery = read("public/gallery.html");
     assert.doesNotMatch(dashboard, /id="showHome"|TU ESPACIO DE TRABAJO|ACTIVIDAD RECIENTE/);
+    assert.match(dashboard, /style\.css\?v=[^"\s]+/);
+    assert.match(dashboard, /script\.js\?v=[^"\s]+/);
     assert.match(dashboard, /id="showTransfers"/);
     assert.match(dashboard, /id="showGalleries"/);
     assert.doesNotMatch(dashboard, /id="workspaceBrandButton"|id="workspaceAccountButton"/);
