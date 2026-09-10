@@ -50,6 +50,10 @@ npm run validate
 - Portada pública en `/` y `/enviar` para subir, obtener un enlace o enviarlo por
   correo sin registro. Usa una identidad temporal no visible, caduca en 24 horas y mantiene
   cuotas, concurrencia, rate limiting e interruptores independientes.
+- El envío por enlace no solicita correo. El envío directo por correo confirma al
+  remitente con un código de seis dígitos que caduca en 10 minutos y recuerda la
+  dirección verificada durante 30 días en esa sesión invitada. El mensaje sale
+  desde el dominio de Straclase y usa el remitente confirmado como dirección de respuesta.
 - Espacio registrado en `/app`, con una navegación sencilla entre
   Transferencias y Galerías; marca y plan se gestionan desde los controles de cuenta.
 - Convertir una transferencia propia en galería sin volver a subir los

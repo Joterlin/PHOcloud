@@ -1,6 +1,7 @@
 const byId = (id) => document.getElementById(id);
 let capabilities = null;
 let selectedFiles = [];
+let senderVerifiedEmail = "";
 
 function shareMethod() {
     return document.querySelector('input[name="shareMethod"]:checked')?.value || "link";
@@ -9,10 +10,134 @@ function shareMethod() {
 function updateShareMethod() {
     const byEmail = shareMethod() === "email";
     byId("recipientEmailGroup").hidden = !byEmail;
+    byId("senderEmailGroup").hidden = !byEmail;
     byId("recipientEmail").required = byEmail;
+    byId("senderEmail").required = byEmail;
+    if (!byEmail) {
+        byId("senderVerification").hidden = true;
+        byId("senderVerificationStatus").hidden = true;
+    } else if (senderVerifiedEmail === normalizedSenderEmail()) {
+        setVerificationStatus(
+            "Correo confirmado. El destinatario podrá responderte directamente.",
+            "success"
+        );
+    }
     byId("continueButton").textContent = byEmail
         ? "Subir y enviar por correo"
         : "Crear enlace";
+}
+
+function normalizedSenderEmail() {
+    return byId("senderEmail").value.trim().toLowerCase();
+}
+
+function setVerificationStatus(message, state = "") {
+    const status = byId("senderVerificationStatus");
+    status.textContent = message;
+    status.className = `verification-status ${state}`.trim();
+    status.hidden = !message;
+}
+
+function markSenderVerified(email) {
+    senderVerifiedEmail = email.toLowerCase();
+    byId("senderVerification").hidden = true;
+    byId("requestSenderCode").textContent = "Verificado ✓";
+    byId("requestSenderCode").disabled = true;
+    if (shareMethod() === "email") {
+        setVerificationStatus(
+            "Correo confirmado. El destinatario podrá responderte directamente.",
+            "success"
+        );
+    }
+}
+
+function invalidateSenderVerification() {
+    if (normalizedSenderEmail() === senderVerifiedEmail) return;
+    senderVerifiedEmail = "";
+    byId("requestSenderCode").textContent = "Verificar correo";
+    byId("requestSenderCode").disabled = false;
+    byId("senderVerification").hidden = true;
+    setVerificationStatus("");
+}
+
+async function requestSenderVerification() {
+    const input = byId("senderEmail");
+    if (!input.checkValidity()) {
+        input.reportValidity();
+        return false;
+    }
+    const button = byId("requestSenderCode");
+    button.disabled = true;
+    button.textContent = "Enviando…";
+    byId("sendError").hidden = true;
+    try {
+        const data = await readResponse(await fetch(
+            "/transfer-sender-verification/request",
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: normalizedSenderEmail() })
+            }
+        ));
+        if (data.verified) {
+            markSenderVerified(data.email);
+            return true;
+        }
+        byId("senderVerification").hidden = false;
+        byId("senderCode").value = data.devCode || "";
+        byId("senderCode").focus();
+        setVerificationStatus(
+            data.delivered
+                ? "Te hemos enviado un código. Caduca en 10 minutos."
+                : "Introduce el código de prueba para continuar."
+        );
+        button.textContent = "Reenviar en 1 min";
+        setTimeout(() => {
+            if (!senderVerifiedEmail) {
+                button.disabled = false;
+                button.textContent = "Reenviar código";
+            }
+        }, 60_000);
+        return false;
+    } catch (error) {
+        button.disabled = false;
+        button.textContent = "Verificar correo";
+        showError(error.message || "No se pudo enviar el código");
+        return false;
+    }
+}
+
+async function confirmSenderCode() {
+    const input = byId("senderCode");
+    if (!input.checkValidity()) {
+        input.reportValidity();
+        return false;
+    }
+    const button = byId("verifySenderCode");
+    button.disabled = true;
+    button.textContent = "Comprobando…";
+    byId("sendError").hidden = true;
+    try {
+        const data = await readResponse(await fetch(
+            "/transfer-sender-verification/verify",
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: normalizedSenderEmail(),
+                    code: input.value.trim()
+                })
+            }
+        ));
+        markSenderVerified(data.email);
+        return true;
+    } catch (error) {
+        showError(error.message || "No se pudo confirmar el código");
+        return false;
+    } finally {
+        button.disabled = false;
+        button.textContent = "Confirmar código";
+    }
 }
 
 function formatBytes(bytes) {
@@ -239,6 +364,9 @@ byId("dropZone").addEventListener("drop", (event) => selectFiles(event.dataTrans
 for (const input of document.querySelectorAll('input[name="shareMethod"]')) {
     input.addEventListener("change", updateShareMethod);
 }
+byId("senderEmail").addEventListener("input", invalidateSenderVerification);
+byId("requestSenderCode").addEventListener("click", requestSenderVerification);
+byId("verifySenderCode").addEventListener("click", confirmSenderCode);
 updateShareMethod();
 
 byId("continueButton").addEventListener("click", async () => {
@@ -247,7 +375,6 @@ byId("continueButton").addEventListener("click", async () => {
     button.disabled = true;
     button.textContent = "Enviando…";
     byId("sendError").hidden = true;
-    setProgress(0, "Preparando transferencia…");
     const selectedMethod = shareMethod();
     const recipientEmail = selectedMethod === "email"
         ? byId("recipientEmail").value.trim()
@@ -259,13 +386,30 @@ byId("continueButton").addEventListener("click", async () => {
         byId("uploadStatus").hidden = true;
         return;
     }
+    const senderEmail = selectedMethod === "email"
+        ? normalizedSenderEmail()
+        : "";
+    if (selectedMethod === "email" && !byId("senderEmail").checkValidity()) {
+        byId("senderEmail").reportValidity();
+        button.disabled = false;
+        updateShareMethod();
+        return;
+    }
+    if (selectedMethod === "email" && senderVerifiedEmail !== senderEmail) {
+        await requestSenderVerification();
+        button.disabled = false;
+        updateShareMethod();
+        return;
+    }
     const metadata = {
         title: byId("sendTitleInput").value.trim() || defaultTitle(),
         message: byId("sendMessage").value.trim(),
         recipientEmail,
+        senderEmail,
         password: byId("sendPassword").value
     };
     try {
+        setProgress(0, "Preparando transferencia…");
         const data = capabilities.uploadMode === "multipart"
             ? await createMultipartTransfer(metadata)
             : await createLocalTransfer(metadata);
@@ -317,6 +461,10 @@ Promise.all([
         byId("loginLink").hidden = true;
         byId("registerLink").hidden = true;
         byId("workspaceLink").hidden = false;
+        if (auth.user?.email) {
+            byId("senderEmail").value = auth.user.email;
+            markSenderVerified(auth.user.email);
+        }
     }
     renderSelection();
 }).catch(() => {

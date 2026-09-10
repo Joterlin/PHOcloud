@@ -262,6 +262,44 @@ test("guarda usuarios y sesiones con expiración", () => {
         store.markEmailVerified(userId, "2026-08-27T12:00:00.000Z");
         assert.equal(Boolean(store.getUserById(userId).emailVerifiedAt), true);
         assert.equal(store.deleteAccountToken("token-verificacion"), true);
+
+        store.saveTransferSenderVerification({
+            ownerId: userId,
+            email: "remitente@example.com",
+            codeHash: "hash-codigo",
+            codeSalt: "salt-codigo",
+            createdAt: now,
+            expiresAt: now + 60_000
+        });
+        assert.equal(
+            store.getTransferSenderVerification(
+                userId, "REMITENTE@example.com"
+            ).attempts,
+            0
+        );
+        assert.equal(
+            store.recordTransferSenderVerificationFailure(
+                userId, "remitente@example.com", now, 5
+            ),
+            1
+        );
+        assert.equal(
+            store.markTransferSenderVerified({
+                ownerId: userId,
+                email: "remitente@example.com",
+                verifiedAt: now,
+                expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+                now,
+                maxAttempts: 5
+            }),
+            true
+        );
+        assert.equal(
+            store.getTransferSenderVerification(
+                userId, "remitente@example.com"
+            ).verifiedAt,
+            now
+        );
     } finally {
         store.close();
         fs.rmSync(environment.root, { recursive: true, force: true });
@@ -290,6 +328,7 @@ test("reserva conversiones de forma atómica, idempotente y recuperable", () => 
             status: "ready",
             storageProvider: "local"
         });
+        assert.equal(store.getTransfer(transferId).senderEmail, "");
         const job = {
             id: "00000000-0000-4000-8000-000000000072",
             ownerId,

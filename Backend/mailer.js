@@ -54,7 +54,7 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html, replyTo }) {
     let resendError = null;
     if (resendConfigured()) {
         try {
@@ -69,7 +69,8 @@ async function sendEmail({ to, subject, text, html }) {
                     to: [to],
                     subject,
                     text,
-                    html
+                    html,
+                    ...(replyTo ? { reply_to: replyTo } : {})
                 }),
                 signal: AbortSignal.timeout(12_000)
             });
@@ -98,7 +99,8 @@ async function sendEmail({ to, subject, text, html }) {
                 to,
                 subject,
                 text,
-                html
+                html,
+                ...(replyTo ? { replyTo } : {})
             });
             return;
         } catch (smtpError) {
@@ -183,8 +185,30 @@ async function sendGalleryDelivery({
     return { delivered: true, devLink: null };
 }
 
+async function sendTransferSenderCode({ to, code }) {
+    const subject = "Confirma tu correo para enviar archivos";
+    if (!emailConfigured()) {
+        return { delivered: false };
+    }
+    await sendEmail({
+        to,
+        subject,
+        text: `Tu código de verificación de Straclase es ${code}. Caduca en 10 minutos.`,
+        html: `
+            <div style="max-width:560px;margin:auto;padding:36px;font-family:Arial,sans-serif;color:#171717">
+                <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">STRACLASE</p>
+                <h1 style="font-family:Georgia,serif;font-weight:400">Confirma que eres tú</h1>
+                <p>Utiliza este código para enviar archivos por correo desde Straclase:</p>
+                <p style="margin:28px 0;font-size:32px;font-weight:700;letter-spacing:.2em">${escapeHtml(code)}</p>
+                <p style="font-size:13px;color:#666">El código caduca en 10 minutos. Si no has solicitado esto, ignora el mensaje.</p>
+            </div>
+        `
+    });
+    return { delivered: true };
+}
+
 async function sendTransferDelivery({
-    to, senderName, title, message, link, protectedTransfer, expiresAt
+    to, senderName, title, message, link, protectedTransfer, expiresAt, replyTo
 }) {
     const subject = `${senderName || "Straclase"} te ha enviado archivos`;
     const protection = protectedTransfer
@@ -203,6 +227,7 @@ async function sendTransferDelivery({
         to,
         subject,
         text: `${senderName || "Straclase"} te ha enviado “${title}”: ${link}. Disponible hasta el ${expiry}. ${protection}`,
+        replyTo,
         html: `
             <div style="max-width:580px;margin:auto;padding:40px;font-family:Arial,sans-serif;color:#171717">
                 <p style="font-size:12px;letter-spacing:.16em;color:#8d7041">STRACLASE TRANSFER</p>
@@ -220,6 +245,7 @@ async function sendTransferDelivery({
 module.exports = {
     sendAccountLink,
     sendGalleryDelivery,
+    sendTransferSenderCode,
     sendTransferDelivery,
     emailConfigured,
     resendConfigured,

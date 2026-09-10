@@ -4,7 +4,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const { createHash, timingSafeEqual } = require("crypto");
+const { createHash, randomInt, timingSafeEqual } = require("crypto");
 const { PassThrough, Readable, Transform } = require("stream");
 const { pipeline } = require("stream/promises");
 const { ZipArchive } = require("archiver");
@@ -30,6 +30,7 @@ const {
 const {
     sendAccountLink,
     sendGalleryDelivery,
+    sendTransferSenderCode,
     sendTransferDelivery,
     emailConfigured
 } = require("./mailer");
@@ -88,6 +89,10 @@ const MAX_TRANSFER_FILE_SIZE_BYTES = TECHNICAL_MAX_TRANSFER_BYTES;
 const MAX_TRANSFER_SIZE_BYTES = TECHNICAL_MAX_TRANSFER_BYTES;
 const ACCOUNT_TOKEN_DURATION_MS = 60 * 60 * 1000;
 const RESET_TOKEN_DURATION_MS = 30 * 60 * 1000;
+const TRANSFER_SENDER_CODE_DURATION_MS = 10 * 60 * 1000;
+const TRANSFER_SENDER_VERIFIED_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+const TRANSFER_SENDER_CODE_MAX_ATTEMPTS = 5;
+const TRANSFER_SENDER_CODE_RESEND_DELAY_MS = 60 * 1000;
 const PLAN_LIMITS = {
     free: {
         galleries: 3,
@@ -193,6 +198,7 @@ deliveryStore.deleteExpiredGallerySessions(Date.now());
 deliveryStore.deleteExpiredAccountTokens(Date.now());
 deliveryStore.deleteExpiredTransferSessions(Date.now());
 deliveryStore.deleteExpiredGuestUploadSessions(Date.now());
+deliveryStore.deleteExpiredTransferSenderVerifications(Date.now());
 deliveryStore.deleteOrphanGuestUsers();
 deliveryStore.resetStaleZipJobs(
     new Date(Date.now() - economicConfig.zipLeaseMs).toISOString()
@@ -1583,6 +1589,31 @@ function validEmail(email) {
         && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function transferSenderEmailIsVerified(req, email, now = Date.now()) {
+    if (!req.guestTransfer) {
+        const user = deliveryStore.getUserById(req.auth.userId);
+        if (Boolean(user?.emailVerifiedAt)
+            && normalizeEmail(user.email) === email) {
+            return true;
+        }
+    }
+    const verification = deliveryStore.getTransferSenderVerification(
+        req.auth.userId, email
+    );
+    return Boolean(
+        verification?.verifiedAt
+        && Number(verification.expiresAt) > now
+    );
+}
+
+function transferSenderEmail(req, value) {
+    const requested = normalizeEmail(value);
+    if (requested || req.guestTransfer) return requested;
+    return normalizeEmail(
+        deliveryStore.getUserById(req.auth.userId)?.email
+    );
+}
+
 function validateRegistration({ displayName, email, password }) {
     const passwordError = validatePassword(password);
     if (passwordError) return passwordError;
@@ -2315,6 +2346,119 @@ app.get("/guest-transfer-capabilities", (req, res) => {
             && economicConfig.guestTransfersEnabled
             ? "Puedes enviar sin crear una cuenta. El enlace caducará en 24 horas."
             : "Las nuevas transferencias están pausadas temporalmente."
+    });
+});
+
+app.post("/transfer-sender-verification/request", requireSameOrigin,
+    limitSensitiveAction, allowTransferCreator, async (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    if (!validEmail(email)) {
+        return res.status(400).json({ error: "Escribe un correo electrónico válido" });
+    }
+    const now = Date.now();
+    if (transferSenderEmailIsVerified(req, email, now)) {
+        return res.json({ verified: true, email });
+    }
+    const previous = deliveryStore.getTransferSenderVerification(
+        req.auth.userId, email
+    );
+    if (previous && !previous.verifiedAt
+        && Number(previous.createdAt) + TRANSFER_SENDER_CODE_RESEND_DELAY_MS > now) {
+        const retryAfter = Math.ceil(
+            (Number(previous.createdAt) + TRANSFER_SENDER_CODE_RESEND_DELAY_MS - now)
+            / 1000
+        );
+        res.set("Retry-After", String(retryAfter));
+        return res.status(429).json({
+            error: `Espera ${retryAfter} segundos antes de solicitar otro código`
+        });
+    }
+    const code = String(randomInt(100000, 1000000));
+    const codeRecord = createPasswordRecord(code);
+    try {
+        const mail = await sendTransferSenderCode({ to: email, code });
+        deliveryStore.saveTransferSenderVerification({
+            ownerId: req.auth.userId,
+            email,
+            codeHash: codeRecord.passwordHash,
+            codeSalt: codeRecord.passwordSalt,
+            createdAt: now,
+            expiresAt: now + TRANSFER_SENDER_CODE_DURATION_MS
+        });
+        res.json({
+            verified: false,
+            delivered: mail.delivered,
+            expiresInSeconds: TRANSFER_SENDER_CODE_DURATION_MS / 1000,
+            devCode: isProduction ? null : code
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(502).json({
+            error: "No se pudo enviar el código de verificación"
+        });
+    }
+});
+
+app.post("/transfer-sender-verification/verify", requireSameOrigin,
+    limitSensitiveAction, allowTransferCreator, (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    const code = typeof req.body?.code === "string"
+        ? req.body.code.trim()
+        : "";
+    if (!validEmail(email) || !/^\d{6}$/.test(code)) {
+        return res.status(400).json({
+            error: "Escribe el correo y el código de 6 dígitos"
+        });
+    }
+    const now = Date.now();
+    if (transferSenderEmailIsVerified(req, email, now)) {
+        return res.json({ verified: true, email });
+    }
+    const verification = deliveryStore.getTransferSenderVerification(
+        req.auth.userId, email
+    );
+    if (!verification || Number(verification.expiresAt) <= now) {
+        return res.status(410).json({
+            error: "El código ha caducado. Solicita uno nuevo."
+        });
+    }
+    if (Number(verification.attempts) >= TRANSFER_SENDER_CODE_MAX_ATTEMPTS) {
+        return res.status(429).json({
+            error: "Demasiados intentos. Solicita un código nuevo."
+        });
+    }
+    if (!verifyPassword(code, verification.codeSalt, verification.codeHash)) {
+        deliveryStore.recordTransferSenderVerificationFailure(
+            req.auth.userId, email, now, TRANSFER_SENDER_CODE_MAX_ATTEMPTS
+        );
+        const remaining = Math.max(
+            0,
+            TRANSFER_SENDER_CODE_MAX_ATTEMPTS
+                - Number(verification.attempts) - 1
+        );
+        return res.status(401).json({
+            error: remaining
+                ? `Código incorrecto. Te quedan ${remaining} intentos.`
+                : "Código incorrecto. Solicita uno nuevo."
+        });
+    }
+    const verified = deliveryStore.markTransferSenderVerified({
+        ownerId: req.auth.userId,
+        email,
+        verifiedAt: now,
+        expiresAt: now + TRANSFER_SENDER_VERIFIED_DURATION_MS,
+        now,
+        maxAttempts: TRANSFER_SENDER_CODE_MAX_ATTEMPTS
+    });
+    if (!verified) {
+        return res.status(409).json({
+            error: "No se pudo confirmar el código. Solicita uno nuevo."
+        });
+    }
+    res.json({
+        verified: true,
+        email,
+        rememberedDays: TRANSFER_SENDER_VERIFIED_DURATION_MS / 86400000
     });
 });
 
@@ -3132,11 +3276,21 @@ app.post("/transfers/multipart", requireSameOrigin, limitSensitiveAction, allowT
     const title = typeof req.body.title === "string" ? req.body.title.trim() : "";
     const message = typeof req.body.message === "string" ? req.body.message.trim() : "";
     const recipientEmail = normalizeEmail(req.body.recipientEmail);
+    const senderEmail = transferSenderEmail(req, req.body.senderEmail);
     const password = typeof req.body.password === "string" ? req.body.password : "";
     if (!title || title.length > 100) return res.status(400).json({ error: "Escribe un título de hasta 100 caracteres" });
     if (message.length > 500) return res.status(400).json({ error: "El mensaje no puede superar 500 caracteres" });
     if (recipientEmail && !validEmail(recipientEmail)) {
         return res.status(400).json({ error: "El correo del destinatario no es válido" });
+    }
+    if (recipientEmail && !validEmail(senderEmail)) {
+        return res.status(400).json({ error: "Añade un correo válido del remitente" });
+    }
+    if (recipientEmail && !transferSenderEmailIsVerified(req, senderEmail)) {
+        return res.status(403).json({
+            error: "Confirma tu correo antes de enviar la transferencia",
+            code: "SENDER_EMAIL_VERIFICATION_REQUIRED"
+        });
     }
     if (password && (password.length < 4 || password.length > 128)) {
         return res.status(400).json({ error: "La contraseña debe tener entre 4 y 128 caracteres" });
@@ -3183,6 +3337,7 @@ app.post("/transfers/multipart", requireSameOrigin, limitSensitiveAction, allowT
                 title,
                 message,
                 recipientEmail,
+                senderEmail,
                 createdAt,
                 expiresAt: new Date(now + economicConfig.uploadLeaseMs).toISOString(),
                 passwordHash: passwordRecord.passwordHash,
@@ -3391,10 +3546,19 @@ app.post("/transfers", requireSameOrigin, limitSensitiveAction, allowTransferCre
         const title = typeof req.body.title === "string" ? req.body.title.trim() : "";
         const message = typeof req.body.message === "string" ? req.body.message.trim() : "";
         const recipientEmail = normalizeEmail(req.body.recipientEmail);
+        const senderEmail = transferSenderEmail(req, req.body.senderEmail);
         const password = typeof req.body.password === "string" ? req.body.password : "";
         if (!title || title.length > 100) return fail(400, "Escribe un título de hasta 100 caracteres");
         if (message.length > 500) return fail(400, "El mensaje no puede superar 500 caracteres");
         if (recipientEmail && !validEmail(recipientEmail)) return fail(400, "El correo del destinatario no es válido");
+        if (recipientEmail && !validEmail(senderEmail)) {
+            return fail(400, "Añade un correo válido del remitente");
+        }
+        if (recipientEmail && !transferSenderEmailIsVerified(req, senderEmail)) {
+            return fail(403, "Confirma tu correo antes de enviar la transferencia", {
+                code: "SENDER_EMAIL_VERIFICATION_REQUIRED"
+            });
+        }
         if (password && (password.length < 4 || password.length > 128)) {
             return fail(400, "La contraseña debe tener entre 4 y 128 caracteres");
         }
@@ -3420,6 +3584,7 @@ app.post("/transfers", requireSameOrigin, limitSensitiveAction, allowTransferCre
                     title,
                     message,
                     recipientEmail,
+                    senderEmail,
                     createdAt,
                     expiresAt: new Date(expiresAtMs).toISOString(),
                     passwordHash: passwordRecord.passwordHash,
@@ -3496,13 +3661,28 @@ app.post("/transfers/:transferId/send", requireSameOrigin,
             error: "El correo debe coincidir con el destinatario indicado al crear la transferencia"
         });
     }
+    const senderEmail = normalizeEmail(transfer.senderEmail)
+        || (req.guestTransfer
+            ? ""
+            : normalizeEmail(
+                deliveryStore.getUserById(req.auth.userId)?.email
+            ));
+    if (req.guestTransfer
+        && (!validEmail(senderEmail)
+            || !transferSenderEmailIsVerified(req, senderEmail))) {
+        return res.status(403).json({
+            error: "Confirma el correo del remitente antes de enviar",
+            code: "SENDER_EMAIL_VERIFICATION_REQUIRED"
+        });
+    }
     try {
         const profile = req.guestTransfer
             ? null
             : deliveryStore.getBrandProfile(req.auth.userId);
         const mail = await sendTransferDelivery({
             to: recipientEmail,
-            senderName: profile?.brandName || "Straclase",
+            senderName: profile?.brandName || senderEmail || "Straclase",
+            replyTo: senderEmail || undefined,
             title: transfer.title,
             message: transfer.message,
             link: `${publicBaseUrl(req)}/t/${transfer.id}`,
@@ -5153,6 +5333,7 @@ const cleanupTimer = setInterval(() => {
     deliveryStore.deleteExpiredAccountTokens(now);
     deliveryStore.deleteExpiredTransferSessions(now);
     deliveryStore.deleteExpiredGuestUploadSessions(now);
+    deliveryStore.deleteExpiredTransferSenderVerifications(now);
     cleanupExpiredTransfers().catch(console.error);
     for (const attempts of [loginAttempts, galleryAttempts, sensitiveActionAttempts]) {
         for (const [key, value] of attempts) {

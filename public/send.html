@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#f6f4ef">
     <title>Enviar archivos · Straclase</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-    <script src="/theme.js?v=20260910-3"></script>
-    <link rel="stylesheet" href="/send.css?v=20260910-3">
+    <script src="/theme.js?v=20260910-4"></script>
+    <link rel="stylesheet" href="/send.css?v=20260910-4">
 </head>
 <body>
     <header class="public-bar">
@@ -54,6 +54,20 @@
                 <label id="recipientEmailGroup" hidden>Correo del destinatario
                     <input id="recipientEmail" type="email" maxlength="254" autocomplete="email" placeholder="persona@correo.com">
                 </label>
+                <label id="senderEmailGroup" hidden>Tu correo
+                    <span>Lo confirmaremos para que nadie pueda enviar archivos en tu nombre.</span>
+                    <div class="email-verify-row">
+                        <input id="senderEmail" type="email" maxlength="254" autocomplete="email" placeholder="tu@correo.com">
+                        <button id="requestSenderCode" class="secondary-button" type="button">Verificar correo</button>
+                    </div>
+                </label>
+                <div id="senderVerification" class="sender-verification" hidden>
+                    <label>Código de 6 dígitos
+                        <input id="senderCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000">
+                    </label>
+                    <button id="verifySenderCode" class="secondary-button" type="button">Confirmar código</button>
+                </div>
+                <p id="senderVerificationStatus" class="verification-status" aria-live="polite" hidden></p>
                 <label>Título <span>(opcional)</span>
                     <input id="sendTitleInput" type="text" maxlength="100" placeholder="Ej. Material de la sesión">
                 </label>
@@ -82,6 +96,6 @@
         </section>
     </main>
     <footer><span>© Straclase</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>
-    <script src="/send.js?v=20260910-3"></script>
+    <script src="/send.js?v=20260910-4"></script>
 </body>
 </html>

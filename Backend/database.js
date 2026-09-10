@@ -345,6 +345,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             title TEXT NOT NULL,
             message TEXT NOT NULL DEFAULT '',
             recipient_email TEXT NOT NULL DEFAULT '',
+            sender_email TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             expires_at TEXT NOT NULL,
             password_hash TEXT,
@@ -398,6 +399,22 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
 
         CREATE INDEX IF NOT EXISTS guest_upload_sessions_expires_at
         ON guest_upload_sessions(expires_at);
+
+        CREATE TABLE IF NOT EXISTS transfer_sender_verifications (
+            owner_id INTEGER NOT NULL,
+            email TEXT NOT NULL COLLATE NOCASE,
+            code_hash TEXT NOT NULL,
+            code_salt TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            verified_at INTEGER,
+            PRIMARY KEY (owner_id, email),
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS transfer_sender_verifications_expires
+        ON transfer_sender_verifications(expires_at);
 
         CREATE TABLE IF NOT EXISTS usage_counters (
             scope TEXT NOT NULL CHECK (scope IN ('global', 'account')),
@@ -459,6 +476,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             .map((column) => column.name)
     );
     const transferMigrations = [
+        ["sender_email", "ALTER TABLE transfers ADD COLUMN sender_email TEXT NOT NULL DEFAULT ''"],
         ["status", "ALTER TABLE transfers ADD COLUMN status TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('uploading', 'ready', 'failed'))"],
         ["storage_provider", "ALTER TABLE transfers ADD COLUMN storage_provider TEXT NOT NULL DEFAULT 'local' CHECK (storage_provider IN ('local', 'r2'))"]
     ];
@@ -918,7 +936,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     `);
     const transferProjection = `
         id, owner_id AS ownerId, title, message,
-        recipient_email AS recipientEmail, created_at AS createdAt,
+        recipient_email AS recipientEmail, sender_email AS senderEmail,
+        created_at AS createdAt,
         expires_at AS expiresAt, file_count AS fileCount,
         total_bytes AS totalBytes, download_count AS downloadCount,
         last_download_at AS lastDownloadAt, status,
@@ -942,10 +961,10 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     `);
     const insertTransfer = database.prepare(`
         INSERT INTO transfers (
-            id, owner_id, title, message, recipient_email, created_at,
+            id, owner_id, title, message, recipient_email, sender_email, created_at,
             expires_at, password_hash, password_salt, file_count, total_bytes,
             status, storage_provider
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const updateTransferReady = database.prepare(`
         UPDATE transfers SET status = 'ready', expires_at = ?
@@ -1023,6 +1042,41 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     `);
     const removeExpiredGuestUploadSessions = database.prepare(
         "DELETE FROM guest_upload_sessions WHERE expires_at <= ?"
+    );
+    const upsertTransferSenderVerification = database.prepare(`
+        INSERT INTO transfer_sender_verifications (
+            owner_id, email, code_hash, code_salt, attempts,
+            created_at, expires_at, verified_at
+        ) VALUES (?, ?, ?, ?, 0, ?, ?, NULL)
+        ON CONFLICT(owner_id, email) DO UPDATE SET
+            code_hash = excluded.code_hash,
+            code_salt = excluded.code_salt,
+            attempts = 0,
+            created_at = excluded.created_at,
+            expires_at = excluded.expires_at,
+            verified_at = NULL
+    `);
+    const selectTransferSenderVerification = database.prepare(`
+        SELECT owner_id AS ownerId, email, code_hash AS codeHash,
+            code_salt AS codeSalt, attempts, created_at AS createdAt,
+            expires_at AS expiresAt, verified_at AS verifiedAt
+        FROM transfer_sender_verifications
+        WHERE owner_id = ? AND email = ? COLLATE NOCASE
+    `);
+    const incrementTransferSenderVerificationFailure = database.prepare(`
+        UPDATE transfer_sender_verifications
+        SET attempts = attempts + 1
+        WHERE owner_id = ? AND email = ? COLLATE NOCASE
+            AND verified_at IS NULL AND expires_at > ? AND attempts < ?
+    `);
+    const verifyTransferSenderEmail = database.prepare(`
+        UPDATE transfer_sender_verifications
+        SET verified_at = ?, expires_at = ?
+        WHERE owner_id = ? AND email = ? COLLATE NOCASE
+            AND expires_at > ? AND attempts < ?
+    `);
+    const removeExpiredTransferSenderVerifications = database.prepare(
+        "DELETE FROM transfer_sender_verifications WHERE expires_at <= ?"
     );
     const removeOrphanGuestUsers = database.prepare(`
         DELETE FROM users
@@ -1848,6 +1902,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             insertTransfer.run(
                 transfer.id, transfer.ownerId, transfer.title,
                 transfer.message || "", transfer.recipientEmail || "",
+                transfer.senderEmail || "",
                 transfer.createdAt, transfer.expiresAt,
                 transfer.passwordHash || null, transfer.passwordSalt || null,
                 transfer.fileCount, transfer.totalBytes,
@@ -1909,6 +1964,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 insertTransfer.run(
                     transfer.id, transfer.ownerId, transfer.title,
                     transfer.message || "", transfer.recipientEmail || "",
+                    transfer.senderEmail || "",
                     transfer.createdAt, transfer.expiresAt,
                     transfer.passwordHash || null, transfer.passwordSalt || null,
                     transfer.fileCount, transfer.totalBytes,
@@ -2030,6 +2086,31 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         },
         deleteExpiredGuestUploadSessions(now) {
             return Number(removeExpiredGuestUploadSessions.run(now).changes);
+        },
+        saveTransferSenderVerification({
+            ownerId, email, codeHash, codeSalt, createdAt, expiresAt
+        }) {
+            upsertTransferSenderVerification.run(
+                ownerId, email, codeHash, codeSalt, createdAt, expiresAt
+            );
+        },
+        getTransferSenderVerification(ownerId, email) {
+            return selectTransferSenderVerification.get(ownerId, email) || null;
+        },
+        recordTransferSenderVerificationFailure(ownerId, email, now, maxAttempts) {
+            return Number(incrementTransferSenderVerificationFailure.run(
+                ownerId, email, now, maxAttempts
+            ).changes);
+        },
+        markTransferSenderVerified({
+            ownerId, email, verifiedAt, expiresAt, now, maxAttempts
+        }) {
+            return Number(verifyTransferSenderEmail.run(
+                verifiedAt, expiresAt, ownerId, email, now, maxAttempts
+            ).changes) > 0;
+        },
+        deleteExpiredTransferSenderVerifications(now) {
+            return Number(removeExpiredTransferSenderVerifications.run(now).changes);
         },
         deleteOrphanGuestUsers() {
             return Number(removeOrphanGuestUsers.run().changes);

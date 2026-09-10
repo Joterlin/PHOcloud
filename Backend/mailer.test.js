@@ -7,6 +7,7 @@ const {
     resendConfigured,
     sendAccountLink,
     sendGalleryDelivery,
+    sendTransferSenderCode,
     sendTransferDelivery
 } = require("./mailer");
 
@@ -161,6 +162,7 @@ test("usa remitentes genéricos si el fotógrafo no publica una marca", async ()
         await sendTransferDelivery({
             to: "client@recipient.test",
             senderName: "",
+            replyTo: "sender@verified.test",
             title: "Archivos",
             message: "",
             link: "https://app.valid-domain.es/t/transfer",
@@ -170,6 +172,35 @@ test("usa remitentes genéricos si el fotógrafo no publica una marca", async ()
 
         assert.match(messages[0].subject, /^Tu fotógrafo/);
         assert.match(messages[1].subject, /^Straclase/);
+        assert.equal(messages[1].reply_to, "sender@verified.test");
+    } finally {
+        global.fetch = originalFetch;
+        restoreEnvironment(snapshot);
+    }
+});
+
+test("envía un código de seis cifras sin exponerlo en el asunto", async () => {
+    const snapshot = Object.fromEntries(variableNames.map((name) => [name, process.env[name]]));
+    const originalFetch = global.fetch;
+    let message;
+    try {
+        process.env.RESEND_API_KEY = "re_test_secret";
+        process.env.PHOCLOUD_FROM_EMAIL = "Straclase <noreply@valid-domain.es>";
+        global.fetch = async (url, options) => {
+            message = JSON.parse(options.body);
+            return new Response(JSON.stringify({ id: "email_code" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
+        };
+        await sendTransferSenderCode({
+            to: "sender@verified.test",
+            code: "482913"
+        });
+        assert.deepEqual(message.to, ["sender@verified.test"]);
+        assert.match(message.text, /482913/);
+        assert.match(message.html, /482913/);
+        assert.doesNotMatch(message.subject, /482913/);
     } finally {
         global.fetch = originalFetch;
         restoreEnvironment(snapshot);

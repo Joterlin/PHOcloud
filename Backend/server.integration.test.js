@@ -262,23 +262,83 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal(rootPage.status, 200);
         assert.match(await rootPage.text(), /No necesitas registrarte/);
 
+        const senderVerification = await jsonRequest(
+            `${baseUrl}/transfer-sender-verification/request`,
+            {
+                method: "POST",
+                body: { email: "remitente@example.com" }
+            }
+        );
+        assert.equal(senderVerification.response.status, 200);
+        assert.match(senderVerification.data.devCode, /^\d{6}$/);
+        const guestCookie = senderVerification.response.headers.getSetCookie()
+            .map((value) => value.split(";", 1)[0]).join("; ");
+        assert.match(guestCookie, /phocloud_guest_sender=/);
+        const unverifiedForm = new FormData();
+        unverifiedForm.append("title", "Envío sin verificar");
+        unverifiedForm.append("recipientEmail", "destinatario@example.com");
+        unverifiedForm.append("senderEmail", "remitente@example.com");
+        unverifiedForm.append("files", new File(
+            [Buffer.from("no debe guardarse")], "sin-verificar.txt",
+            { type: "text/plain" }
+        ));
+        const unverifiedUpload = await fetch(`${baseUrl}/transfers`, {
+            method: "POST",
+            headers: { Cookie: guestCookie },
+            body: unverifiedForm
+        });
+        assert.equal(unverifiedUpload.status, 403);
+        assert.equal(
+            (await unverifiedUpload.json()).code,
+            "SENDER_EMAIL_VERIFICATION_REQUIRED"
+        );
+        const wrongSenderCode = await jsonRequest(
+            `${baseUrl}/transfer-sender-verification/verify`,
+            {
+                method: "POST",
+                cookie: guestCookie,
+                body: {
+                    email: "remitente@example.com",
+                    code: "000000"
+                }
+            }
+        );
+        assert.equal(wrongSenderCode.response.status, 401);
+        const verifiedSender = await jsonRequest(
+            `${baseUrl}/transfer-sender-verification/verify`,
+            {
+                method: "POST",
+                cookie: guestCookie,
+                body: {
+                    email: "remitente@example.com",
+                    code: senderVerification.data.devCode
+                }
+            }
+        );
+        assert.equal(verifiedSender.response.status, 200);
+        assert.equal(verifiedSender.data.verified, true);
+
         const guestForm = new FormData();
         guestForm.append("title", "Envío sin cuenta");
         guestForm.append("recipientEmail", "destinatario@example.com");
+        guestForm.append("senderEmail", "remitente@example.com");
         guestForm.append("files", new File(
             [Buffer.from("archivo invitado")], "invitado.txt",
             { type: "text/plain" }
         ));
         const guestUpload = await fetch(`${baseUrl}/transfers`, {
             method: "POST",
+            headers: { Cookie: guestCookie },
             body: guestForm
         });
         const guestUploadData = await guestUpload.json();
         assert.equal(guestUpload.status, 201);
-        const guestCookie = guestUpload.headers.getSetCookie()
-            .map((value) => value.split(";", 1)[0]).join("; ");
-        assert.match(guestCookie, /phocloud_guest_sender=/);
         assert.equal((await fetch(`${baseUrl}/t/${guestUploadData.transferId}`)).status, 200);
+        const publicGuestTransfer = await jsonRequest(
+            `${baseUrl}/transfer/${guestUploadData.transferId}`
+        );
+        assert.equal(publicGuestTransfer.response.status, 200);
+        assert.equal("senderEmail" in publicGuestTransfer.data, false);
         const guestMail = await jsonRequest(
             `${baseUrl}/transfers/${guestUploadData.transferId}/send`,
             {
