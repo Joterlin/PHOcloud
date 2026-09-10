@@ -2412,14 +2412,14 @@ app.post("/auth/register", requireSameOrigin, limitSensitiveAction, async (req, 
         return res.status(400).json({ error: validationError });
     }
     const existingUser = deliveryStore.getUserByEmail(email);
-    if (existingUser && !existingUser.authDisabled) {
+    if (existingUser && !existingUser.authDisabled && existingUser.emailVerifiedAt) {
         return res.status(409).json({ error: "Ese correo ya está registrado" });
     }
 
     try {
         const passwordRecord = createPasswordRecord(password);
         const termsAcceptedAt = new Date().toISOString();
-        const userId = existingUser?.authDisabled
+        const userId = existingUser
             ? existingUser.id
             : deliveryStore.createUser({
                 username: internalUsername(),
@@ -2431,17 +2431,33 @@ app.post("/auth/register", requireSameOrigin, limitSensitiveAction, async (req, 
                 termsAcceptedAt,
                 createdAt: new Date().toISOString()
             });
-        if (existingUser?.authDisabled) {
-            const reactivated = deliveryStore.reactivateUser(userId, {
+        if (existingUser) {
+            deliveryStore.deleteUserSessions(userId);
+            const prepared = deliveryStore.prepareUserRegistration(userId, {
                 username: internalUsername(),
                 displayName,
                 ...passwordRecord,
                 termsAcceptedAt
             });
-            if (!reactivated) throw new Error("No se pudo reactivar la cuenta retirada");
+            if (!prepared) throw new Error("No se pudo preparar de nuevo la cuenta");
         }
         const user = deliveryStore.getUserById(userId);
-        const mail = await issueAccountLink(req, user, "verify_email");
+        let mail;
+        try {
+            mail = await issueAccountLink(req, user, "verify_email");
+        } catch (mailError) {
+            console.error("No se pudo enviar la verificación de cuenta", mailError);
+            return res.status(502).json({
+                error: "La cuenta está preparada, pero no pudimos enviar el correo de verificación. Vuelve a pulsar Crear cuenta en unos minutos.",
+                code: "VERIFICATION_EMAIL_FAILED"
+            });
+        }
+        if (isProduction && !mail.delivered) {
+            return res.status(503).json({
+                error: "El correo de verificación no está disponible temporalmente. Vuelve a intentarlo en unos minutos.",
+                code: "EMAIL_NOT_CONFIGURED"
+            });
+        }
         res.status(201).json({
             message: mail.delivered
                 ? "Revisa tu correo para activar la cuenta"

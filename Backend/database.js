@@ -686,11 +686,12 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
     const updateUserPassword = database.prepare(`
         UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?
     `);
-    const reactivateUserStatement = database.prepare(`
+    const prepareUserRegistrationStatement = database.prepare(`
         UPDATE users
         SET username = ?, display_name = ?, password_hash = ?, password_salt = ?,
             email_verified_at = NULL, terms_accepted_at = ?, auth_disabled = 0
-        WHERE id = ? AND is_guest = 0 AND auth_disabled = 1
+        WHERE id = ? AND is_guest = 0
+            AND (auth_disabled = 1 OR email_verified_at IS NULL)
     `);
     const updateUserPlan = database.prepare(`
         UPDATE users SET plan = ?, plan_status = ? WHERE id = ?
@@ -1478,10 +1479,10 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 passwordHash, passwordSalt, userId
             ).changes > 0;
         },
-        reactivateUser(userId, {
+        prepareUserRegistration(userId, {
             username, displayName, passwordHash, passwordSalt, termsAcceptedAt
         }) {
-            return reactivateUserStatement.run(
+            return prepareUserRegistrationStatement.run(
                 username, displayName, passwordHash, passwordSalt,
                 termsAcceptedAt, userId
             ).changes > 0;

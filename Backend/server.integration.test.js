@@ -96,13 +96,29 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             body: { ...registration, acceptTerms: true }
         });
         assert.equal(registered.response.status, 201);
-        const verificationToken = new URL(registered.data.devLink)
+        const firstVerificationToken = new URL(registered.data.devLink)
             .searchParams.get("token");
+        const repeatedPassword = "ContrasenaRepetida123";
+        const repeatedRegistration = await jsonRequest(`${baseUrl}/auth/register`, {
+            method: "POST",
+            body: {
+                ...registration,
+                password: repeatedPassword,
+                acceptTerms: true
+            }
+        });
+        assert.equal(repeatedRegistration.response.status, 201);
+        const verificationToken = new URL(repeatedRegistration.data.devLink)
+            .searchParams.get("token");
+        assert.equal((await jsonRequest(`${baseUrl}/auth/verify-email`, {
+            method: "POST",
+            body: { token: firstVerificationToken }
+        })).response.status, 400);
         const unverifiedLogin = await jsonRequest(`${baseUrl}/auth/login`, {
             method: "POST",
             body: {
                 email: registration.email,
-                password: registration.password
+                password: repeatedPassword
             }
         });
         assert.equal(unverifiedLogin.response.status, 403);
@@ -117,7 +133,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             method: "POST",
             body: {
                 email: registration.email.toUpperCase(),
-                password: registration.password
+                password: repeatedPassword
             }
         });
         assert.equal(login.response.status, 200);
@@ -146,7 +162,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             method: "POST",
             body: {
                 email: registration.email,
-                password: registration.password
+                password: repeatedPassword
             }
         })).response.status, 401);
         const loginAfterReset = await jsonRequest(`${baseUrl}/auth/login`, {

@@ -621,7 +621,7 @@ test("retira una sola vez las cuentas antiguas sin perder galerías ni Stripe", 
             "00000000-0000-4000-8000-000000000099"
         ).clientName, "Galería conservada");
 
-        assert.equal(store.reactivateUser(userId, {
+        assert.equal(store.prepareUserRegistration(userId, {
             username: "account_reactivated",
             displayName: "Cuenta Nueva",
             passwordHash: "hash-nuevo",
