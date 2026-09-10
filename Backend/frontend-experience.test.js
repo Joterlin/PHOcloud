@@ -66,6 +66,8 @@ test("el registro y el acceso usan únicamente el correo electrónico", () => {
     const dashboardScript = read("Frontend/script.js");
     assert.doesNotMatch(login, /id="username"|id="usernamePrefix"|Nombre de usuario/);
     assert.match(login, /id="email" type="email"/);
+    assert.match(login, /login\.css\?v=[^"\s]+/);
+    assert.match(login, /login\.js\?v=[^"\s]+/);
     assert.doesNotMatch(loginScript, /username|@usuario|RESERVED_USERNAMES/);
     assert.match(loginScript, /email: emailInput\.value\.trim\(\)/);
     assert.match(loginScript, /AbortSignal\.timeout\(30_000\)/);
