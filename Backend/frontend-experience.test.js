@@ -55,10 +55,18 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(send, /No necesitas registrarte ni iniciar sesión/);
     assert.match(sendScript, /\/transfers\/multipart/);
     assert.match(sendScript, /retryPart/);
+    assert.match(send, /name="shareMethod" value="link"/);
+    assert.match(send, /name="shareMethod" value="email"/);
+    assert.match(send, /id="recipientEmail"/);
+    assert.match(sendScript, /async function emailTransfer/);
     assert.match(sendScript, /id="resultLink"|resultLink/);
     assert.doesNotMatch(sendScript, /indexedDB|login\?mode=register/);
     assert.match(transfer, /href="\/enviar"/);
     assert.match(gallery, /href="\/enviar"/);
+    assert.match(gallery, /data-gallery-view="compact"/);
+    assert.match(gallery, /data-gallery-view="standard"/);
+    assert.match(gallery, /data-gallery-view="large"/);
+    assert.match(read("public/gallery.js"), /straclase-gallery-view/);
 });
 
 test("el registro y el acceso usan únicamente el correo electrónico", () => {

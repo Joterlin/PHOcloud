@@ -26,7 +26,7 @@ test("aplica límites conservadores y conserva 50 GiB como capacidad técnica", 
     assert.equal(config.accountConcurrentConversions, 1);
     assert.equal(config.globalConcurrentConversions, 2);
     assert.equal(config.guestTransfersEnabled, true);
-    assert.equal(config.guestTransferMaxBytes, 2 * GIB);
+    assert.equal(config.guestTransferMaxBytes, 3 * GIB);
     assert.equal(config.guestGlobalMonthlyUploadBytes, 100 * GIB);
     assert.equal(config.guestGlobalStorageBytes, 25 * GIB);
 });

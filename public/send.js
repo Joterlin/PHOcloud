@@ -2,6 +2,19 @@ const byId = (id) => document.getElementById(id);
 let capabilities = null;
 let selectedFiles = [];
 
+function shareMethod() {
+    return document.querySelector('input[name="shareMethod"]:checked')?.value || "link";
+}
+
+function updateShareMethod() {
+    const byEmail = shareMethod() === "email";
+    byId("recipientEmailGroup").hidden = !byEmail;
+    byId("recipientEmail").required = byEmail;
+    byId("continueButton").textContent = byEmail
+        ? "Subir y enviar por correo"
+        : "Crear enlace";
+}
+
 function formatBytes(bytes) {
     if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
     const units = ["B", "KB", "MB", "GB", "TB"];
@@ -176,13 +189,32 @@ function createLocalTransfer(metadata) {
     });
 }
 
-function showResult(data) {
+function showResult(data, deliveryStatus = null) {
     for (const id of ["dropZone", "selection", "sendOptions", "limits", "continueButton", "uploadStatus"]) {
         byId(id).hidden = true;
     }
     byId("resultLink").value = data.link;
     byId("resultSummary").textContent = `${data.fileCount} archivo${data.fileCount === 1 ? "" : "s"} · ${formatBytes(data.totalBytes)} · disponible 24 horas`;
+    byId("resultTitle").textContent = deliveryStatus?.delivered
+        ? "Transferencia enviada"
+        : "Tu transferencia está lista";
+    byId("resultDeliveryStatus").hidden = !deliveryStatus;
+    byId("resultDeliveryStatus").textContent = deliveryStatus?.message || "";
+    byId("resultDeliveryStatus").classList.toggle(
+        "warning", Boolean(deliveryStatus?.warning)
+    );
     byId("sendResult").hidden = false;
+}
+
+async function emailTransfer(data, email) {
+    return readResponse(await fetch(
+        `/transfers/${encodeURIComponent(data.transferId)}/send`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email })
+        }
+    ));
 }
 
 byId("guestFiles").addEventListener("change", (event) => selectFiles(event.target.files));
@@ -204,6 +236,10 @@ for (const eventName of ["dragleave", "drop"]) {
     });
 }
 byId("dropZone").addEventListener("drop", (event) => selectFiles(event.dataTransfer.files));
+for (const input of document.querySelectorAll('input[name="shareMethod"]')) {
+    input.addEventListener("change", updateShareMethod);
+}
+updateShareMethod();
 
 byId("continueButton").addEventListener("click", async () => {
     if (!selectedFiles.length || !capabilities?.enabled) return;
@@ -212,22 +248,51 @@ byId("continueButton").addEventListener("click", async () => {
     button.textContent = "Enviando…";
     byId("sendError").hidden = true;
     setProgress(0, "Preparando transferencia…");
+    const selectedMethod = shareMethod();
+    const recipientEmail = selectedMethod === "email"
+        ? byId("recipientEmail").value.trim()
+        : "";
+    if (selectedMethod === "email" && !byId("recipientEmail").checkValidity()) {
+        byId("recipientEmail").reportValidity();
+        button.disabled = false;
+        updateShareMethod();
+        byId("uploadStatus").hidden = true;
+        return;
+    }
     const metadata = {
         title: byId("sendTitleInput").value.trim() || defaultTitle(),
         message: byId("sendMessage").value.trim(),
-        recipientEmail: "",
+        recipientEmail,
         password: byId("sendPassword").value
     };
     try {
         const data = capabilities.uploadMode === "multipart"
             ? await createMultipartTransfer(metadata)
             : await createLocalTransfer(metadata);
-        showResult(data);
+        if (selectedMethod === "email") {
+            setProgress(100, "Enviando el correo al destinatario…");
+            try {
+                const mail = await emailTransfer(data, recipientEmail);
+                showResult(data, {
+                    delivered: mail.delivered,
+                    warning: !mail.delivered,
+                    message: mail.message
+                });
+            } catch (emailError) {
+                showResult(data, {
+                    delivered: false,
+                    warning: true,
+                    message: "Los archivos están listos, pero el correo no pudo enviarse. Copia el enlace y compártelo manualmente."
+                });
+            }
+        } else {
+            showResult(data);
+        }
     } catch (error) {
         showError(`${error.message || "No se pudo completar el envío"}. Puedes intentarlo de nuevo con los mismos archivos.`);
         byId("uploadStatus").hidden = true;
         button.disabled = false;
-        button.textContent = "Enviar archivos";
+        updateShareMethod();
     }
 });
 

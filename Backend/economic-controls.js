@@ -98,7 +98,7 @@ function createEconomicConfig(env = process.env) {
         acceptNewTransfers: enabled(env.PHOCLOUD_ACCEPT_NEW_TRANSFERS, true),
         guestTransfersEnabled: enabled(env.PHOCLOUD_GUEST_TRANSFERS_ENABLED, true),
         guestTransferMaxBytes: gibibytes(
-            env.PHOCLOUD_GUEST_TRANSFER_MAX_GIB, 2,
+            env.PHOCLOUD_GUEST_TRANSFER_MAX_GIB, 3,
             TECHNICAL_MAX_TRANSFER_BYTES / GIB
         ),
         guestGlobalMonthlyUploadBytes: gibibytes(

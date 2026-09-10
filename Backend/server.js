@@ -3474,11 +3474,15 @@ app.delete("/transfers/:transferId", requireSameOrigin, requireTransferUploadOwn
     }
 });
 
-app.post("/transfers/:transferId/send", requireAuth, requireSameOrigin, limitSensitiveAction, async (req, res) => {
+app.post("/transfers/:transferId/send", requireSameOrigin,
+    requireTransferUploadOwner, limitSensitiveAction, async (req, res) => {
     const transfer = deliveryStore.getOwnedTransfer(
         req.params.transferId, req.auth.userId
     );
     if (!transfer) return res.status(404).json({ error: "Transferencia no encontrada" });
+    if (transfer.status !== "ready") {
+        return res.status(409).json({ error: "Espera a que termine la subida antes de enviar el correo" });
+    }
     if (Date.parse(transfer.expiresAt) <= Date.now()) {
         return res.status(410).json({ error: "La transferencia ha caducado" });
     }
@@ -3486,11 +3490,19 @@ app.post("/transfers/:transferId/send", requireAuth, requireSameOrigin, limitSen
     if (!validEmail(recipientEmail)) {
         return res.status(400).json({ error: "Añade un correo válido del destinatario" });
     }
+    if (req.guestTransfer
+        && recipientEmail !== normalizeEmail(transfer.recipientEmail)) {
+        return res.status(403).json({
+            error: "El correo debe coincidir con el destinatario indicado al crear la transferencia"
+        });
+    }
     try {
-        const profile = deliveryStore.getBrandProfile(req.auth.userId);
+        const profile = req.guestTransfer
+            ? null
+            : deliveryStore.getBrandProfile(req.auth.userId);
         const mail = await sendTransferDelivery({
             to: recipientEmail,
-            senderName: profile.brandName || "Straclase",
+            senderName: profile?.brandName || "Straclase",
             title: transfer.title,
             message: transfer.message,
             link: `${publicBaseUrl(req)}/t/${transfer.id}`,

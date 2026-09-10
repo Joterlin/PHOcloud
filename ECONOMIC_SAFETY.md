@@ -19,13 +19,13 @@ permanente de galerías y del abuso mediante cuentas múltiples.
 
 | Cuenta | Transferencia | Subidas/mes | Temporales simultáneas | Subidas simultáneas | ZIP | ZIP/mes |
 |---|---:|---:|---:|---:|---:|---:|
-| Invitado | 2 GiB | 5 GiB por navegador | 5 GiB por navegador | 1 | Según acceso público | Según acceso público |
+| Invitado | 3 GiB | 5 GiB por navegador | 5 GiB por navegador | 1 | Según acceso público | Según acceso público |
 | Gratis | 5 GiB | 5 GiB | 5 GiB | 1 | 1 GiB | 1 trabajo / 1 GiB |
 | Creador (4,99 €) | 25 GiB | 250 GiB | 50 GiB | 2 | 5 GiB | 5 trabajos / 10 GiB |
 | Pro (9,99 €) | 50 GiB | 1 TiB | 250 GiB | 4 | 10 GiB | 20 trabajos / 50 GiB |
 
 La subida anónima usa una sesión temporal sin acceso al panel. Tiene un máximo
-predeterminado de 2 GiB por envío, conserva la cuota gratuita de 5 GiB por
+predeterminado de 3 GiB por envío, conserva la cuota gratuita de 5 GiB por
 navegador y añade topes compartidos de 25 GiB almacenados y 100 GiB subidos al
 mes. Estos contadores son defensas de aplicación y una persona puede intentar
 eludir la cuota borrando cookies; el rate limiting y los umbrales globales siguen

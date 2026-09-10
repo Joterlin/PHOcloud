@@ -7,7 +7,7 @@
     <title>Straclase</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
     <link rel="manifest" href="/site.webmanifest">
-    <link rel="stylesheet" href="/gallery.css">
+    <link rel="stylesheet" href="/gallery.css?v=20260910-3">
 </head>
 <body>
     <header id="galleryHeading" class="gallery-header" hidden>
@@ -72,6 +72,11 @@
                     <span>Disponible desde cualquier dispositivo</span>
                 </div>
                 <div class="gallery-toolbar-actions">
+                    <div class="gallery-view-controls" role="group" aria-label="Tamaño de las fotografías">
+                        <button type="button" data-gallery-view="compact" aria-label="Miniaturas pequeñas" title="Miniaturas pequeñas" aria-pressed="false">▦</button>
+                        <button type="button" data-gallery-view="standard" aria-label="Vista normal" title="Vista normal" aria-pressed="true">▥</button>
+                        <button type="button" data-gallery-view="large" aria-label="Vista grande" title="Vista grande" aria-pressed="false">▣</button>
+                    </div>
                     <button id="quickShowFavorites" type="button" hidden>Mi selección</button>
                     <a id="quickDownloadOriginal">Descargar originales</a>
                     <a id="quickDownloadWeb">Calidad reducida</a>
@@ -132,6 +137,6 @@
             </div>
         </form>
     </dialog>
-    <script src="/gallery.js"></script>
+    <script src="/gallery.js?v=20260910-3"></script>
 </body>
 </html>

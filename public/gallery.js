@@ -52,6 +52,9 @@ const selectionDialog = document.getElementById("selectionDialog");
 const selectionForm = document.getElementById("selectionForm");
 const selectionDialogSummary = document.getElementById("selectionDialogSummary");
 const selectionDialogError = document.getElementById("selectionDialogError");
+const galleryViewButtons = Array.from(
+    document.querySelectorAll("[data-gallery-view]")
+);
 
 const folderId = window.location.pathname.split("/").filter(Boolean).pop();
 let images = [];
@@ -61,6 +64,30 @@ let current = 0;
 let favoritesOnly = false;
 let selection = { selectionLimit: 0, status: "open" };
 let selectionComments = new Map();
+
+function applyGalleryView(view) {
+    const selected = ["compact", "standard", "large"].includes(view)
+        ? view
+        : "standard";
+    document.body.dataset.galleryView = selected;
+    for (const button of galleryViewButtons) {
+        const active = button.dataset.galleryView === selected;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+    }
+    try {
+        localStorage.setItem("straclase-gallery-view", selected);
+    } catch {}
+}
+
+for (const button of galleryViewButtons) {
+    button.addEventListener("click", () => applyGalleryView(button.dataset.galleryView));
+}
+try {
+    applyGalleryView(localStorage.getItem("straclase-gallery-view") || "standard");
+} catch {
+    applyGalleryView("standard");
+}
 
 function galleryUrl(suffix = "") {
     return `/gallery/${encodeURIComponent(folderId)}${suffix}`;

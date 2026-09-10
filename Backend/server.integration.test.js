@@ -254,6 +254,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal(guestCapabilities.data.enabled, true);
         assert.equal(guestCapabilities.data.requiresAccount, false);
         assert.equal(guestCapabilities.data.uploadMode, "local");
+        assert.equal(guestCapabilities.data.maxTotalSize, 3 * 1024 * 1024 * 1024);
         const guestPage = await fetch(`${baseUrl}/enviar`);
         assert.equal(guestPage.status, 200);
         assert.match(await guestPage.text(), /id="guestFiles"/);
@@ -263,6 +264,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
 
         const guestForm = new FormData();
         guestForm.append("title", "Envío sin cuenta");
+        guestForm.append("recipientEmail", "destinatario@example.com");
         guestForm.append("files", new File(
             [Buffer.from("archivo invitado")], "invitado.txt",
             { type: "text/plain" }
@@ -277,6 +279,25 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
             .map((value) => value.split(";", 1)[0]).join("; ");
         assert.match(guestCookie, /phocloud_guest_sender=/);
         assert.equal((await fetch(`${baseUrl}/t/${guestUploadData.transferId}`)).status, 200);
+        const guestMail = await jsonRequest(
+            `${baseUrl}/transfers/${guestUploadData.transferId}/send`,
+            {
+                method: "POST",
+                cookie: guestCookie,
+                body: { email: "destinatario@example.com" }
+            }
+        );
+        assert.equal(guestMail.response.status, 200);
+        assert.equal(guestMail.data.delivered, false);
+        const redirectedGuestMail = await jsonRequest(
+            `${baseUrl}/transfers/${guestUploadData.transferId}/send`,
+            {
+                method: "POST",
+                cookie: guestCookie,
+                body: { email: "otra-persona@example.com" }
+            }
+        );
+        assert.equal(redirectedGuestMail.response.status, 403);
         assert.equal((await jsonRequest(
             `${baseUrl}/transfers/${guestUploadData.transferId}`,
             { method: "DELETE" }
