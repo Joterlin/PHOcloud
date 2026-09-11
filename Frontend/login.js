@@ -55,6 +55,16 @@ const accountToken = params.get("token") || "";
 let backTargetMode = "login";
 let backEmail = "";
 
+function trackSignupStarted() {
+    try {
+        if (sessionStorage.getItem("straclase-signup-started") === "1") return;
+        sessionStorage.setItem("straclase-signup-started", "1");
+        window.straclaseAnalytics?.capture("signup_started");
+    } catch {
+        window.straclaseAnalytics?.capture("signup_started");
+    }
+}
+
 function setGroup(id, visible, required = visible) {
     const group = byId(id);
     group.hidden = !visible;
@@ -167,6 +177,11 @@ async function verifyEmail() {
     }
     try {
         const data = await request("/auth/verify-email", { token: accountToken });
+        if (data.authenticated && data.analyticsDistinctId) {
+            await window.straclaseAnalytics?.identify(data.analyticsDistinctId);
+            await window.straclaseAnalytics?.capture("signup_completed");
+            await window.straclaseAnalytics?.capture("login_completed");
+        }
         showSuccess(data.authenticated
             ? "Correo confirmado. Abriendo tu espacio para convertir la transferencia…"
             : data.message);
@@ -186,6 +201,9 @@ authTabs.addEventListener("click", (event) => {
     if (targetMode) configureMode(targetMode);
 });
 byId("forgotButton").addEventListener("click", () => configureMode("forgot"));
+googleAuthButton.addEventListener("click", () => {
+    if (mode === "register") trackSignupStarted();
+});
 backButton.addEventListener("click", () => {
     history.replaceState({}, "", "/login");
     const target = backTargetMode;
@@ -207,10 +225,12 @@ authForm.addEventListener("submit", async (event) => {
     authButton.textContent = "Procesando…";
     try {
         if (mode === "login") {
-            await request("/auth/login", {
+            const data = await request("/auth/login", {
                 email: emailInput.value.trim(),
                 password: passwordInput.value
             });
+            await window.straclaseAnalytics?.identify(data.analyticsDistinctId);
+            await window.straclaseAnalytics?.capture("login_completed");
             window.location.replace(redirectTarget);
             return;
         }
@@ -223,6 +243,7 @@ authForm.addEventListener("submit", async (event) => {
             return;
         }
         if (mode === "register") {
+            trackSignupStarted();
             const data = await request("/auth/register", {
                 displayName: byId("displayName").value.trim(),
                 email: emailInput.value.trim(),

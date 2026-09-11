@@ -9,6 +9,7 @@
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-2"></script>
     <link rel="stylesheet" href="/style.css?v=20260911-2">
+    <link rel="stylesheet" href="/analytics.css?v=1">
 </head>
 <body>
     <main>
@@ -22,6 +23,7 @@
                 <span id="accountName">Mi cuenta</span>
                 <small id="accountPlan">Plan gratuito</small>
             </button>
+            <button id="analyticsButton" type="button" hidden>Estadísticas</button>
             <button id="brandSettingsButton" type="button">Mi marca</button>
             <button id="logoutButton" type="button">Cerrar sesión</button>
         </nav>
@@ -318,6 +320,45 @@
         <p id="errorMessage" role="alert" hidden></p>
         <footer class="panel-footer"><span class="footer-wordmark"><img src="/assets/straclase-mark.png" alt="">Straclase</span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></footer>
     </main>
+
+    <dialog id="analyticsDialog" aria-labelledby="analyticsDialogTitle">
+        <div class="analytics-dialog-content">
+            <div class="edit-dialog-heading">
+                <div><p class="edit-dialog-eyebrow">ÚLTIMOS 7 DÍAS</p><h2 id="analyticsDialogTitle">Estadísticas</h2></div>
+                <button id="closeAnalyticsDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
+            </div>
+            <p class="dialog-intro">Los usuarios proceden de Straclase. Las visitas y el embudo solo incluyen a quienes aceptaron la analítica.</p>
+            <div id="analyticsStatus" class="analytics-status" role="status">Cargando datos reales…</div>
+            <div class="analytics-cards">
+                <article><span>Visitantes</span><strong id="analyticsVisitors">—</strong></article>
+                <article><span>Páginas vistas</span><strong id="analyticsPageviews">—</strong></article>
+                <article><span>Usuarios registrados</span><strong id="analyticsTotalUsers">—</strong></article>
+                <article><span>Nuevos usuarios</span><strong id="analyticsNewUsers">—</strong></article>
+                <article><span>Registros completados</span><strong id="analyticsCompletedRegistrations">—</strong></article>
+                <article><span>Conversión a registro</span><strong id="analyticsConversion">—</strong></article>
+                <article><span>Usuarios activos</span><strong id="analyticsActiveUsers">—</strong></article>
+            </div>
+            <section class="analytics-section">
+                <div class="analytics-section-heading"><h3>Evolución</h3><span>Visitas y nuevos usuarios</span></div>
+                <div id="analyticsChart" class="analytics-chart" aria-label="Evolución de los últimos siete días"></div>
+            </section>
+            <div class="analytics-detail-grid">
+                <section class="analytics-section">
+                    <div class="analytics-section-heading"><h3>Embudo</h3><span>Personas únicas</span></div>
+                    <ol class="analytics-funnel">
+                        <li><span>Visitaron</span><strong id="funnelVisits">—</strong></li>
+                        <li><span>Iniciaron registro</span><strong id="funnelStarted">—</strong></li>
+                        <li><span>Completaron registro</span><strong id="funnelCompleted">—</strong></li>
+                        <li><span>Iniciaron sesión</span><strong id="funnelLogins">—</strong></li>
+                    </ol>
+                </section>
+                <section class="analytics-section">
+                    <div class="analytics-section-heading"><h3>Fuentes de tráfico</h3><span>Visitantes</span></div>
+                    <div id="analyticsSources" class="analytics-sources"><p>Aún no hay datos.</p></div>
+                </section>
+            </div>
+        </div>
+    </dialog>
 
     <dialog id="accountDialog" aria-labelledby="accountDialogTitle">
         <div class="edit-dialog-content account-dialog-content">
@@ -767,6 +808,7 @@
         </form>
     </dialog>
 
-    <script src="/script.js?v=20260911-2"></script>
+    <script src="/analytics.js?v=1"></script>
+    <script src="/script.js?v=20260911-analytics"></script>
 </body>
 </html>

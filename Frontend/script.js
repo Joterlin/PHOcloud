@@ -39,6 +39,8 @@ const editDialogError = byId("editDialogError");
 const saveDeliveryButton = byId("saveDelivery");
 const accountButton = byId("accountButton");
 const accountDialog = byId("accountDialog");
+const analyticsButton = byId("analyticsButton");
+const analyticsDialog = byId("analyticsDialog");
 const transferCreator = byId("transferCreator");
 const transfersPanel = byId("transfersPanel");
 
@@ -864,7 +866,10 @@ openButton.addEventListener("click", () => window.open(currentLink, "_blank"));
 logoutButton.addEventListener("click", async () => {
     logoutButton.disabled = true;
     try { await fetch("/auth/logout", { method: "POST" }); }
-    finally { window.location.replace("/login"); }
+    finally {
+        window.straclaseAnalytics?.reset();
+        window.location.replace("/login");
+    }
 });
 
 function planLabel(plan) {
@@ -913,6 +918,8 @@ async function loadAccount() {
     const response = await fetch("/account");
     const data = await readResponse(response);
     accountData = data.account;
+    window.straclaseAnalytics?.identify(accountData.analyticsDistinctId);
+    analyticsButton.hidden = accountData.analyticsAdmin !== true;
     const usage = accountData.usage;
     const galleryPercent = Math.min(100,
         usage.galleryLimit ? usage.galleryCount / usage.galleryLimit * 100 : 0
@@ -989,6 +996,104 @@ async function loadAccount() {
     viewingControl.disabled = false;
     applyGalleryExpiryPolicy();
 }
+
+function analyticsNumber(value) {
+    return new Intl.NumberFormat("es-ES").format(Number(value || 0));
+}
+
+function analyticsDays() {
+    const days = [];
+    const now = new Date();
+    for (let offset = 6; offset >= 0; offset -= 1) {
+        days.push(new Date(Date.UTC(
+            now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - offset
+        )).toISOString().slice(0, 10));
+    }
+    return days;
+}
+
+function renderAnalyticsChart(eventSeries, userSeries) {
+    const visitsByDay = new Map((eventSeries || []).map((row) => [row.day, Number(row.visitors || 0)]));
+    const usersByDay = new Map((userSeries || []).map((row) => [row.day, Number(row.newUsers || 0)]));
+    const days = analyticsDays();
+    const maximum = Math.max(1, ...days.flatMap((day) => [visitsByDay.get(day) || 0, usersByDay.get(day) || 0]));
+    const chart = byId("analyticsChart");
+    chart.replaceChildren();
+    for (const day of days) {
+        const visitors = visitsByDay.get(day) || 0;
+        const users = usersByDay.get(day) || 0;
+        const column = document.createElement("div");
+        column.className = "analytics-chart-column";
+        const bars = document.createElement("div");
+        bars.className = "analytics-chart-bars";
+        const visitsBar = document.createElement("i");
+        visitsBar.className = "visits";
+        visitsBar.style.height = `${visitors ? Math.max(8, visitors / maximum * 100) : 2}%`;
+        visitsBar.title = `${visitors} visitantes`;
+        const usersBar = document.createElement("i");
+        usersBar.className = "users";
+        usersBar.style.height = `${users ? Math.max(8, users / maximum * 100) : 2}%`;
+        usersBar.title = `${users} usuarios nuevos`;
+        bars.append(visitsBar, usersBar);
+        const label = document.createElement("span");
+        label.textContent = new Intl.DateTimeFormat("es-ES", { weekday: "short", timeZone: "UTC" })
+            .format(new Date(`${day}T00:00:00Z`)).replace(".", "");
+        column.append(bars, label);
+        chart.append(column);
+    }
+}
+
+function renderAnalyticsSources(sources) {
+    const container = byId("analyticsSources");
+    container.replaceChildren();
+    if (!sources?.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "Aún no hay visitas con consentimiento.";
+        container.append(empty);
+        return;
+    }
+    for (const item of sources) {
+        const row = document.createElement("div");
+        const source = document.createElement("span");
+        source.textContent = item.source;
+        const visitors = document.createElement("strong");
+        visitors.textContent = analyticsNumber(item.visitors);
+        row.append(source, visitors);
+        container.append(row);
+    }
+}
+
+async function loadAnalytics() {
+    byId("analyticsStatus").textContent = "Cargando datos reales…";
+    const response = await fetch("/analytics/summary");
+    const data = await readResponse(response);
+    const totals = data.totals;
+    byId("analyticsVisitors").textContent = analyticsNumber(totals.visitors);
+    byId("analyticsPageviews").textContent = analyticsNumber(totals.pageviews);
+    byId("analyticsTotalUsers").textContent = analyticsNumber(totals.totalUsers);
+    byId("analyticsNewUsers").textContent = analyticsNumber(totals.newUsers);
+    byId("analyticsCompletedRegistrations").textContent = analyticsNumber(totals.completedRegistrations);
+    byId("analyticsConversion").textContent = totals.conversionRate === null
+        ? "—"
+        : `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 }).format(totals.conversionRate)} %`;
+    byId("analyticsActiveUsers").textContent = analyticsNumber(totals.activeUsers);
+    byId("funnelVisits").textContent = analyticsNumber(totals.visitors);
+    byId("funnelStarted").textContent = analyticsNumber(totals.signupStarted);
+    byId("funnelCompleted").textContent = analyticsNumber(totals.signupCompleted);
+    byId("funnelLogins").textContent = analyticsNumber(totals.logins);
+    renderAnalyticsChart(data.eventSeries, data.userSeries);
+    renderAnalyticsSources(data.sources);
+    byId("analyticsStatus").textContent = data.posthogConfigured
+        ? "PostHog conectado · región europea · datos internos actualizados"
+        : "Datos internos activos · PostHog pendiente de añadir su Project API Key";
+}
+
+analyticsButton.addEventListener("click", async () => {
+    analyticsDialog.showModal();
+    try { await loadAnalytics(); }
+    catch (error) { byId("analyticsStatus").textContent = error.message; }
+});
+byId("closeAnalyticsDialog").addEventListener("click", () => analyticsDialog.close());
 
 accountButton.addEventListener("click", () => accountDialog.showModal());
 byId("closeAccountDialog").addEventListener("click", () => accountDialog.close());
@@ -2810,6 +2915,16 @@ Promise.all([
     loadTransferCapabilities(), loadGalleryCapabilities()
 ]).then(async () => {
     const url = new URL(window.location.href);
+    const analyticsAuth = url.searchParams.get("analyticsAuth");
+    if (["signup", "login"].includes(analyticsAuth)) {
+        await window.straclaseAnalytics?.identify(accountData?.analyticsDistinctId);
+        if (analyticsAuth === "signup") {
+            await window.straclaseAnalytics?.capture("signup_completed");
+        }
+        await window.straclaseAnalytics?.capture("login_completed");
+        url.searchParams.delete("analyticsAuth");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
     const billingResult = url.searchParams.get("billing");
     await restorePendingGuestSelection().catch(() => {});
     await handleRequestedTransferConversion().catch((error) => {

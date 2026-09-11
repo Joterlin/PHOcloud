@@ -93,6 +93,26 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         CREATE INDEX IF NOT EXISTS user_identities_user_id
         ON user_identities(user_id);
 
+        CREATE TABLE IF NOT EXISTS analytics_events (
+            id INTEGER PRIMARY KEY,
+            event_name TEXT NOT NULL CHECK (event_name IN (
+                '$pageview', 'signup_started', 'signup_completed', 'login_completed'
+            )),
+            visitor_id TEXT NOT NULL,
+            user_id INTEGER,
+            page_path TEXT NOT NULL DEFAULT '/',
+            traffic_source TEXT NOT NULL DEFAULT 'Directo',
+            dedupe_key TEXT NOT NULL UNIQUE,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS analytics_events_created_at
+        ON analytics_events(created_at);
+
+        CREATE INDEX IF NOT EXISTS analytics_events_name_created
+        ON analytics_events(event_name, created_at);
+
         CREATE TABLE IF NOT EXISTS brand_profiles (
             user_id INTEGER PRIMARY KEY,
             brand_name TEXT NOT NULL DEFAULT '',
@@ -665,6 +685,55 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         SELECT COUNT(*) AS count FROM users
         WHERE is_guest = 0 AND auth_disabled = 0
     `);
+    const insertAnalyticsEvent = database.prepare(`
+        INSERT OR IGNORE INTO analytics_events (
+            event_name, visitor_id, user_id, page_path, traffic_source,
+            dedupe_key, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const selectAnalyticsUserSummary = database.prepare(`
+        SELECT
+            COUNT(*) AS totalUsers,
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS newUsers,
+            COUNT(CASE WHEN email_verified_at IS NOT NULL THEN 1 END) AS completedUsers,
+            COUNT(CASE WHEN email_verified_at >= ? THEN 1 END) AS completedRegistrations
+        FROM users
+        WHERE is_guest = 0 AND auth_disabled = 0
+    `);
+    const selectAnalyticsEventSummary = database.prepare(`
+        SELECT
+            COUNT(CASE WHEN event_name = '$pageview' THEN 1 END) AS pageviews,
+            COUNT(DISTINCT CASE WHEN event_name = '$pageview' THEN visitor_id END) AS visitors,
+            COUNT(DISTINCT CASE WHEN event_name = 'signup_started' THEN visitor_id END) AS signupStarted,
+            COUNT(DISTINCT CASE WHEN event_name = 'signup_completed' THEN COALESCE('u:' || user_id, 'v:' || visitor_id) END) AS signupCompleted,
+            COUNT(DISTINCT CASE WHEN event_name = 'login_completed' THEN COALESCE('u:' || user_id, 'v:' || visitor_id) END) AS logins,
+            COUNT(DISTINCT user_id) AS activeUsers
+        FROM analytics_events
+        WHERE created_at >= ?
+    `);
+    const selectAnalyticsEventSeries = database.prepare(`
+        SELECT date(created_at / 1000, 'unixepoch') AS day,
+            COUNT(CASE WHEN event_name = '$pageview' THEN 1 END) AS pageviews,
+            COUNT(DISTINCT CASE WHEN event_name = '$pageview' THEN visitor_id END) AS visitors
+        FROM analytics_events
+        WHERE created_at >= ?
+        GROUP BY day ORDER BY day
+    `);
+    const selectAnalyticsUserSeries = database.prepare(`
+        SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS newUsers
+        FROM users
+        WHERE is_guest = 0 AND auth_disabled = 0 AND created_at >= ?
+        GROUP BY day ORDER BY day
+    `);
+    const selectAnalyticsSources = database.prepare(`
+        SELECT traffic_source AS source, COUNT(DISTINCT visitor_id) AS visitors
+        FROM analytics_events
+        WHERE event_name = '$pageview' AND created_at >= ?
+        GROUP BY traffic_source ORDER BY visitors DESC LIMIT 8
+    `);
+    const deleteOldAnalyticsEvents = database.prepare(
+        "DELETE FROM analytics_events WHERE created_at < ?"
+    );
     const insertUser = database.prepare(`
         INSERT INTO users (
             username, email, display_name, password_hash, password_salt,
@@ -1530,6 +1599,29 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         deleteDelivery: (id, ownerId) => removeDelivery.run(id, ownerId).changes > 0,
         deleteAllDeliveries: (ownerId) => Number(removeAllDeliveries.run(ownerId).changes),
         hasUsers: () => Number(countUsers.get().count) > 0,
+        recordAnalyticsEvent({
+            eventName, visitorId, userId = null, pagePath = "/",
+            trafficSource = "Directo", dedupeKey, createdAt
+        }) {
+            return insertAnalyticsEvent.run(
+                eventName, visitorId, userId, pagePath, trafficSource,
+                dedupeKey, createdAt
+            ).changes > 0;
+        },
+        getAnalyticsSummary({ sinceMs, sinceIso }) {
+            const userSummary = selectAnalyticsUserSummary.get(sinceIso, sinceIso);
+            const eventSummary = selectAnalyticsEventSummary.get(sinceMs);
+            return {
+                users: userSummary,
+                events: eventSummary,
+                eventSeries: selectAnalyticsEventSeries.all(sinceMs),
+                userSeries: selectAnalyticsUserSeries.all(sinceIso),
+                sources: selectAnalyticsSources.all(sinceMs)
+            };
+        },
+        deleteOldAnalyticsEvents(cutoffMs) {
+            return Number(deleteOldAnalyticsEvents.run(cutoffMs).changes);
+        },
         createUser({
             username, email = null, displayName = "", passwordHash,
             passwordSalt, emailVerifiedAt = null, plan = "free",

@@ -16,6 +16,22 @@ if (Boolean(googleClientId) !== Boolean(googleClientSecret)) {
     warnings.push("El acceso con Google no está configurado; correo y contraseña seguirán disponibles");
 }
 
+const posthogProjectApiKey = process.env.POSTHOG_PROJECT_API_KEY?.trim() || "";
+const posthogHost = (process.env.POSTHOG_HOST || "https://eu.i.posthog.com")
+    .trim().replace(/\/$/, "");
+if (posthogProjectApiKey && !posthogProjectApiKey.startsWith("phc_")) {
+    errors.push("POSTHOG_PROJECT_API_KEY debe ser la Project API Key pública (phc_), no una clave personal");
+}
+if (!["https://eu.i.posthog.com", "https://us.i.posthog.com"].includes(posthogHost)) {
+    errors.push("POSTHOG_HOST debe ser el host oficial EU o US de PostHog");
+}
+if (!posthogProjectApiKey) {
+    warnings.push("PostHog no está configurado; el panel conservará métricas internas consentidas");
+}
+if (!process.env.PHOCLOUD_ANALYTICS_ADMIN_EMAILS?.trim()) {
+    warnings.push("No hay administradores de estadísticas; configura PHOCLOUD_ANALYTICS_ADMIN_EMAILS");
+}
+
 function enabledValue(value) {
     return ["1", "true", "yes", "on"].includes(
         String(value || "").trim().toLowerCase()

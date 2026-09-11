@@ -835,6 +835,12 @@ test("producción no expone la configuración privilegiada inicial", async () =>
         const status = await jsonRequest(`${baseUrl}/auth/status`);
         assert.equal(status.data.setupRequired, false);
         assert.equal(status.data.googleAuthEnabled, false);
+        const analyticsConfig = await jsonRequest(`${baseUrl}/analytics/config`);
+        assert.equal(analyticsConfig.response.status, 200);
+        assert.equal(analyticsConfig.data.enabled, false);
+        assert.equal(analyticsConfig.data.region, "EU");
+        const analyticsSummary = await fetch(`${baseUrl}/analytics/summary`);
+        assert.equal(analyticsSummary.status, 401);
         const googleUnavailable = await fetch(`${baseUrl}/auth/google`, {
             redirect: "manual"
         });

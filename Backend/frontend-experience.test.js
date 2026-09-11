@@ -165,3 +165,32 @@ test("Mi marca ofrece una vista previa útil y protege el contraste público", (
     assert.match(galleryCss, /color: var\(--accent-foreground\)/);
     assert.match(transferScript, /--accent-foreground/);
 });
+
+test("la analítica es consentida, privada y muestra únicamente datos reales", () => {
+    const dashboard = read("Frontend/index.html");
+    const dashboardScript = read("Frontend/script.js");
+    const login = read("Frontend/login.html");
+    const loginScript = read("Frontend/login.js");
+    const send = read("public/send.html");
+    const analytics = read("public/analytics.js");
+    const privacy = read("public/privacy.html");
+    assert.match(dashboard, /id="analyticsButton"[^>]+hidden/);
+    assert.match(dashboard, /id="analyticsDialog"/);
+    assert.match(dashboard, /analytics\.js\?v=/);
+    assert.match(login, /analytics\.js\?v=/);
+    assert.match(send, /analytics\.js\?v=/);
+    assert.match(dashboardScript, /fetch\("\/analytics\/summary"\)/);
+    assert.match(dashboardScript, /accountData\.analyticsAdmin !== true/);
+    assert.match(dashboardScript, /straclaseAnalytics\?\.reset\(\)/);
+    assert.match(loginScript, /capture\("signup_started"\)/);
+    assert.match(loginScript, /capture\("signup_completed"\)/);
+    assert.match(loginScript, /capture\("login_completed"\)/);
+    assert.match(analytics, /autocapture: false/);
+    assert.match(analytics, /disable_session_recording: true/);
+    assert.match(analytics, /opt_out_capturing_by_default: true/);
+    assert.match(analytics, /consent\(\) !== "granted"/);
+    assert.doesNotMatch(read("public/gallery.html"), /analytics\.js/);
+    assert.doesNotMatch(read("public/transfer.html"), /analytics\.js/);
+    assert.match(privacy, /Cookies y analítica/);
+    assert.match(privacy, /No se envían contraseñas, tokens, datos de pago, imágenes, archivos ni contenido privado/);
+});

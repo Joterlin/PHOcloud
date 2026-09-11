@@ -36,6 +36,20 @@ En producción son obligatorias:
   `PHOCLOUD_GALLERY_R2_SECRET_ACCESS_KEY` y
   `PHOCLOUD_GALLERY_R2_BUCKET`
 
+## Analítica opcional
+
+Configura `PHOCLOUD_ANALYTICS_ADMIN_EMAILS` con uno o varios correos de cuentas
+administradoras separados por comas. Añade `POSTHOG_PROJECT_API_KEY=phc_...` y
+`POSTHOG_HOST=https://eu.i.posthog.com` si el proyecto de PostHog está en Europa.
+Sin esa clave, las métricas internas siguen funcionando y el panel indica que
+PostHog está pendiente.
+
+En PostHog revisa **Project Settings > General** y confirma que se descarta la
+dirección IP. La aplicación ya desactiva autocaptura y grabación de sesiones,
+limita los eventos y solo inicializa la captura después del consentimiento.
+Cloudflare Web Analytics, si está activado desde Cloudflare, es independiente y
+no se retira al configurar PostHog.
+
 ## Transferencias grandes con R2
 
 Crea un bucket privado exclusivo para transferencias temporales y un token que

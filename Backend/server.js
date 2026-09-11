@@ -83,6 +83,19 @@ const economicConfig = createEconomicConfig();
 const billingEnvironment = billing.publicConfiguration().mode;
 const secureCookies = isProduction;
 const googleAuth = createGoogleAuth();
+const posthogProjectApiKey = (process.env.POSTHOG_PROJECT_API_KEY || "").trim();
+const allowedPosthogHosts = new Set([
+    "https://eu.i.posthog.com", "https://us.i.posthog.com"
+]);
+const requestedPosthogHost = (process.env.POSTHOG_HOST || "https://eu.i.posthog.com")
+    .trim().replace(/\/$/, "");
+const posthogHost = allowedPosthogHosts.has(requestedPosthogHost)
+    ? requestedPosthogHost
+    : "https://eu.i.posthog.com";
+const analyticsAdminEmails = new Set(
+    String(process.env.PHOCLOUD_ANALYTICS_ADMIN_EMAILS || "")
+        .split(",").map((email) => email.trim().toLowerCase()).filter(Boolean)
+);
 const GALLERY_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 const GUEST_UPLOAD_COOKIE_NAME = "phocloud_guest_sender";
 const GUEST_UPLOAD_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -124,6 +137,7 @@ const validFolderId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{
 const loginAttempts = new Map();
 const galleryAttempts = new Map();
 const sensitiveActionAttempts = new Map();
+const analyticsAttempts = new Map();
 const zipConcurrency = createConcurrencyLimiter();
 const uploadConcurrency = createConcurrencyLimiter();
 const activeZipBuilds = new Map();
@@ -266,7 +280,7 @@ app.use((req, res, next) => {
         ...(galleryStorage.requestOrigins || [])
     ].filter(Boolean))].map((origin) => ` ${origin}`).join("");
     res.set({
-        "Content-Security-Policy": `default-src 'self'; img-src 'self' data: blob:${storageOrigins}; media-src 'self' blob:${storageOrigins}; style-src 'self'; script-src 'self'; connect-src 'self'${storageOrigins}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
+        "Content-Security-Policy": `default-src 'self'; img-src 'self' data: blob:${storageOrigins}; media-src 'self' blob:${storageOrigins}; style-src 'self'; script-src 'self'; connect-src 'self'${storageOrigins}${posthogProjectApiKey ? ` ${posthogHost}` : ""}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
         "Referrer-Policy": "no-referrer",
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
@@ -1447,6 +1461,32 @@ function googleErrorRedirect(res, message) {
     res.redirect(302, `/login?oauthError=${encodeURIComponent(message)}`);
 }
 
+function analyticsDistinctId(userId) {
+    return createHash("sha256")
+        .update(`straclase-account:${userId}`)
+        .digest("hex").slice(0, 32);
+}
+
+function isAnalyticsAdmin(user) {
+    return Boolean(user?.email)
+        && analyticsAdminEmails.has(user.email.trim().toLowerCase());
+}
+
+function safeAnalyticsPath(value) {
+    const aliases = { "/send": "/enviar", "/app/": "/app" };
+    const path = aliases[value] || value;
+    return new Set(["/", "/enviar", "/login", "/app"]).has(path)
+        ? path
+        : "/other";
+}
+
+function safeTrafficSource(value) {
+    const source = typeof value === "string" ? value.trim() : "";
+    return source && /^[\p{L}\p{N} ._-]{1,100}$/u.test(source)
+        ? source
+        : "Directo";
+}
+
 function getSessionFromRequest(req) {
     const token = readCookie(
         req.headers.cookie,
@@ -1753,6 +1793,18 @@ function limitSensitiveAction(req, res, next) {
             error: "Demasiadas solicitudes. Espera unos minutos."
         });
     }
+    current.count += 1;
+    next();
+}
+
+function limitAnalyticsEvent(req, res, next) {
+    const now = Date.now();
+    const current = analyticsAttempts.get(req.ip);
+    if (!current || current.resetAt <= now) {
+        analyticsAttempts.set(req.ip, { count: 1, resetAt: now + 60_000 });
+        return next();
+    }
+    if (current.count >= 120) return res.status(429).end();
     current.count += 1;
     next();
 }
@@ -2516,6 +2568,7 @@ app.get("/auth/status", (req, res) => {
         user: session ? {
             email: session.email,
             displayName: session.displayName || session.email,
+            analyticsDistinctId: analyticsDistinctId(session.userId),
             plan: session.plan,
             planStatus: session.planStatus
         } : null
@@ -2577,6 +2630,7 @@ app.get("/auth/google/callback", async (req, res) => {
             throw new Error("Google no devolvió un correo válido");
         }
 
+        let registrationCompleted = false;
         let user = deliveryStore.getUserByIdentity(
             "google",
             identity.subject
@@ -2604,6 +2658,7 @@ app.get("/auth/google/callback", async (req, res) => {
                         user.id,
                         new Date().toISOString()
                     );
+                    registrationCompleted = true;
                 }
             } else {
                 const now = new Date().toISOString();
@@ -2624,6 +2679,7 @@ app.get("/auth/google/callback", async (req, res) => {
                         createdAt: now
                     });
                     user = deliveryStore.getUserById(userId);
+                    registrationCompleted = true;
                 } catch (error) {
                     user = deliveryStore.getUserByEmail(identity.email);
                     if (!user) throw error;
@@ -2644,7 +2700,12 @@ app.get("/auth/google/callback", async (req, res) => {
 
         deliveryStore.deleteExpiredSessions(Date.now());
         startSession(res, user.id);
-        res.redirect(302, identity.next);
+        const nextUrl = new URL(identity.next, "http://straclase.local");
+        nextUrl.searchParams.set(
+            "analyticsAuth",
+            registrationCompleted ? "signup" : "login"
+        );
+        res.redirect(302, `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
     } catch (error) {
         console.error("Google OAuth callback error", error.message);
         googleErrorRedirect(
@@ -2795,7 +2856,8 @@ app.post("/auth/verify-email", requireSameOrigin, (req, res) => {
     startSession(res, record.userId);
     res.json({
         message: "Correo confirmado. Tu sesión ya está iniciada.",
-        authenticated: true
+        authenticated: true,
+        analyticsDistinctId: analyticsDistinctId(record.userId)
     });
 });
 
@@ -2903,7 +2965,11 @@ app.post("/auth/login", requireSameOrigin, (req, res) => {
     startSession(res, user.id);
 
     const billingUser = userForCurrentBillingEnvironment(user);
-    res.json({ email: billingUser.email, plan: billingUser.plan });
+    res.json({
+        email: billingUser.email,
+        plan: billingUser.plan,
+        analyticsDistinctId: analyticsDistinctId(user.id)
+    });
 });
 
 app.post("/auth/logout", requireSameOrigin, (req, res) => {
@@ -2923,6 +2989,93 @@ app.post("/auth/logout", requireSameOrigin, (req, res) => {
 });
 
 app.use(express.static(publicDirectory));
+
+app.get("/analytics/vendor.js", (req, res) => {
+    res.set("Cache-Control", "public, max-age=604800, immutable");
+    res.sendFile(path.join(
+        rootDirectory, "node_modules", "posthog-js", "dist", "array.no-external.js"
+    ));
+});
+
+app.get("/analytics/config", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({
+        enabled: Boolean(posthogProjectApiKey),
+        projectApiKey: posthogProjectApiKey || null,
+        host: posthogHost,
+        region: posthogHost.startsWith("https://eu.") ? "EU" : "US"
+    });
+});
+
+app.post(
+    "/analytics/event",
+    requireSameOrigin,
+    limitAnalyticsEvent,
+    (req, res) => {
+        const eventName = req.body?.eventName;
+        const visitorId = req.body?.visitorId;
+        const dedupeKey = req.body?.dedupeKey;
+        const allowedEvents = new Set([
+            "$pageview", "signup_started", "signup_completed", "login_completed"
+        ]);
+        if (!allowedEvents.has(eventName)
+            || typeof visitorId !== "string"
+            || !/^[a-zA-Z0-9_-]{16,80}$/.test(visitorId)
+            || typeof dedupeKey !== "string"
+            || !/^[a-zA-Z0-9_-]{16,80}$/.test(dedupeKey)) {
+            return res.status(400).json({ error: "Evento no válido" });
+        }
+        const session = getSessionFromRequest(req);
+        deliveryStore.recordAnalyticsEvent({
+            eventName,
+            visitorId,
+            userId: session?.userId || null,
+            pagePath: safeAnalyticsPath(req.body?.pagePath),
+            trafficSource: safeTrafficSource(req.body?.trafficSource),
+            dedupeKey,
+            createdAt: Date.now()
+        });
+        res.status(202).end();
+    }
+);
+
+app.get("/analytics/summary", requireAuth, (req, res) => {
+    const user = deliveryStore.getUserById(req.auth.userId);
+    if (!isAnalyticsAdmin(user)) {
+        return res.status(403).json({ error: "Estadísticas solo disponibles para administración" });
+    }
+    const now = new Date();
+    const since = new Date(Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6
+    ));
+    const summary = deliveryStore.getAnalyticsSummary({
+        sinceMs: since.getTime(),
+        sinceIso: since.toISOString()
+    });
+    const visitors = Number(summary.events.visitors || 0);
+    const completed = Number(summary.users.completedRegistrations || 0);
+    res.set("Cache-Control", "no-store");
+    res.json({
+        periodDays: 7,
+        posthogConfigured: Boolean(posthogProjectApiKey),
+        totals: {
+            totalUsers: Number(summary.users.totalUsers || 0),
+            completedUsers: Number(summary.users.completedUsers || 0),
+            newUsers: Number(summary.users.newUsers || 0),
+            completedRegistrations: completed,
+            visitors,
+            pageviews: Number(summary.events.pageviews || 0),
+            activeUsers: Number(summary.events.activeUsers || 0),
+            signupStarted: Number(summary.events.signupStarted || 0),
+            signupCompleted: Number(summary.events.signupCompleted || 0),
+            logins: Number(summary.events.logins || 0),
+            conversionRate: visitors ? Math.round(completed / visitors * 1000) / 10 : null
+        },
+        eventSeries: summary.eventSeries,
+        userSeries: summary.userSeries,
+        sources: summary.sources
+    });
+});
 
 app.get(["/app", "/app/", "/index.html"], requirePageAuth, (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -2949,6 +3102,8 @@ app.get("/account", requireAuth, (req, res) => {
         account: {
             email: user.email,
             displayName: user.displayName || user.email,
+            analyticsAdmin: isAnalyticsAdmin(user),
+            analyticsDistinctId: analyticsDistinctId(user.id),
             emailVerified: !user.email || Boolean(user.emailVerifiedAt),
             plan: user.plan,
             planStatus: user.planStatus,
@@ -5542,7 +5697,10 @@ const cleanupTimer = setInterval(() => {
     deliveryStore.deleteExpiredGuestUploadSessions(now);
     deliveryStore.deleteExpiredTransferSenderVerifications(now);
     cleanupExpiredTransfers().catch(console.error);
-    for (const attempts of [loginAttempts, galleryAttempts, sensitiveActionAttempts]) {
+    deliveryStore.deleteOldAnalyticsEvents(now - 180 * 24 * 60 * 60 * 1000);
+    for (const attempts of [
+        loginAttempts, galleryAttempts, sensitiveActionAttempts, analyticsAttempts
+    ]) {
         for (const [key, value] of attempts) {
             if (value.resetAt <= now) attempts.delete(key);
         }

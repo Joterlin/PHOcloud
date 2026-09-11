@@ -62,6 +62,8 @@ npm run validate
 - Transferir hasta 3 GiB como invitado, 5 GiB en Gratis, 25 GiB en Creador y 50 GiB en Pro, siempre con caducidad a las 24 horas.
 - Descargar un archivo concreto o el paquete completo en ZIP.
 - Enviar el enlace por correo y registrar el número de descargas.
+- Analítica con consentimiento: visitantes, páginas vistas, embudo de registro,
+  accesos, usuarios activos y fuentes. Los totales de cuentas proceden de SQLite.
 
 ## Dónde se guarda la información
 
@@ -98,6 +100,20 @@ del cliente. Las contraseñas de galerías nunca se incluyen en el mensaje porqu
 Straclase no conserva una versión legible de ellas.
 
 El archivo `.env` contiene secretos y está excluido del control de versiones.
+
+## Estadísticas y PostHog
+
+El panel global aparece únicamente a las cuentas incluidas en
+`PHOCLOUD_ANALYTICS_ADMIN_EMAILS`. Los usuarios registrados y nuevos se calculan
+desde SQLite; las visitas, el embudo y las fuentes solo cuentan a quienes aceptan
+la analítica. Los eventos permitidos son `$pageview`, `signup_started`,
+`signup_completed` y `login_completed`.
+
+Para enviar también esos eventos a PostHog configura `POSTHOG_PROJECT_API_KEY`
+con la Project API Key pública (`phc_...`) y `POSTHOG_HOST` con
+`https://eu.i.posthog.com` para un proyecto europeo. No uses una Personal API
+Key. El código no captura formularios, imágenes, archivos, pagos ni grabaciones
+de sesión, y continúa funcionando si PostHog no responde.
 
 ## Almacenamiento de galerías
 

@@ -82,6 +82,65 @@ test("crea, consulta y elimina entregas", () => {
     }
 });
 
+test("registra estadísticas reales, deduplica eventos y calcula el resumen", () => {
+    const environment = createTestEnvironment();
+    const store = createDeliveryStore(environment);
+    try {
+        const userId = store.createUser({
+            username: "analytics_user",
+            email: "analytics@example.com",
+            displayName: "Analytics",
+            passwordHash: "hash",
+            passwordSalt: "salt",
+            emailVerifiedAt: "2026-09-11T09:00:00.000Z",
+            createdAt: "2026-09-11T08:00:00.000Z"
+        });
+        const base = {
+            visitorId: "visitor_1234567890",
+            userId,
+            pagePath: "/login",
+            trafficSource: "google.com",
+            createdAt: Date.parse("2026-09-11T10:00:00.000Z")
+        };
+        assert.equal(store.recordAnalyticsEvent({
+            ...base, eventName: "$pageview", dedupeKey: "event_1234567890"
+        }), true);
+        assert.equal(store.recordAnalyticsEvent({
+            ...base, eventName: "$pageview", dedupeKey: "event_1234567890"
+        }), false);
+        for (const [eventName, suffix] of [
+            ["signup_started", "start"],
+            ["signup_completed", "complete"],
+            ["login_completed", "login"]
+        ]) {
+            store.recordAnalyticsEvent({
+                ...base,
+                eventName,
+                dedupeKey: `event_123456_${suffix}`
+            });
+        }
+        const summary = store.getAnalyticsSummary({
+            sinceMs: Date.parse("2026-09-10T00:00:00.000Z"),
+            sinceIso: "2026-09-10T00:00:00.000Z"
+        });
+        assert.equal(summary.users.totalUsers, 1);
+        assert.equal(summary.users.newUsers, 1);
+        assert.equal(summary.users.completedRegistrations, 1);
+        assert.equal(summary.events.visitors, 1);
+        assert.equal(summary.events.pageviews, 1);
+        assert.equal(summary.events.signupStarted, 1);
+        assert.equal(summary.events.signupCompleted, 1);
+        assert.equal(summary.events.logins, 1);
+        assert.equal(summary.events.activeUsers, 1);
+        assert.deepEqual(summary.sources.map((item) => ({ ...item })), [
+            { source: "google.com", visitors: 1 }
+        ]);
+    } finally {
+        store.close();
+        fs.rmSync(environment.root, { recursive: true, force: true });
+    }
+});
+
 test("importa una galería antigua desde metadata.json", () => {
     const environment = createTestEnvironment();
     const galleryId = "00000000-0000-4000-8000-000000000002";
