@@ -8,7 +8,7 @@
     <link rel="icon" href="/assets/straclase-favicon.svg" type="image/svg+xml">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-2"></script>
-    <link rel="stylesheet" href="/style.css?v=20260910-3">
+    <link rel="stylesheet" href="/style.css?v=20260911-1">
 </head>
 <body>
     <main>
@@ -398,46 +398,112 @@
                 </div>
                 <button id="closeBrandDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
             </div>
-            <p class="dialog-intro">Las nuevas galerías comenzarán con estos datos. Después podrás personalizar cada una.</p>
-            <div id="profileLogoPreview" class="logo-preview" hidden>
-                <img id="profileLogoImage" alt="Imagen de marca actual">
-            </div>
-            <div class="options-grid">
-                <label class="field" for="profileBrandName">Nombre de tu marca (opcional)
-                    <input id="profileBrandName" type="text" maxlength="80" placeholder="Ej. Marta Studio">
-                </label>
-                <label class="field" for="profileLogo">Imagen de marca (opcional)
-                    <input id="profileLogo" type="file"
-                        accept=".jpg,.jpeg,.png,.gif">
-                    <small>Puedes usar el nombre, la imagen o ambos.</small>
-                </label>
-                <label class="field range-field" for="profileLogoScale">Tamaño de la imagen
-                    <input id="profileLogoScale" type="range" min="50" max="160" value="100">
-                </label>
-                <label class="field range-field" for="profileLogoPositionX">Posición horizontal
-                    <input id="profileLogoPositionX" type="range" min="0" max="100" value="50">
-                </label>
-                <label class="field range-field" for="profileLogoPositionY">Posición vertical
-                    <input id="profileLogoPositionY" type="range" min="0" max="100" value="50">
-                </label>
-                <label class="field color-field" for="profileAccentColor">Color de textos y botones
-                    <input id="profileAccentColor" type="color" value="#c9aa70">
-                </label>
-                <label class="field color-field" for="profileBackgroundColor">Color de fondo de la galería
-                    <input id="profileBackgroundColor" type="color" value="#ffffff">
-                </label>
-                <section class="field field-wide link-editor" aria-labelledby="profileLinksTitle">
-                    <div class="link-editor-heading">
-                        <div><strong id="profileLinksTitle">Enlaces predeterminados</strong>
-                            <small>Se copiarán a cada galería nueva en este orden.</small></div>
-                        <button id="addProfileLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
+            <p class="dialog-intro">Configura el punto de partida de tus próximas galerías. Puedes ver cada cambio antes de guardarlo.</p>
+            <div class="brand-editor-layout">
+                <aside id="profileBrandLivePreview" class="brand-live-preview" data-tone="light"
+                    aria-label="Vista previa de tu marca">
+                    <p class="live-preview-label"><span></span> VISTA PREVIA EN TIEMPO REAL</p>
+                    <div class="brand-preview-hero">
+                        <div class="brand-preview-topbar">
+                            <span id="profileLiveBrand" class="brand-preview-identity">
+                                <img id="profileLiveLogo" alt="" hidden>
+                                <strong id="profileLiveBrandName">Tu marca</strong>
+                            </span>
+                            <span id="profileLiveLink" class="brand-preview-link">TU WEB</span>
+                        </div>
+                        <div class="brand-preview-copy">
+                            <small>ENTREGA FOTOGRÁFICA</small>
+                            <strong>Nombre del cliente</strong>
+                            <div class="brand-preview-actions">
+                                <span>Ver fotografías</span>
+                                <span>Descargar</span>
+                            </div>
+                        </div>
                     </div>
-                    <div id="profileLinksList" class="link-list" aria-live="polite"></div>
-                </section>
+                    <div class="brand-preview-collection">
+                        <span>LA COLECCIÓN</span>
+                        <div><i></i><i></i><i></i></div>
+                    </div>
+                    <p id="profileContrastStatus" class="contrast-status"></p>
+                </aside>
+
+                <div class="brand-editor-controls">
+                    <div id="profileLogoPreview" class="logo-preview logo-source-preview" hidden>
+                        <img id="profileLogoImage" alt="Imagen de marca actual">
+                    </div>
+                    <div class="options-grid">
+                        <label class="field" for="profileBrandName">Nombre de tu marca (opcional)
+                            <input id="profileBrandName" type="text" maxlength="80" placeholder="Ej. Marta Studio">
+                        </label>
+                        <label class="field" for="profileLogo">Imagen de marca (opcional)
+                            <input id="profileLogo" type="file" accept=".jpg,.jpeg,.png,.gif">
+                            <small>PNG transparente recomendado. Puedes usar imagen, nombre o ambos.</small>
+                        </label>
+
+                        <section id="profileLogoControls" class="field field-wide logo-adjuster" hidden
+                            aria-labelledby="profileLogoControlsTitle">
+                            <div class="logo-adjuster-heading">
+                                <div><strong id="profileLogoControlsTitle">Ajustar imagen de marca</strong>
+                                    <small>Arrastra la imagen en la vista previa o utiliza estos controles.</small></div>
+                                <button class="secondary small-button" type="button" data-reset-profile-logo>Restablecer</button>
+                            </div>
+                            <div class="logo-adjuster-grid">
+                                <div class="logo-size-control">
+                                    <label for="profileLogoScale">Tamaño</label>
+                                    <div class="number-stepper">
+                                        <button type="button" data-adjust-target="profileLogoScale" data-delta="-5" aria-label="Reducir tamaño">−</button>
+                                        <input id="profileLogoScale" type="number" min="50" max="160" step="5" value="100">
+                                        <span>%</span>
+                                        <button type="button" data-adjust-target="profileLogoScale" data-delta="5" aria-label="Aumentar tamaño">＋</button>
+                                    </div>
+                                </div>
+                                <div class="position-control">
+                                    <span>Horizontal</span>
+                                    <input id="profileLogoPositionX" type="hidden" value="50">
+                                    <div class="position-buttons" data-position-group="profileLogoPositionX">
+                                        <button type="button" data-position-value="15">Izquierda</button>
+                                        <button type="button" data-position-value="50">Centro</button>
+                                        <button type="button" data-position-value="85">Derecha</button>
+                                    </div>
+                                </div>
+                                <div class="position-control">
+                                    <span>Vertical</span>
+                                    <input id="profileLogoPositionY" type="hidden" value="50">
+                                    <div class="position-buttons" data-position-group="profileLogoPositionY">
+                                        <button type="button" data-position-value="15">Arriba</button>
+                                        <button type="button" data-position-value="50">Centro</button>
+                                        <button type="button" data-position-value="85">Abajo</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <div class="field color-control">
+                            <label for="profileAccentColor">Color principal</label>
+                            <div><input id="profileAccentColor" type="color" value="#c9aa70">
+                                <output id="profileAccentValue" for="profileAccentColor">#C9AA70</output></div>
+                            <small>Se aplica a botones y detalles. El contraste se corrige automáticamente.</small>
+                        </div>
+                        <div class="field color-control">
+                            <label for="profileBackgroundColor">Fondo de la galería</label>
+                            <div><input id="profileBackgroundColor" type="color" value="#ffffff">
+                                <output id="profileBackgroundValue" for="profileBackgroundColor">#FFFFFF</output></div>
+                            <small>Los textos cambian entre claro y oscuro para seguir siendo legibles.</small>
+                        </div>
+                        <section class="field field-wide link-editor" aria-labelledby="profileLinksTitle">
+                            <div class="link-editor-heading">
+                                <div><strong id="profileLinksTitle">Enlaces predeterminados</strong>
+                                    <small>Se copiarán a cada galería nueva en este orden.</small></div>
+                                <button id="addProfileLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
+                            </div>
+                            <div id="profileLinksList" class="link-list" aria-live="polite"></div>
+                        </section>
+                    </div>
+                    <label id="removeProfileLogoLabel" class="remove-password" hidden>
+                        <input id="removeProfileLogo" type="checkbox"> Quitar imagen de marca actual
+                    </label>
+                </div>
             </div>
-            <label id="removeProfileLogoLabel" class="remove-password" hidden>
-                <input id="removeProfileLogo" type="checkbox"> Quitar imagen de marca actual
-            </label>
             <p id="brandDialogError" class="delete-dialog-error" role="alert" hidden></p>
             <div class="edit-dialog-actions">
                 <button id="cancelBrandDialog" type="button" class="secondary">Cancelar</button>
@@ -701,6 +767,6 @@
         </form>
     </dialog>
 
-    <script src="/script.js?v=20260910-3"></script>
+    <script src="/script.js?v=20260911-1"></script>
 </body>
 </html>

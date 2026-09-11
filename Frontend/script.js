@@ -402,6 +402,7 @@ function addLinkRow(prefix = "", link = {}) {
     const remove = actionButton("×", "remove-link", () => {
         row.remove();
         if (prefix === "edit") updateEditGalleryPreview();
+        if (prefix === "profile") updateProfileBrandPreview();
     });
     remove.title = "Eliminar enlace";
     remove.setAttribute("aria-label", "Eliminar enlace");
@@ -425,12 +426,15 @@ function addLinkRow(prefix = "", link = {}) {
             + row.getBoundingClientRect().height / 2;
         container.insertBefore(dragging, after ? row.nextSibling : row);
         if (prefix === "edit") updateEditGalleryPreview();
+        if (prefix === "profile") updateProfileBrandPreview();
     });
 
     if (prefix === "edit") row.addEventListener("input", updateEditGalleryPreview);
+    if (prefix === "profile") row.addEventListener("input", updateProfileBrandPreview);
 
     container.appendChild(row);
     if (prefix === "edit") updateEditGalleryPreview();
+    if (prefix === "profile") updateProfileBrandPreview();
     label.focus();
 }
 
@@ -505,11 +509,15 @@ function logoElements(prefix) {
 
 function updateLogoPreview(prefix = "") {
     const elements = logoElements(prefix);
-    const x = Number(elements.positionX.value) || 50;
-    const y = Number(elements.positionY.value) || 50;
-    const scale = Number(elements.scale.value) || 100;
-    elements.image.style.transform = `translate(${(x - 50) * .35}%, ${(y - 50) * .35}%) scale(${scale / 100})`;
+    const numericX = Number(elements.positionX.value);
+    const numericY = Number(elements.positionY.value);
+    const numericScale = Number(elements.scale.value);
+    const x = Number.isFinite(numericX) ? numericX : 50;
+    const y = Number.isFinite(numericY) ? numericY : 50;
+    const scale = Number.isFinite(numericScale) ? numericScale : 100;
+    elements.image.style.transform = `translate(${x - 50}%, ${y - 50}%) scale(${scale / 100})`;
     if (prefix === "edit") updateEditGalleryPreview();
+    if (prefix === "profile") updateProfileBrandPreview();
 }
 
 function previewSelectedLogo(prefix, file) {
@@ -519,6 +527,10 @@ function previewSelectedLogo(prefix, file) {
     elements.image.src = objectUrl;
     elements.image.onload = () => URL.revokeObjectURL(objectUrl);
     elements.preview.hidden = false;
+    if (prefix === "profile") {
+        byId("removeProfileLogo").checked = false;
+        byId("profileLogoControls").hidden = false;
+    }
     updateLogoPreview(prefix);
 }
 
@@ -834,12 +846,84 @@ function openBrandDialog() {
     byId("removeProfileLogo").checked = false;
     byId("removeProfileLogoLabel").hidden = !brandProfile.hasLogo;
     byId("profileLogoPreview").hidden = !brandProfile.hasLogo;
+    byId("profileLogoControls").hidden = !brandProfile.hasLogo;
     if (brandProfile.logoUrl) {
         byId("profileLogoImage").src = brandProfile.logoUrl;
     }
     updateLogoPreview("profile");
     brandDialogError.hidden = true;
     brandDialog.showModal();
+    updateProfileBrandPreview();
+}
+
+for (const id of [
+    "profileBrandName", "profileAccentColor", "profileBackgroundColor",
+    "profileLogoScale", "profileLogoPositionX", "profileLogoPositionY",
+    "removeProfileLogo"
+]) {
+    byId(id).addEventListener("input", updateProfileBrandPreview);
+}
+
+for (const button of document.querySelectorAll("[data-adjust-target]")) {
+    button.addEventListener("click", () => {
+        const input = byId(button.dataset.adjustTarget);
+        const next = Math.max(
+            Number(input.min),
+            Math.min(Number(input.max), Number(input.value) + Number(button.dataset.delta))
+        );
+        input.value = String(next);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+}
+
+for (const group of document.querySelectorAll("[data-position-group]")) {
+    for (const button of group.querySelectorAll("[data-position-value]")) {
+        button.addEventListener("click", () => {
+            const input = byId(group.dataset.positionGroup);
+            input.value = button.dataset.positionValue;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+    }
+}
+
+document.querySelector("[data-reset-profile-logo]").addEventListener("click", () => {
+    byId("profileLogoScale").value = "100";
+    byId("profileLogoPositionX").value = "50";
+    byId("profileLogoPositionY").value = "50";
+    updateLogoPreview("profile");
+});
+
+let profileLogoDrag = null;
+byId("profileLiveLogo").addEventListener("pointerdown", (event) => {
+    if (byId("profileLiveLogo").hidden) return;
+    profileLogoDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        positionX: Number(byId("profileLogoPositionX").value),
+        positionY: Number(byId("profileLogoPositionY").value),
+        width: Math.max(1, byId("profileLiveLogo").getBoundingClientRect().width),
+        height: Math.max(1, byId("profileLiveLogo").getBoundingClientRect().height)
+    };
+    byId("profileLiveLogo").setPointerCapture(event.pointerId);
+    event.preventDefault();
+});
+byId("profileLiveLogo").addEventListener("pointermove", (event) => {
+    if (!profileLogoDrag || profileLogoDrag.pointerId !== event.pointerId) return;
+    const x = Math.max(0, Math.min(100,
+        profileLogoDrag.positionX + (event.clientX - profileLogoDrag.startX) * 100 / profileLogoDrag.width
+    ));
+    const y = Math.max(0, Math.min(100,
+        profileLogoDrag.positionY + (event.clientY - profileLogoDrag.startY) * 100 / profileLogoDrag.height
+    ));
+    byId("profileLogoPositionX").value = String(Math.round(x));
+    byId("profileLogoPositionY").value = String(Math.round(y));
+    updateLogoPreview("profile");
+});
+for (const eventName of ["pointerup", "pointercancel"]) {
+    byId("profileLiveLogo").addEventListener(eventName, (event) => {
+        if (profileLogoDrag?.pointerId === event.pointerId) profileLogoDrag = null;
+    });
 }
 
 brandForm.addEventListener("submit", async (event) => {
@@ -1189,12 +1273,120 @@ async function deleteSection(sectionId) {
     }
 }
 
-function colorTone(hex) {
+function rgbFromHex(hex) {
     const value = String(hex || "").replace("#", "");
-    if (!/^[0-9a-f]{6}$/i.test(value)) return "dark";
-    const [red, green, blue] = [0, 2, 4]
-        .map((offset) => parseInt(value.slice(offset, offset + 2), 16));
-    return (red * 299 + green * 587 + blue * 114) / 1000 > 155 ? "light" : "dark";
+    if (!/^[0-9a-f]{6}$/i.test(value)) return [0, 0, 0];
+    return [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16));
+}
+
+function hexFromRgb(rgb) {
+    return `#${rgb.map((part) => Math.round(part).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function relativeLuminance(hex) {
+    return rgbFromHex(hex)
+        .map((value) => value / 255)
+        .map((value) => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+        .reduce((total, value, index) => total + value * [.2126, .7152, .0722][index], 0);
+}
+
+function contrastRatio(first, second) {
+    const values = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
+    return (values[0] + .05) / (values[1] + .05);
+}
+
+function mixHex(color, target, amount) {
+    const sourceRgb = rgbFromHex(color);
+    const targetRgb = rgbFromHex(target);
+    return hexFromRgb(sourceRgb.map((value, index) =>
+        value + (targetRgb[index] - value) * amount
+    ));
+}
+
+function readableAccent(accent, background, minimum = 4.5) {
+    if (contrastRatio(accent, background) >= minimum) return accent;
+    const target = relativeLuminance(background) > .35 ? "#000000" : "#ffffff";
+    for (let amount = .08; amount <= 1; amount += .08) {
+        const candidate = mixHex(accent, target, amount);
+        if (contrastRatio(candidate, background) >= minimum) return candidate;
+    }
+    return target;
+}
+
+function foregroundFor(color) {
+    return contrastRatio(color, "#111111") >= contrastRatio(color, "#ffffff")
+        ? "#111111"
+        : "#ffffff";
+}
+
+function colorTone(hex) {
+    return relativeLuminance(hex) > .36 ? "light" : "dark";
+}
+
+function brandPalette(accent, background) {
+    return {
+        text: colorTone(background) === "light" ? "#171717" : "#f6f3ed",
+        accentText: foregroundFor(accent),
+        readable: readableAccent(accent, background),
+        onCover: readableAccent(accent, "#202020")
+    };
+}
+
+function syncProfilePositionButtons() {
+    for (const group of document.querySelectorAll("[data-position-group]")) {
+        const value = Number(byId(group.dataset.positionGroup).value);
+        let closest = null;
+        let distance = Infinity;
+        for (const button of group.querySelectorAll("[data-position-value]")) {
+            const currentDistance = Math.abs(Number(button.dataset.positionValue) - value);
+            if (currentDistance < distance) {
+                closest = button;
+                distance = currentDistance;
+            }
+            button.classList.remove("is-active");
+        }
+        closest?.classList.add("is-active");
+    }
+}
+
+function updateProfileBrandPreview() {
+    const preview = byId("profileBrandLivePreview");
+    if (!preview) return;
+    const background = byId("profileBackgroundColor").value || "#ffffff";
+    const accent = byId("profileAccentColor").value || "#c9aa70";
+    const palette = brandPalette(accent, background);
+    preview.style.setProperty("--brand-preview-bg", background);
+    preview.style.setProperty("--brand-preview-text", palette.text);
+    preview.style.setProperty("--brand-preview-accent", accent);
+    preview.style.setProperty("--brand-preview-accent-readable", palette.readable);
+    preview.style.setProperty("--brand-preview-accent-on-cover", palette.onCover);
+    preview.style.setProperty("--brand-preview-accent-text", palette.accentText);
+    preview.dataset.tone = colorTone(background);
+    byId("profileAccentValue").textContent = accent.toUpperCase();
+    byId("profileBackgroundValue").textContent = background.toUpperCase();
+
+    const sourceLogo = byId("profileLogoImage");
+    const liveLogo = byId("profileLiveLogo");
+    const hasLogo = Boolean(sourceLogo.getAttribute("src")) && !byId("removeProfileLogo").checked;
+    byId("profileLogoControls").hidden = !hasLogo;
+    liveLogo.hidden = !hasLogo;
+    if (hasLogo) {
+        liveLogo.src = sourceLogo.src;
+        liveLogo.style.transform = sourceLogo.style.transform;
+    } else {
+        liveLogo.removeAttribute("src");
+    }
+    const brandName = byId("profileBrandName").value.trim();
+    byId("profileLiveBrandName").textContent = brandName || (hasLogo ? "" : "Tu marca");
+    byId("profileLiveBrandName").hidden = hasLogo && !brandName;
+    const firstLink = byId("profileLinksList").querySelector(".link-label")?.value.trim();
+    byId("profileLiveLink").textContent = firstLink || "TU WEB";
+    syncProfilePositionButtons();
+
+    const adjusted = palette.readable.toLowerCase() !== accent.toLowerCase();
+    byId("profileContrastStatus").textContent = adjusted
+        ? "Contraste protegido: conservamos tu color en botones y usamos una variante legible en los textos pequeños."
+        : "Buena legibilidad: esta combinación mantiene visibles los textos y botones.";
 }
 
 function renderEditLivePhotos() {
@@ -1227,6 +1419,10 @@ function updateEditGalleryPreview() {
     const accent = byId("editAccentColor").value || "#c9aa70";
     preview.style.setProperty("--preview-bg", background);
     preview.style.setProperty("--preview-accent", accent);
+    const palette = brandPalette(accent, background);
+    preview.style.setProperty("--preview-accent-readable", palette.readable);
+    preview.style.setProperty("--preview-accent-text", palette.accentText);
+    preview.style.setProperty("--preview-accent-on-cover", palette.onCover);
     preview.dataset.tone = colorTone(background);
     preview.dataset.galleryStyle = document.querySelector(
         'input[name="editGalleryStyle"]:checked'

@@ -119,3 +119,29 @@ test("la identidad Straclase usa la figura desplazada sin invadir marcas de clie
     assert.match(transferScript, /usesSystemBrand = !data\.logoUrl/);
     assert.match(transferScript, /transferSystemLogo"\)\.hidden = !usesSystemBrand/);
 });
+
+test("Mi marca ofrece una vista previa útil y protege el contraste público", () => {
+    const dashboard = read("Frontend/index.html");
+    const dashboardScript = read("Frontend/script.js");
+    const dashboardCss = read("Frontend/style.css");
+    const galleryScript = read("public/gallery.js");
+    const galleryCss = read("public/gallery.css");
+    const transferScript = read("public/transfer.js");
+
+    assert.match(dashboard, /id="profileBrandLivePreview"/);
+    assert.match(dashboard, /id="profileLiveLogo"/);
+    assert.match(dashboard, /data-adjust-target="profileLogoScale"/);
+    assert.match(dashboard, /data-position-group="profileLogoPositionX"/);
+    assert.match(dashboard, /data-position-group="profileLogoPositionY"/);
+    assert.doesNotMatch(dashboard, /id="profileLogo(?:Scale|PositionX|PositionY)" type="range"/);
+    assert.match(dashboardScript, /function updateProfileBrandPreview\(\)/);
+    assert.match(dashboardScript, /profileLiveLogo"\)\.addEventListener\("pointerdown"/);
+    assert.match(dashboardScript, /function readableAccent\(/);
+    assert.match(dashboardScript, /--preview-accent-readable/);
+    assert.match(dashboardCss, /\.brand-editor-layout/);
+    assert.match(dashboardCss, /--brand-preview-accent-text/);
+    assert.match(galleryScript, /--accent-foreground/);
+    assert.match(galleryScript, /--accent-readable/);
+    assert.match(galleryCss, /color: var\(--accent-foreground\)/);
+    assert.match(transferScript, /--accent-foreground/);
+});

@@ -66,6 +66,52 @@ let favoritesOnly = false;
 let selection = { selectionLimit: 0, status: "open" };
 let selectionComments = new Map();
 
+function rgbFromHex(hex) {
+    const value = String(hex || "").replace("#", "");
+    if (!/^[0-9a-f]{6}$/i.test(value)) return [0, 0, 0];
+    return [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16));
+}
+
+function hexFromRgb(rgb) {
+    return `#${rgb.map((part) => Math.round(part).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function relativeLuminance(hex) {
+    return rgbFromHex(hex)
+        .map((value) => value / 255)
+        .map((value) => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+        .reduce((total, value, index) => total + value * [.2126, .7152, .0722][index], 0);
+}
+
+function contrastRatio(first, second) {
+    const values = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
+    return (values[0] + .05) / (values[1] + .05);
+}
+
+function mixHex(color, target, amount) {
+    const source = rgbFromHex(color);
+    const destination = rgbFromHex(target);
+    return hexFromRgb(source.map((value, index) =>
+        value + (destination[index] - value) * amount
+    ));
+}
+
+function readableAccent(accent, background, minimum = 4.5) {
+    if (contrastRatio(accent, background) >= minimum) return accent;
+    const target = relativeLuminance(background) > .35 ? "#000000" : "#ffffff";
+    for (let amount = .08; amount <= 1; amount += .08) {
+        const candidate = mixHex(accent, target, amount);
+        if (contrastRatio(candidate, background) >= minimum) return candidate;
+    }
+    return target;
+}
+
+function foregroundFor(color) {
+    return contrastRatio(color, "#111111") >= contrastRatio(color, "#ffffff")
+        ? "#111111"
+        : "#ffffff";
+}
+
 function applyGalleryView(view) {
     const selected = ["compact", "standard", "large"].includes(view)
         ? view
@@ -171,10 +217,12 @@ async function loadGallery() {
 
 function applyBrand(data) {
     const background = data.backgroundColor || "#ffffff";
-    document.documentElement.style.setProperty(
-        "--accent",
-        data.accentColor || "#c9aa70"
-    );
+    const accent = data.accentColor || "#c9aa70";
+    const backgroundText = relativeLuminance(background) > .36 ? "#171717" : "#f5f3ef";
+    document.documentElement.style.setProperty("--accent", accent);
+    document.documentElement.style.setProperty("--accent-foreground", foregroundFor(accent));
+    document.documentElement.style.setProperty("--accent-readable", readableAccent(accent, background));
+    document.documentElement.style.setProperty("--accent-on-cover", readableAccent(accent, "#202020"));
     document.documentElement.style.setProperty(
         "--gallery-bg",
         background
@@ -182,13 +230,11 @@ function applyBrand(data) {
     document.documentElement.style.backgroundColor = background;
     document.body.style.setProperty("--gallery-bg", background);
     document.body.style.backgroundColor = background;
-    const rgb = background.slice(1).match(/.{2}/g).map((part) => parseInt(part, 16));
-    const luminance = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
-    const tone = luminance > 150 ? "light" : "dark";
+    const tone = relativeLuminance(background) > .36 ? "light" : "dark";
     document.body.dataset.tone = tone;
     document.documentElement.style.colorScheme = tone;
     document.documentElement.style.setProperty(
-        "--gallery-text", tone === "light" ? "#171717" : "#f5f3ef"
+        "--gallery-text", backgroundText
     );
     document.body.dataset.galleryStyle = data.galleryStyle || "masonry";
     const hasCover = Boolean(data.coverFilename && data.coverStyle !== "none");
@@ -212,7 +258,7 @@ function applyBrand(data) {
     brandLogo.hidden = !data.logoUrl;
     if (data.logoUrl) {
         brandLogo.src = data.logoUrl;
-        brandLogo.style.transform = `translate(${((data.logoPositionX ?? 50) - 50) * .35}%, ${((data.logoPositionY ?? 50) - 50) * .35}%) scale(${(data.logoScale ?? 100) / 100})`;
+        brandLogo.style.transform = `translate(${(data.logoPositionX ?? 50) - 50}%, ${(data.logoPositionY ?? 50) - 50}%) scale(${(data.logoScale ?? 100) / 100})`;
     }
     const links = Array.isArray(data.socialLinks)
         ? data.socialLinks

@@ -1,6 +1,48 @@
 const byId = (id) => document.getElementById(id);
 const transferId = window.location.pathname.split("/").filter(Boolean).pop();
 
+function rgbFromHex(hex) {
+    const value = String(hex || "").replace("#", "");
+    if (!/^[0-9a-f]{6}$/i.test(value)) return [0, 0, 0];
+    return [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16));
+}
+
+function hexFromRgb(rgb) {
+    return `#${rgb.map((part) => Math.round(part).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function relativeLuminance(hex) {
+    return rgbFromHex(hex)
+        .map((value) => value / 255)
+        .map((value) => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+        .reduce((total, value, index) => total + value * [.2126, .7152, .0722][index], 0);
+}
+
+function contrastRatio(first, second) {
+    const values = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
+    return (values[0] + .05) / (values[1] + .05);
+}
+
+function readableAccent(accent, background) {
+    if (contrastRatio(accent, background) >= 4.5) return accent;
+    const target = relativeLuminance(background) > .35 ? "#000000" : "#ffffff";
+    const source = rgbFromHex(accent);
+    const destination = rgbFromHex(target);
+    for (let amount = .08; amount <= 1; amount += .08) {
+        const candidate = hexFromRgb(source.map((value, index) =>
+            value + (destination[index] - value) * amount
+        ));
+        if (contrastRatio(candidate, background) >= 4.5) return candidate;
+    }
+    return target;
+}
+
+function foregroundFor(color) {
+    return contrastRatio(color, "#111111") >= contrastRatio(color, "#ffffff")
+        ? "#111111"
+        : "#ffffff";
+}
+
 function apiUrl(suffix = "") {
     return `/transfer/${encodeURIComponent(transferId)}${suffix}`;
 }
@@ -58,11 +100,13 @@ async function loadTransfer() {
 }
 
 function renderTransfer(data) {
-    document.documentElement.style.setProperty("--accent", data.accentColor || "#c9aa70");
-    document.documentElement.style.setProperty("--page-bg", data.backgroundColor || "#ffffff");
+    const accent = data.accentColor || "#c9aa70";
     const background = data.backgroundColor || "#ffffff";
-    const rgb = background.slice(1).match(/.{2}/g)?.map((part) => parseInt(part, 16)) || [8,8,8];
-    const light = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 > 150;
+    document.documentElement.style.setProperty("--accent", accent);
+    document.documentElement.style.setProperty("--accent-readable", readableAccent(accent, background));
+    document.documentElement.style.setProperty("--accent-foreground", foregroundFor(accent));
+    document.documentElement.style.setProperty("--page-bg", background);
+    const light = relativeLuminance(background) > .36;
     document.documentElement.style.setProperty("--text", light ? "#171717" : "#f5f3ef");
     document.documentElement.style.colorScheme = light ? "light" : "dark";
     const brandName = data.brandName?.trim() || "";
