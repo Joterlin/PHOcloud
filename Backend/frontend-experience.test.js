@@ -9,6 +9,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 test("la personalización muestra una galería viva y no expone el valor mágico cero", () => {
     const html = read("Frontend/index.html");
     const script = read("Frontend/script.js");
+    const css = read("Frontend/style.css");
     assert.match(html, /id="editGalleryLivePreview"/);
     assert.match(html, /id="editLivePhotoGrid"/);
     assert.match(html, /VISTA PREVIA EN TIEMPO REAL/);
@@ -16,6 +17,19 @@ test("la personalización muestra una galería viva y no expone el valor mágico
     assert.match(html, /id="editSelectionLimit" type="number" min="1"/);
     assert.match(script, /function updateEditGalleryPreview\(\)/);
     assert.match(script, /galleryLifetimeDays/);
+    assert.match(script, /function enhanceGalleryEditor\(\)/);
+    assert.match(script, /data-edit-panel-target="cover"/);
+    assert.match(script, /data-edit-preview-device="mobile"/);
+    assert.match(script, /id="editCoverFocalPoint"/);
+    assert.match(script, /data-edit-cover-style="immersive"/);
+    assert.match(script, /editPreviewOriginalAction/);
+    assert.match(script, /editPreviewFavoriteNotice/);
+    assert.match(script, /scaleInput\.type = "number"/);
+    assert.match(script, /editLiveLogo"\)\.addEventListener\("pointerdown"/);
+    assert.match(script, /setEditSaveState\(true\)/);
+    assert.match(css, /\.gallery-editor-layout/);
+    assert.match(css, /\.gallery-preview-viewport\[data-preview-device=mobile\]/);
+    assert.match(css, /#editCoverFocalPoint/);
 });
 
 test("el aviso de transferencia se oculta solo y la marca pública no usa una placa", () => {

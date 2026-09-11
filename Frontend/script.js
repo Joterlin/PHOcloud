@@ -69,6 +69,192 @@ let transferCapabilities = {
     maxFiles: 500,
     acceptingNewTransfers: true
 };
+
+function elementFromHtml(markup) {
+    const template = document.createElement("template");
+    template.innerHTML = markup.trim();
+    return template.content.firstElementChild;
+}
+
+function enhanceGalleryEditor() {
+    const form = editDeliveryForm;
+    const heading = form.querySelector(":scope > .edit-dialog-heading");
+    const oldActions = form.querySelector(":scope > .edit-dialog-actions");
+    const generalFields = form.querySelector(":scope > .options-grid");
+    const permissionList = form.querySelector(":scope > .edit-permission-list");
+    const selectionAdmin = form.querySelector(":scope > .selection-admin");
+    const brandSection = form.querySelector(":scope > .edit-brand-section");
+    const photoManager = form.querySelector(":scope > .photo-manager");
+    const error = form.querySelector(":scope > #editDialogError");
+    const livePreview = byId("editGalleryLivePreview");
+    const customizerControls = brandSection.querySelector(".gallery-customizer-controls");
+    const designGrid = customizerControls.querySelector(".options-grid");
+
+    form.className = "gallery-editor";
+    heading.className = "gallery-editor-header";
+    heading.querySelector("div").className = "gallery-editor-title";
+    const state = elementFromHtml('<div class="gallery-editor-save-state" role="status"><span id="editSaveStateDot"></span><span id="editSaveState">Todo guardado</span></div>');
+    const headerActions = document.createElement("div");
+    headerActions.className = "gallery-editor-header-actions";
+    const openGallery = elementFromHtml('<button id="editPreviewOpenGallery" class="secondary" type="button">Abrir galería ↗</button>');
+    headerActions.append(openGallery, byId("cancelEditDialog"), byId("saveDelivery"), byId("closeEditDialog"));
+    headerActions.querySelector("#cancelEditDialog").textContent = "Cerrar";
+    headerActions.querySelector("#saveDelivery").textContent = "Guardar cambios";
+    heading.append(state, headerActions);
+    oldActions.remove();
+
+    const layout = document.createElement("div");
+    layout.className = "gallery-editor-layout";
+    const nav = elementFromHtml(`<nav class="gallery-editor-nav" aria-label="Secciones del editor">
+        <button type="button" class="is-active" data-edit-panel-target="content"><span>01</span>Contenido</button>
+        <button type="button" data-edit-panel-target="cover"><span>02</span>Portada</button>
+        <button type="button" data-edit-panel-target="design"><span>03</span>Diseño</button>
+        <button type="button" data-edit-panel-target="brand"><span>04</span>Marca</button>
+        <button type="button" data-edit-panel-target="access"><span>05</span>Acceso</button>
+    </nav>`);
+    const controls = document.createElement("div");
+    controls.className = "gallery-editor-controls";
+    const panel = (name, eyebrow, title, description) => {
+        const section = elementFromHtml(`<section class="gallery-editor-panel" data-edit-panel="${name}">
+            <div class="editor-panel-heading"><span>${eyebrow}</span><h3>${title}</h3><p>${description}</p></div>
+        </section>`);
+        if (name !== "content") section.hidden = true;
+        controls.appendChild(section);
+        return section;
+    };
+    const contentPanel = panel("content", "CONTENIDO", "Los datos de la entrega", "Cambia el título, el mensaje y las fotografías que verá tu cliente.");
+    const coverPanel = panel("cover", "PORTADA", "La primera impresión", "Elige una composición y encuadra la imagen directamente sobre la vista previa.");
+    const designPanel = panel("design", "DISEÑO", "Ritmo y color", "Escoge cómo se ordenan las fotografías y la atmósfera de la página.");
+    const brandPanel = panel("brand", "MARCA", "Hazla reconocible", "Combina el nombre de tu estudio, tu imagen y tus enlaces.");
+    const accessPanel = panel("access", "ACCESO", "Privacidad y entrega", "Decide qué puede ver, descargar y seleccionar tu cliente.");
+    layout.append(nav, controls);
+    heading.after(form.querySelector("#editDeliveryId"), layout);
+
+    const passwordField = byId("editPassword").closest(".field");
+    contentPanel.append(generalFields, photoManager);
+    passwordField.remove();
+    photoManager.classList.add("editor-photo-manager");
+    const intro = document.createElement("p");
+    intro.className = "editor-help";
+    intro.textContent = "Pulsa «Portada» sobre una fotografía para cambiar la imagen principal.";
+    byId("editPhotos").before(intro);
+
+    const coverSelectLabel = byId("editCoverStyle").closest(".field");
+    coverSelectLabel.hidden = true;
+    coverPanel.appendChild(coverSelectLabel);
+    const coverPicker = elementFromHtml(`<div class="cover-style-grid" role="group" aria-label="Diseño de portada">
+        <button type="button" data-edit-cover-style="immersive"><i class="cover-style-sample immersive"></i><strong>Inmersiva</strong><small>Imagen a pantalla completa</small></button>
+        <button type="button" data-edit-cover-style="split"><i class="cover-style-sample split"></i><strong>Editorial</strong><small>Texto e imagen divididos</small></button>
+        <button type="button" data-edit-cover-style="frame"><i class="cover-style-sample frame"></i><strong>Enmarcada</strong><small>Imagen con aire alrededor</small></button>
+        <button type="button" data-edit-cover-style="minimal"><i class="cover-style-sample minimal"></i><strong>Sutil</strong><small>Una portada más suave</small></button>
+        <button type="button" data-edit-cover-style="none"><i class="cover-style-sample none"></i><strong>Solo texto</strong><small>Sin fotografía</small></button>
+    </div>`);
+    coverPanel.appendChild(coverPicker);
+    const coverPositionX = byId("editCoverPositionX");
+    const coverPositionY = byId("editCoverPositionY");
+    coverPositionX.closest(".field").hidden = true;
+    coverPositionY.closest(".field").hidden = true;
+    coverPanel.append(coverPositionX.closest(".field"), coverPositionY.closest(".field"));
+    const focalControls = elementFromHtml(`<div id="editCoverFocusControls" class="focal-controls">
+        <div><strong>Encuadre de la portada</strong><small>Arrastra el punto sobre la imagen o elige una posición.</small></div>
+        <div class="focal-presets" data-cover-focal-presets>
+            <button type="button" data-cover-x="25" data-cover-y="25" aria-label="Arriba izquierda"></button><button type="button" data-cover-x="50" data-cover-y="25" aria-label="Arriba centro"></button><button type="button" data-cover-x="75" data-cover-y="25" aria-label="Arriba derecha"></button>
+            <button type="button" data-cover-x="25" data-cover-y="50" aria-label="Centro izquierda"></button><button type="button" data-cover-x="50" data-cover-y="50" aria-label="Centro"></button><button type="button" data-cover-x="75" data-cover-y="50" aria-label="Centro derecha"></button>
+            <button type="button" data-cover-x="25" data-cover-y="75" aria-label="Abajo izquierda"></button><button type="button" data-cover-x="50" data-cover-y="75" aria-label="Abajo centro"></button><button type="button" data-cover-x="75" data-cover-y="75" aria-label="Abajo derecha"></button>
+        </div>
+    </div>`);
+    coverPanel.appendChild(focalControls);
+
+    const stylePicker = designGrid.querySelector(".style-picker");
+    stylePicker.classList.remove("field-wide");
+    designPanel.appendChild(stylePicker);
+    const colorGrid = document.createElement("div");
+    colorGrid.className = "editor-color-grid";
+    for (const id of ["editBackgroundColor", "editAccentColor"]) {
+        const label = byId(id).closest(".field");
+        label.className = "color-control";
+        const title = label.firstChild.textContent.trim();
+        label.firstChild.remove();
+        const wrapper = document.createElement("div");
+        const output = document.createElement("output");
+        output.id = id === "editBackgroundColor" ? "editBackgroundValue" : "editAccentValue";
+        const caption = document.createElement("label");
+        caption.htmlFor = id;
+        caption.textContent = title;
+        label.insertBefore(caption, label.firstChild);
+        wrapper.append(byId(id), output);
+        label.appendChild(wrapper);
+        colorGrid.appendChild(label);
+    }
+    designPanel.append(colorGrid, elementFromHtml('<p id="editContrastStatus" class="contrast-status"></p>'));
+
+    const brandNameField = byId("editBrandName").closest(".field");
+    const logoField = byId("editLogo").closest(".field");
+    brandNameField.classList.remove("field-wide");
+    logoField.classList.remove("field-wide");
+    brandPanel.append(byId("editLogoPreview"), brandNameField, logoField);
+    const scaleInput = byId("editLogoScale");
+    const xInput = byId("editLogoPositionX");
+    const yInput = byId("editLogoPositionY");
+    const oldScale = scaleInput.closest(".field");
+    const oldX = xInput.closest(".field");
+    const oldY = yInput.closest(".field");
+    scaleInput.type = "number";
+    xInput.type = "hidden";
+    yInput.type = "hidden";
+    const logoAdjuster = elementFromHtml(`<div id="editLogoControls" class="logo-adjuster" hidden>
+        <div class="logo-adjuster-heading"><div><strong>Ajustar imagen</strong><small>También puedes arrastrarla en la portada.</small></div><button type="button" class="secondary small-button" data-reset-edit-logo>Restablecer</button></div>
+        <div class="logo-adjuster-grid">
+            <div class="logo-size-control"><label for="editLogoScale">Tamaño</label><div class="number-stepper"><button type="button" data-adjust-target="editLogoScale" data-delta="-5" aria-label="Reducir tamaño">−</button><span data-logo-scale-slot></span><span>%</span><button type="button" data-adjust-target="editLogoScale" data-delta="5" aria-label="Aumentar tamaño">＋</button></div></div>
+            <div class="position-control"><span>Posición horizontal</span><div class="position-buttons" data-position-group="editLogoPositionX"><button type="button" data-position-value="20">Izquierda</button><button type="button" data-position-value="50">Centro</button><button type="button" data-position-value="80">Derecha</button></div><span data-logo-x-slot></span></div>
+            <div class="position-control"><span>Posición vertical</span><div class="position-buttons" data-position-group="editLogoPositionY"><button type="button" data-position-value="25">Arriba</button><button type="button" data-position-value="50">Centro</button><button type="button" data-position-value="75">Abajo</button></div><span data-logo-y-slot></span></div>
+        </div>
+    </div>`);
+    logoAdjuster.querySelector("[data-logo-scale-slot]").replaceWith(scaleInput);
+    logoAdjuster.querySelector("[data-logo-x-slot]").replaceWith(xInput);
+    logoAdjuster.querySelector("[data-logo-y-slot]").replaceWith(yInput);
+    oldScale.remove(); oldX.remove(); oldY.remove();
+    brandPanel.append(logoAdjuster, byId("removeEditLogoLabel"), byId("editLinksList").closest(".link-editor"));
+
+    accessPanel.append(permissionList, passwordField, byId("removePasswordLabel"), selectionAdmin);
+    permissionList.querySelectorAll(".permission-option small").forEach((small) => {
+        if (!small.textContent) small.remove();
+    });
+
+    const previewStage = elementFromHtml(`<section class="gallery-editor-preview-stage" aria-label="Vista previa de la galería">
+        <div class="preview-toolbar"><div><span class="live-dot"></span><strong>Vista previa en tiempo real</strong><small>Los cambios aún no se han publicado</small></div><div class="preview-device-switch" role="group" aria-label="Tamaño de vista previa"><button type="button" data-edit-preview-device="desktop" class="is-active" aria-pressed="true">Escritorio</button><button type="button" data-edit-preview-device="mobile" aria-pressed="false">Móvil</button></div></div>
+        <div class="gallery-preview-viewport" data-preview-device="desktop"></div>
+    </section>`);
+    previewStage.querySelector(".gallery-preview-viewport").appendChild(livePreview);
+    livePreview.querySelector(".live-preview-label")?.remove();
+    const cover = livePreview.querySelector("#editCoverPreview");
+    cover.querySelector("#editCoverPreviewImage").after(elementFromHtml('<button id="editCoverFocalPoint" type="button" aria-label="Punto de enfoque. Arrastra para cambiar el encuadre"><span></span></button>'));
+    cover.prepend(elementFromHtml('<div id="editPreviewVisibilityNotice" class="edit-preview-disabled" hidden><strong>Galería desactivada</strong><span>El cliente verá un aviso hasta que permitas la visualización.</span></div>'));
+    livePreview.querySelector("#editLiveMessage").after(elementFromHtml('<div class="edit-preview-actions"><span id="editPreviewOriginalAction">Descargar originales</span><span id="editPreviewWebAction">Calidad reducida</span><span id="editPreviewFavoriteAction">♡ Seleccionar</span></div>'));
+    const collection = livePreview.querySelector(".edit-preview-collection");
+    collection.firstElementChild.outerHTML = '<div class="edit-preview-collection-heading"><span>TU GALERÍA</span><strong>Tus fotografías, en un solo lugar.</strong></div>';
+    livePreview.querySelector("#editLivePhotoGrid").before(elementFromHtml('<div id="editPreviewFavoriteNotice" class="edit-preview-favorite-notice"><span>♡</span> Tu cliente podrá seleccionar sus favoritas</div>'));
+    collection.appendChild(elementFromHtml('<p class="edit-preview-footer">Entrega privada creada con Straclase</p>'));
+
+    layout.appendChild(previewStage);
+    error.classList.add("gallery-editor-error");
+    form.appendChild(error);
+    brandSection.remove();
+
+    for (const button of nav.querySelectorAll("[data-edit-panel-target]")) {
+        button.addEventListener("click", () => {
+            const name = button.dataset.editPanelTarget;
+            nav.querySelectorAll("button").forEach((item) => item.classList.toggle("is-active", item === button));
+            controls.querySelectorAll("[data-edit-panel]").forEach((item) => { item.hidden = item.dataset.editPanel !== name; });
+            if (window.innerWidth < 900) controls.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    }
+    openGallery.addEventListener("click", () => {
+        if (currentEditDelivery) window.open(`/s/${encodeURIComponent(currentEditDelivery.id)}`, "_blank", "noopener");
+    });
+}
+
+enhanceGalleryEditor();
 const blockedTransferExtensions = new Set([
     "exe", "msi", "msp", "com", "scr", "bat", "cmd", "ps1", "vbs",
     "js", "jar", "apk", "app", "dmg"
@@ -530,6 +716,10 @@ function previewSelectedLogo(prefix, file) {
     if (prefix === "profile") {
         byId("removeProfileLogo").checked = false;
         byId("profileLogoControls").hidden = false;
+    }
+    if (prefix === "edit") {
+        byId("removeEditLogo").checked = false;
+        byId("editLogoControls").hidden = false;
     }
     updateLogoPreview(prefix);
 }
@@ -1158,6 +1348,9 @@ function fillEditForm() {
     updateEditGalleryPreview();
     renderSelectionAdmin();
     renderSections();
+    setEditSaveState(false);
+    const firstEditorTab = document.querySelector('[data-edit-panel-target="content"]');
+    firstEditorTab?.click();
 }
 
 function activityText(item) {
@@ -1405,7 +1598,15 @@ function renderEditLivePhotos() {
         const image = document.createElement("img");
         image.alt = "";
         image.src = `/gallery/${encodeURIComponent(currentEditDelivery.id)}/previews/${encodeURIComponent(filename)}`;
-        container.appendChild(image);
+        const item = document.createElement("span");
+        item.className = "edit-live-photo";
+        item.appendChild(image);
+        if (byId("editFavoritesEnabled").checked) {
+            const heart = document.createElement("i");
+            heart.textContent = "♡";
+            item.appendChild(heart);
+        }
+        container.appendChild(item);
     }
 }
 
@@ -1423,6 +1624,7 @@ function updateEditGalleryPreview() {
     preview.style.setProperty("--preview-accent-readable", palette.readable);
     preview.style.setProperty("--preview-accent-text", palette.accentText);
     preview.style.setProperty("--preview-accent-on-cover", palette.onCover);
+    preview.style.setProperty("--preview-text", palette.text);
     preview.dataset.tone = colorTone(background);
     preview.dataset.galleryStyle = document.querySelector(
         'input[name="editGalleryStyle"]:checked'
@@ -1437,10 +1639,21 @@ function updateEditGalleryPreview() {
         image.src = `/gallery/${encodeURIComponent(currentEditDelivery.id)}/previews/${encodeURIComponent(cover)}`;
         image.style.objectPosition = `${byId("editCoverPositionX").value}% ${byId("editCoverPositionY").value}%`;
     }
+    const focal = byId("editCoverFocalPoint");
+    focal.style.left = `${byId("editCoverPositionX").value}%`;
+    focal.style.top = `${byId("editCoverPositionY").value}%`;
+    focal.hidden = !cover || byId("editCoverStyle").value === "none";
+    byId("editCoverFocusControls").hidden = !cover || byId("editCoverStyle").value === "none";
+    for (const button of document.querySelectorAll("[data-edit-cover-style]")) {
+        const active = button.dataset.editCoverStyle === byId("editCoverStyle").value;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+    }
 
     const sourceLogo = byId("editLogoImage");
     const liveLogo = byId("editLiveLogo");
     const hasLogo = Boolean(sourceLogo.getAttribute("src")) && !byId("removeEditLogo").checked;
+    byId("editLogoControls").hidden = !hasLogo;
     liveLogo.hidden = !hasLogo;
     if (hasLogo) {
         liveLogo.src = sourceLogo.src;
@@ -1458,6 +1671,19 @@ function updateEditGalleryPreview() {
         .filter(Boolean)
         .slice(0, 3);
     byId("editLiveLinks").textContent = links.join("   ·   ");
+    const viewing = byId("editViewingEnabled").checked;
+    byId("editPreviewVisibilityNotice").hidden = viewing;
+    byId("editPreviewOriginalAction").hidden = !byId("editAllowOriginalDownload").checked;
+    byId("editPreviewWebAction").hidden = !byId("editAllowWebDownload").checked;
+    byId("editPreviewFavoriteAction").hidden = !byId("editFavoritesEnabled").checked;
+    byId("editPreviewFavoriteNotice").hidden = !byId("editFavoritesEnabled").checked;
+    byId("editAccentValue").textContent = accent.toUpperCase();
+    byId("editBackgroundValue").textContent = background.toUpperCase();
+    const adjusted = palette.readable.toLowerCase() !== accent.toLowerCase();
+    byId("editContrastStatus").textContent = adjusted
+        ? "Contraste protegido: usaremos una variante legible de tu color en textos pequeños."
+        : "Buena legibilidad: textos y botones mantienen suficiente contraste.";
+    syncProfilePositionButtons();
     renderEditLivePhotos();
 }
 
@@ -1468,12 +1694,115 @@ function updateEditCoverPreview() {
 for (const id of [
     "editCoverStyle", "editCoverPositionX", "editCoverPositionY",
     "editClientName", "editMessage", "editBrandName", "editAccentColor",
-    "editBackgroundColor", "removeEditLogo"
+    "editBackgroundColor", "removeEditLogo", "editViewingEnabled",
+    "editAllowOriginalDownload", "editAllowWebDownload", "editFavoritesEnabled"
 ]) {
     byId(id).addEventListener("input", updateEditGalleryPreview);
 }
 for (const option of document.querySelectorAll('input[name="editGalleryStyle"]')) {
     option.addEventListener("change", updateEditGalleryPreview);
+}
+
+function setEditSaveState(dirty) {
+    byId("editSaveState").textContent = dirty ? "Cambios sin guardar" : "Todo guardado";
+    byId("editSaveStateDot").classList.toggle("is-dirty", dirty);
+}
+
+editDeliveryForm.addEventListener("input", () => {
+    if (currentEditDelivery) setEditSaveState(true);
+});
+editDeliveryForm.addEventListener("change", () => {
+    if (currentEditDelivery) setEditSaveState(true);
+});
+
+for (const button of document.querySelectorAll("[data-edit-cover-style]")) {
+    button.addEventListener("click", () => {
+        byId("editCoverStyle").value = button.dataset.editCoverStyle;
+        byId("editCoverStyle").dispatchEvent(new Event("input", { bubbles: true }));
+    });
+}
+
+for (const button of document.querySelectorAll("[data-cover-focal-presets] button")) {
+    button.addEventListener("click", () => {
+        byId("editCoverPositionX").value = button.dataset.coverX;
+        byId("editCoverPositionY").value = button.dataset.coverY;
+        byId("editCoverPositionX").dispatchEvent(new Event("input", { bubbles: true }));
+    });
+}
+
+for (const button of document.querySelectorAll("[data-edit-preview-device]")) {
+    button.addEventListener("click", () => {
+        const device = button.dataset.editPreviewDevice;
+        document.querySelector(".gallery-preview-viewport").dataset.previewDevice = device;
+        document.querySelectorAll("[data-edit-preview-device]").forEach((item) => {
+            const active = item === button;
+            item.classList.toggle("is-active", active);
+            item.setAttribute("aria-pressed", String(active));
+        });
+    });
+}
+
+let coverFocalDrag = null;
+function moveCoverFocalPoint(event) {
+    const cover = byId("editCoverPreview");
+    const bounds = cover.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, (event.clientX - bounds.left) * 100 / bounds.width));
+    const y = Math.max(0, Math.min(100, (event.clientY - bounds.top) * 100 / bounds.height));
+    byId("editCoverPositionX").value = String(Math.round(x));
+    byId("editCoverPositionY").value = String(Math.round(y));
+    byId("editCoverPositionX").dispatchEvent(new Event("input", { bubbles: true }));
+}
+byId("editCoverFocalPoint").addEventListener("pointerdown", (event) => {
+    coverFocalDrag = event.pointerId;
+    byId("editCoverFocalPoint").setPointerCapture(event.pointerId);
+    moveCoverFocalPoint(event);
+});
+byId("editCoverFocalPoint").addEventListener("pointermove", (event) => {
+    if (coverFocalDrag === event.pointerId) moveCoverFocalPoint(event);
+});
+for (const eventName of ["pointerup", "pointercancel"]) {
+    byId("editCoverFocalPoint").addEventListener(eventName, (event) => {
+        if (coverFocalDrag === event.pointerId) coverFocalDrag = null;
+    });
+}
+
+document.querySelector("[data-reset-edit-logo]").addEventListener("click", () => {
+    byId("editLogoScale").value = "100";
+    byId("editLogoPositionX").value = "50";
+    byId("editLogoPositionY").value = "50";
+    byId("editLogoScale").dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+let editLogoDrag = null;
+byId("editLiveLogo").addEventListener("pointerdown", (event) => {
+    if (byId("editLiveLogo").hidden) return;
+    const bounds = byId("editCoverPreview").getBoundingClientRect();
+    editLogoDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        positionX: Number(byId("editLogoPositionX").value),
+        positionY: Number(byId("editLogoPositionY").value),
+        width: Math.max(1, bounds.width),
+        height: Math.max(1, bounds.height)
+    };
+    byId("editLiveLogo").setPointerCapture(event.pointerId);
+    event.preventDefault();
+});
+byId("editLiveLogo").addEventListener("pointermove", (event) => {
+    if (!editLogoDrag || editLogoDrag.pointerId !== event.pointerId) return;
+    byId("editLogoPositionX").value = String(Math.round(Math.max(0, Math.min(100,
+        editLogoDrag.positionX + (event.clientX - editLogoDrag.startX) * 100 / editLogoDrag.width
+    ))));
+    byId("editLogoPositionY").value = String(Math.round(Math.max(0, Math.min(100,
+        editLogoDrag.positionY + (event.clientY - editLogoDrag.startY) * 100 / editLogoDrag.height
+    ))));
+    byId("editLogoPositionX").dispatchEvent(new Event("input", { bubbles: true }));
+});
+for (const eventName of ["pointerup", "pointercancel"]) {
+    byId("editLiveLogo").addEventListener(eventName, (event) => {
+        if (editLogoDrag?.pointerId === event.pointerId) editLogoDrag = null;
+    });
 }
 
 function renderEditPhotos() {
