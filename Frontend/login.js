@@ -10,11 +10,14 @@ const authError = byId("authError");
 const authSuccess = byId("authSuccess");
 const authSuccessText = byId("authSuccessText");
 const devLink = byId("devLink");
+const googleAuthBlock = byId("googleAuthBlock");
+const googleAuthButton = byId("googleAuthButton");
 const emailInput = byId("email");
 const passwordInput = byId("password");
 const confirmPasswordInput = byId("confirmPassword");
 const params = new URLSearchParams(window.location.search);
 const requestedNext = params.get("next") || "";
+const oauthError = params.get("oauthError") || "";
 const PENDING_TRANSFER_CLAIM_KEY = "straclase-pending-transfer-claim";
 const validTransferId = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value || "");
 function pendingTransferClaim() {
@@ -46,6 +49,7 @@ const redirectTarget = requestedNext.startsWith("/")
         : "/app";
 
 let setupRequired = false;
+let googleAuthEnabled = false;
 let mode = params.get("mode") || "login";
 const accountToken = params.get("token") || "";
 let backTargetMode = "login";
@@ -95,6 +99,9 @@ function configureMode(nextMode) {
     backEmail = "";
     backButton.textContent = "Volver al acceso";
     authTabs.hidden = !["login", "register"].includes(mode) || setupRequired;
+    googleAuthBlock.hidden = !googleAuthEnabled
+        || !["login", "register"].includes(mode)
+        || setupRequired;
     backButton.hidden = ["login", "register", "setup"].includes(mode);
     byId("termsText").hidden = mode !== "register";
     byId("acceptTerms").disabled = mode !== "register";
@@ -262,8 +269,11 @@ async function initialize() {
         const status = await response.json();
         if (status.authenticated) return window.location.replace(redirectTarget);
         setupRequired = status.setupRequired;
+        googleAuthEnabled = status.googleAuthEnabled === true;
+        googleAuthButton.href = `/auth/google?next=${encodeURIComponent(redirectTarget)}`;
         if (setupRequired) mode = "setup";
         configureMode(mode);
+        if (oauthError) showError(oauthError);
     } catch {
         showError("No se pudo conectar con Straclase");
     }

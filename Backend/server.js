@@ -4,7 +4,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const { createHash, randomInt, timingSafeEqual } = require("crypto");
+const { createHash, randomBytes, randomInt, timingSafeEqual } = require("crypto");
 const { PassThrough, Readable, Transform } = require("stream");
 const { pipeline } = require("stream/promises");
 const { ZipArchive } = require("archiver");
@@ -52,6 +52,12 @@ const {
     hashSessionToken,
     readCookie
 } = require("./auth");
+const {
+    GOOGLE_OAUTH_COOKIE_NAME,
+    GOOGLE_OAUTH_MAX_AGE_MS,
+    createGoogleAuth,
+    safeNextPath
+} = require("./google-auth");
 
 const app = express();
 const rootDirectory = path.join(__dirname, "..");
@@ -76,6 +82,7 @@ const billing = createBilling();
 const economicConfig = createEconomicConfig();
 const billingEnvironment = billing.publicConfiguration().mode;
 const secureCookies = isProduction;
+const googleAuth = createGoogleAuth();
 const GALLERY_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 const GUEST_UPLOAD_COOKIE_NAME = "phocloud_guest_sender";
 const GUEST_UPLOAD_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -1422,6 +1429,24 @@ function cookieOptions() {
     };
 }
 
+function googleOAuthCookieOptions() {
+    return {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: secureCookies,
+        path: "/auth/google",
+        maxAge: GOOGLE_OAUTH_MAX_AGE_MS
+    };
+}
+
+function googleRedirectUri(req) {
+    return `${publicBaseUrl(req)}/auth/google/callback`;
+}
+
+function googleErrorRedirect(res, message) {
+    res.redirect(302, `/login?oauthError=${encodeURIComponent(message)}`);
+}
+
 function getSessionFromRequest(req) {
     const token = readCookie(
         req.headers.cookie,
@@ -2483,6 +2508,7 @@ app.get("/auth/status", (req, res) => {
 
     res.json({
         authenticated: Boolean(session),
+        googleAuthEnabled: googleAuth.configured,
         setupRequired: !isProduction
             && !deliveryStore.hasUsers()
             && isLocalRequest(req),
@@ -2494,6 +2520,140 @@ app.get("/auth/status", (req, res) => {
             planStatus: session.planStatus
         } : null
     });
+});
+
+app.get("/auth/google", (req, res) => {
+    if (!googleAuth.configured) {
+        return googleErrorRedirect(
+            res,
+            "El acceso con Google todavía no está configurado"
+        );
+    }
+    if (getSessionFromRequest(req)) {
+        return res.redirect(302, safeNextPath(req.query?.next));
+    }
+    try {
+        const authorization = googleAuth.authorization({
+            redirectUri: googleRedirectUri(req),
+            next: req.query?.next
+        });
+        res.cookie(
+            GOOGLE_OAUTH_COOKIE_NAME,
+            authorization.cookie,
+            googleOAuthCookieOptions()
+        );
+        res.redirect(302, authorization.url);
+    } catch (error) {
+        console.error("Google OAuth start error", error.message);
+        googleErrorRedirect(res, "No se pudo iniciar el acceso con Google");
+    }
+});
+
+app.get("/auth/google/callback", async (req, res) => {
+    const oauthCookie = readCookie(
+        req.headers.cookie,
+        GOOGLE_OAUTH_COOKIE_NAME
+    );
+    res.clearCookie(GOOGLE_OAUTH_COOKIE_NAME, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: secureCookies,
+        path: "/auth/google"
+    });
+    if (req.query?.error) {
+        return googleErrorRedirect(
+            res,
+            "El acceso con Google se canceló antes de completarse"
+        );
+    }
+    try {
+        const identity = await googleAuth.authenticate({
+            redirectUri: googleRedirectUri(req),
+            code: req.query?.code,
+            state: req.query?.state,
+            cookie: oauthCookie
+        });
+        if (!validEmail(identity.email)) {
+            throw new Error("Google no devolvió un correo válido");
+        }
+
+        let user = deliveryStore.getUserByIdentity(
+            "google",
+            identity.subject
+        );
+        if (user?.authDisabled) {
+            throw new Error("Esta cuenta de Straclase no está disponible");
+        }
+
+        if (!user) {
+            const existing = deliveryStore.getUserByEmail(identity.email);
+            if (existing?.authDisabled) {
+                throw new Error("Esta cuenta de Straclase no está disponible");
+            }
+            if (existing) {
+                const googleControlsMailbox = identity.email.endsWith("@gmail.com")
+                    || Boolean(identity.hostedDomain);
+                if (!googleControlsMailbox) {
+                    throw new Error(
+                        "Este correo ya existe. Entra con tu contraseña para proteger la cuenta"
+                    );
+                }
+                user = existing;
+                if (!user.emailVerifiedAt) {
+                    deliveryStore.markEmailVerified(
+                        user.id,
+                        new Date().toISOString()
+                    );
+                }
+            } else {
+                const now = new Date().toISOString();
+                const randomPassword = createPasswordRecord(
+                    randomBytes(48).toString("base64url")
+                );
+                const displayName = identity.displayName
+                    || identity.email.split("@", 1)[0]
+                    || "Usuario";
+                try {
+                    const userId = deliveryStore.createUser({
+                        username: internalUsername(),
+                        email: identity.email,
+                        displayName,
+                        emailVerifiedAt: now,
+                        termsAcceptedAt: now,
+                        ...randomPassword,
+                        createdAt: now
+                    });
+                    user = deliveryStore.getUserById(userId);
+                } catch (error) {
+                    user = deliveryStore.getUserByEmail(identity.email);
+                    if (!user) throw error;
+                }
+            }
+
+            if (!deliveryStore.linkUserIdentity(
+                "google",
+                identity.subject,
+                user.id,
+                new Date().toISOString()
+            )) {
+                throw new Error(
+                    "No se pudo vincular esta cuenta de Google de forma segura"
+                );
+            }
+        }
+
+        deliveryStore.deleteExpiredSessions(Date.now());
+        startSession(res, user.id);
+        res.redirect(302, identity.next);
+    } catch (error) {
+        console.error("Google OAuth callback error", error.message);
+        googleErrorRedirect(
+            res,
+            error.message.includes("contraseña")
+                ? error.message
+                : "No se pudo verificar el acceso con Google. Inténtalo de nuevo"
+        );
+    }
 });
 
 app.post("/auth/setup", requireSameOrigin, (req, res) => {

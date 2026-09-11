@@ -80,6 +80,19 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
 
         CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
 
+        CREATE TABLE IF NOT EXISTS user_identities (
+            provider TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (provider, subject),
+            UNIQUE (provider, user_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS user_identities_user_id
+        ON user_identities(user_id);
+
         CREATE TABLE IF NOT EXISTS brand_profiles (
             user_id INTEGER PRIMARY KEY,
             brand_name TEXT NOT NULL DEFAULT '',
@@ -697,6 +710,16 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             auth_disabled AS authDisabled,
             created_at AS createdAt
         FROM users WHERE id = ?
+    `);
+    const selectUserIdentity = database.prepare(`
+        SELECT user_id AS userId
+        FROM user_identities
+        WHERE provider = ? AND subject = ?
+    `);
+    const insertUserIdentity = database.prepare(`
+        INSERT OR IGNORE INTO user_identities (
+            provider, subject, user_id, created_at
+        ) VALUES (?, ?, ?, ?)
     `);
     const verifyUserEmail = database.prepare(`
         UPDATE users SET email_verified_at = ? WHERE id = ?
@@ -1526,6 +1549,14 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         getUserByUsername: (username) => selectUser.get(username) || null,
         getUserByEmail: (email) => selectUserByEmail.get(email) || null,
         getUserById: (id) => selectUserById.get(id) || null,
+        getUserByIdentity(provider, subject) {
+            const identity = selectUserIdentity.get(provider, subject);
+            return identity ? selectUserById.get(identity.userId) || null : null;
+        },
+        linkUserIdentity(provider, subject, userId, createdAt) {
+            insertUserIdentity.run(provider, subject, userId, createdAt);
+            return selectUserIdentity.get(provider, subject)?.userId === userId;
+        },
         getUserByIdentifier(identifier) {
             return selectUserByEmail.get(identifier)
                 || selectUser.get(identifier)

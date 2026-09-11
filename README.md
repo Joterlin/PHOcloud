@@ -177,3 +177,22 @@ o se detecta un placeholder, la página se bloquea y no publica datos de ejemplo
 La identidad, domicilio, NIF, datos registrales aplicables, información de
 consumo, fiscalidad y tratamiento de imágenes deben revisarse con un profesional
 jurídico antes de cobrar o abrir el servicio a terceros.
+
+## Acceso con Google
+
+El acceso con Google es opcional y convive con correo y contraseña. Straclase usa
+Authorization Code, PKCE, `state` y `nonce`; no guarda los tokens de Google ni
+solicita acceso a Drive, contactos u otros datos.
+
+1. En Google Cloud, configura la pantalla de consentimiento OAuth con el dominio
+   `straclase.com` y publica la aplicación cuando corresponda.
+2. Crea un cliente OAuth 2.0 de tipo **Aplicación web**.
+3. Añade `https://straclase.com/auth/google/callback` como URI de redirección
+   autorizada. Para desarrollo puede añadirse también
+   `http://localhost:3000/auth/google/callback`.
+4. En Railway añade `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` al mismo entorno
+   del servicio. Nunca expongas el secreto en el frontend ni lo confirmes en Git.
+5. Despliega y comprueba que `/auth/status` devuelve `googleAuthEnabled: true`.
+
+Si solo se configura una de las dos variables, el preflight de producción detiene
+el arranque para evitar mostrar un acceso incompleto.

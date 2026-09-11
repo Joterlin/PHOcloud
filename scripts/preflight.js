@@ -8,6 +8,14 @@ const production = process.env.NODE_ENV === "production";
 const errors = [];
 const warnings = [];
 
+const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || "";
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || "";
+if (Boolean(googleClientId) !== Boolean(googleClientSecret)) {
+    errors.push("GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben configurarse juntos");
+} else if (!googleClientId) {
+    warnings.push("El acceso con Google no está configurado; correo y contraseña seguirán disponibles");
+}
+
 function enabledValue(value) {
     return ["1", "true", "yes", "on"].includes(
         String(value || "").trim().toLowerCase()

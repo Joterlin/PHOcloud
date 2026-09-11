@@ -97,10 +97,16 @@ test("el registro y el acceso usan únicamente el correo electrónico", () => {
     const dashboardScript = read("Frontend/script.js");
     assert.doesNotMatch(login, /id="username"|id="usernamePrefix"|Nombre de usuario/);
     assert.match(login, /id="email" type="email"/);
+    assert.match(login, /id="googleAuthButton"[^>]+href="\/auth\/google"/);
+    assert.match(login, /Continuar con Google/);
+    assert.match(login, /aceptas los/);
     assert.match(login, /login\.css\?v=[^"\s]+/);
     assert.match(login, /login\.js\?v=[^"\s]+/);
     assert.doesNotMatch(loginScript, /username|@usuario|RESERVED_USERNAMES/);
     assert.match(loginScript, /email: emailInput\.value\.trim\(\)/);
+    assert.match(loginScript, /status\.googleAuthEnabled === true/);
+    assert.match(loginScript, /oauthError/);
+    assert.doesNotMatch(login, /GOOGLE_CLIENT_SECRET|GOCSPX_/);
     assert.match(loginScript, /AbortSignal\.timeout\(30_000\)/);
     assert.match(loginScript, /Straclase tardó demasiado en responder/);
     assert.match(loginScript, /scrollIntoView\(\{ behavior: "smooth", block: "nearest" \}\)/);

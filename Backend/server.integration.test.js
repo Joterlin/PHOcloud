@@ -834,6 +834,15 @@ test("producción no expone la configuración privilegiada inicial", async () =>
         await waitForServer(baseUrl, child);
         const status = await jsonRequest(`${baseUrl}/auth/status`);
         assert.equal(status.data.setupRequired, false);
+        assert.equal(status.data.googleAuthEnabled, false);
+        const googleUnavailable = await fetch(`${baseUrl}/auth/google`, {
+            redirect: "manual"
+        });
+        assert.equal(googleUnavailable.status, 302);
+        assert.match(
+            googleUnavailable.headers.get("location"),
+            /^\/login\?oauthError=/
+        );
         const setup = await fetch(`${baseUrl}/auth/setup`, {
             method: "POST",
             headers: {

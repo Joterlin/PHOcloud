@@ -199,6 +199,17 @@ test("guarda usuarios y sesiones con expiración", () => {
         assert.equal(store.getUserById(userId).plan, "free");
         assert.equal(Boolean(store.getUserById(userId).termsAcceptedAt), true);
 
+        assert.equal(store.getUserByIdentity("google", "google-subject-1"), null);
+        assert.equal(store.linkUserIdentity(
+            "google", "google-subject-1", userId,
+            "2026-08-26T10:01:00.000Z"
+        ), true);
+        assert.equal(store.getUserByIdentity("google", "google-subject-1").id, userId);
+        assert.equal(store.linkUserIdentity(
+            "google", "google-subject-distinto", userId,
+            "2026-08-26T10:02:00.000Z"
+        ), false);
+
         const legacyEmailUsernameId = store.createUser({
             username: "legacy@example.com",
             passwordHash: "hash-antiguo",
