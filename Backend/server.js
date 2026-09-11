@@ -3053,7 +3053,8 @@ app.get("/analytics/summary", requireAuth, (req, res) => {
         sinceIso: since.toISOString()
     });
     const visitors = Number(summary.events.visitors || 0);
-    const completed = Number(summary.users.completedRegistrations || 0);
+    const completedRegistrations = Number(summary.users.completedRegistrations || 0);
+    const consentedSignupCompletions = Number(summary.events.signupCompleted || 0);
     res.set("Cache-Control", "no-store");
     res.json({
         periodDays: 7,
@@ -3062,14 +3063,16 @@ app.get("/analytics/summary", requireAuth, (req, res) => {
             totalUsers: Number(summary.users.totalUsers || 0),
             completedUsers: Number(summary.users.completedUsers || 0),
             newUsers: Number(summary.users.newUsers || 0),
-            completedRegistrations: completed,
+            completedRegistrations,
             visitors,
             pageviews: Number(summary.events.pageviews || 0),
             activeUsers: Number(summary.events.activeUsers || 0),
             signupStarted: Number(summary.events.signupStarted || 0),
-            signupCompleted: Number(summary.events.signupCompleted || 0),
+            signupCompleted: consentedSignupCompletions,
             logins: Number(summary.events.logins || 0),
-            conversionRate: visitors ? Math.round(completed / visitors * 1000) / 10 : null
+            conversionRate: visitors
+                ? Math.round(consentedSignupCompletions / visitors * 1000) / 10
+                : null
         },
         eventSeries: summary.eventSeries,
         userSeries: summary.userSeries,
