@@ -394,9 +394,6 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         convertibleForm.append("files", new File(
             [png], "portada.png", { type: "image/png" }
         ));
-        convertibleForm.append("files", new File(
-            [Buffer.from("notas")], "notas.txt", { type: "text/plain" }
-        ));
         const convertibleUpload = await fetch(`${baseUrl}/transfers`, {
             method: "POST",
             headers: { Cookie: cookie },
@@ -411,7 +408,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.equal(conversionOptions.response.status, 200);
         assert.equal(conversionOptions.data.compatible.length, 1);
         assert.equal(conversionOptions.data.compatible[0].name, "portada.png");
-        assert.equal(conversionOptions.data.excluded.length, 1);
+        assert.equal(conversionOptions.data.excluded.length, 0);
 
         const conversionBody = {
             idempotencyKey: "integracion-conversion-001",
@@ -460,6 +457,52 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         )).response.status, 200);
         assert.equal((await jsonRequest(
             `${baseUrl}/transfers/${convertible.transferId}`,
+            { method: "DELETE", cookie }
+        )).response.status, 200);
+
+        const mixedForm = new FormData();
+        mixedForm.append("title", "Fotos y documentos");
+        mixedForm.append("files", new File(
+            [png], "foto-mixta.png", { type: "image/png" }
+        ));
+        mixedForm.append("files", new File(
+            [Buffer.from("raw")], "IMG_5438.cr2", { type: "image/x-canon-cr2" }
+        ));
+        const mixedUpload = await fetch(`${baseUrl}/transfers`, {
+            method: "POST",
+            headers: { Cookie: cookie },
+            body: mixedForm
+        });
+        const mixed = await mixedUpload.json();
+        assert.equal(mixedUpload.status, 201);
+        const mixedOptions = await jsonRequest(
+            `${baseUrl}/transfers/${mixed.transferId}/conversion-options`,
+            { cookie }
+        );
+        assert.equal(mixedOptions.response.status, 422);
+        assert.equal(mixedOptions.data.code, "TRANSFER_NOT_PHOTO_ONLY");
+        const listedTransfers = await jsonRequest(`${baseUrl}/transfers`, { cookie });
+        assert.equal(
+            listedTransfers.data.transfers.find(
+                (transfer) => transfer.id === mixed.transferId
+            ).galleryEligible,
+            false
+        );
+        const rejectedMixedConversion = await jsonRequest(
+            `${baseUrl}/transfers/${mixed.transferId}/conversions`,
+            {
+                method: "POST",
+                cookie,
+                body: {
+                    idempotencyKey: "integracion-mixta-001",
+                    selectedFileIds: ["foto-mixta.png"],
+                    clientName: "No debe convertirse"
+                }
+            }
+        );
+        assert.equal(rejectedMixedConversion.response.status, 422);
+        assert.equal((await jsonRequest(
+            `${baseUrl}/transfers/${mixed.transferId}`,
             { method: "DELETE", cookie }
         )).response.status, 200);
 

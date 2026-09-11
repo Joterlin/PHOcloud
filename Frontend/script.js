@@ -65,12 +65,69 @@ let currentTransferId = "";
 let latestDeliveries = [];
 let latestTransfers = [];
 let conversionContext = null;
+let transferGalleryPreviewUrls = [];
 let transferCapabilities = {
     maxFileSize: 5 * 1024 * 1024 * 1024,
     maxTotalSize: 5 * 1024 * 1024 * 1024,
     maxFiles: 500,
     acceptingNewTransfers: true
 };
+
+const GALLERY_PHOTO_EXTENSIONS = new Set([
+    "jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif"
+]);
+
+function isGalleryPhotoFile(file) {
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    return GALLERY_PHOTO_EXTENSIONS.has(extension);
+}
+
+function isPhotoOnlyGallerySelection(files) {
+    return files.length > 0
+        && files.length <= 500
+        && files.every((file) => isGalleryPhotoFile(file)
+            && file.size <= 50 * 1024 * 1024)
+        && files.reduce((sum, file) => sum + file.size, 0)
+            <= 10 * 1024 * 1024 * 1024;
+}
+
+function clearTransferGalleryPreview() {
+    for (const url of transferGalleryPreviewUrls) URL.revokeObjectURL(url);
+    transferGalleryPreviewUrls = [];
+    const preview = byId("transferGalleryPreview");
+    preview.replaceChildren();
+    preview.hidden = true;
+}
+
+function renderTransferGalleryPreview(files) {
+    clearTransferGalleryPreview();
+    if (!isPhotoOnlyGallerySelection(files)) return false;
+    const preview = byId("transferGalleryPreview");
+    for (const file of files.slice(0, 4)) {
+        const tile = document.createElement("span");
+        tile.className = "transfer-gallery-preview-tile";
+        const image = document.createElement("img");
+        const url = URL.createObjectURL(file);
+        transferGalleryPreviewUrls.push(url);
+        image.src = url;
+        image.alt = "";
+        image.addEventListener("error", () => {
+            image.remove();
+            tile.classList.add("is-fallback");
+            tile.textContent = "FOTO";
+        }, { once: true });
+        tile.appendChild(image);
+        preview.appendChild(tile);
+    }
+    if (files.length > 4) {
+        const more = document.createElement("span");
+        more.className = "transfer-gallery-preview-more";
+        more.textContent = `+${files.length - 4}`;
+        preview.appendChild(more);
+    }
+    preview.hidden = false;
+    return true;
+}
 
 function elementFromHtml(markup) {
     const template = document.createElement("template");
@@ -2429,7 +2486,8 @@ byId("createTransfer").addEventListener("click", async () => {
         byId("transferLinkInput").value = data.link;
         byId("transferResultSummary").textContent = `${data.fileCount} archivo${data.fileCount === 1 ? "" : "s"} · ${formatBytes(data.totalBytes)}`;
         byId("transferResult").hidden = false;
-        byId("convertLatestTransfer").hidden = false;
+        const canConvert = renderTransferGalleryPreview(sourceFiles);
+        byId("convertLatestTransfer").hidden = !canConvert;
         clearTimeout(transferResultHideTimer);
         transferResultHideTimer = setTimeout(() => {
             byId("transferResult").hidden = true;
@@ -2493,7 +2551,10 @@ function createTransferCard(transfer) {
     if (!incomplete) {
         actions.append(open, copy);
         if (transfer.recipientEmail) actions.append(send);
-        if (!transfer.expired) {
+        const conversionStatus = transfer.conversion?.status;
+        const hasActiveOrReadyConversion = ["pending", "building", "ready"]
+            .includes(conversionStatus);
+        if (!transfer.expired && (transfer.galleryEligible || hasActiveOrReadyConversion)) {
             const convert = actionButton(
                 transfer.conversion?.status === "ready"
                     ? "Abrir galería creada"
@@ -2730,7 +2791,7 @@ byId("toggleConvertFiles").addEventListener("click", () => {
     updateConversionSelection();
 });
 function closeConvertDialog() {
-    if (!byId("startConversion").disabled) byId("convertDialog").close();
+    byId("convertDialog").close();
 }
 byId("closeConvertDialog").addEventListener("click", closeConvertDialog);
 byId("cancelConvertDialog").addEventListener("click", closeConvertDialog);

@@ -8,7 +8,7 @@
     <title>Enviar archivos · Straclase</title>
     <link rel="icon" href="/assets/straclase-favicon.svg" type="image/svg+xml">
     <script src="/theme.js?v=20260910-4"></script>
-    <link rel="stylesheet" href="/send.css?v=20260910-6">
+    <link rel="stylesheet" href="/send.css?v=20260911-1">
     <link rel="stylesheet" href="/analytics.css?v=1">
 </head>
 <body>
@@ -93,16 +93,19 @@
                 <p id="resultDeliveryStatus" class="result-delivery-status" hidden></p>
                 <input id="resultLink" type="text" readonly aria-label="Enlace de la transferencia">
                 <div><button id="copyLink" type="button" class="continue">Copiar enlace</button><button id="newTransfer" type="button" class="text-button">Crear otra</button></div>
-                <div class="conversion-offer">
-                    <strong>¿Prefieres presentarlo como una galería?</strong>
-                    <span id="conversionOfferText">Crea una cuenta gratis y personaliza estas fotos sin volver a subirlas.</span>
-                    <button id="convertGuestTransfer" type="button" class="conversion-button">Crear cuenta y convertir en galería</button>
+                <div id="conversionOffer" class="conversion-offer" hidden>
+                    <div id="conversionPreview" class="conversion-preview" aria-label="Vista previa de la galería"></div>
+                    <div class="conversion-copy">
+                        <strong>Así podrían verse tus fotografías</strong>
+                        <span id="conversionOfferText">Crea una cuenta gratis y personaliza estas fotos sin volver a subirlas.</span>
+                        <button id="convertGuestTransfer" type="button" class="conversion-button">Crear cuenta y convertir en galería</button>
+                    </div>
                 </div>
             </div>
         </section>
     </main>
     <footer><span>© Straclase</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>
     <script src="/analytics.js?v=1"></script>
-    <script src="/send.js?v=20260910-5"></script>
+    <script src="/send.js?v=20260911-1"></script>
 </body>
 </html>

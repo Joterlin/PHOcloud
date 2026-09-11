@@ -57,8 +57,11 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(dashboard, /id="showGalleries"/);
     assert.doesNotMatch(dashboard, /id="workspaceBrandButton"|id="workspaceAccountButton"/);
     assert.match(dashboard, /id="convertDialog"/);
+    assert.match(dashboard, /id="transferGalleryPreview"/);
     assert.match(dashboardScript, /selectedFileIds/);
     assert.match(dashboardScript, /\/conversions/);
+    assert.match(dashboardScript, /transfer\.galleryEligible \|\| hasActiveOrReadyConversion/);
+    assert.match(dashboardScript, /function closeConvertDialog\(\) \{\s*byId\("convertDialog"\)\.close\(\);/);
     const conversionSubmit = dashboardScript.slice(
         dashboardScript.indexOf('byId("convertForm").addEventListener'),
         dashboardScript.indexOf('byId("toggleConvertFiles").addEventListener')
@@ -79,6 +82,10 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(sendScript, /async function emailTransfer/);
     assert.match(sendScript, /id="resultLink"|resultLink/);
     assert.match(send, /id="convertGuestTransfer"/);
+    assert.match(send, /id="conversionOffer"[^>]+hidden/);
+    assert.match(send, /id="conversionPreview"/);
+    assert.match(sendScript, /isPhotoOnlyGallerySelection/);
+    assert.match(sendScript, /byId\("conversionOffer"\)\.hidden = !canConvert/);
     assert.match(sendScript, /login\?mode=register/);
     assert.match(sendScript, /claimTransfer/);
     assert.match(dashboardScript, /\/claim/);

@@ -1984,6 +1984,22 @@ function classifyTransferFilesForGallery(transfer) {
     return { compatible, excluded };
 }
 
+function isPhotoOnlyGalleryTransfer(classified) {
+    return classified.compatible.length > 0
+        && classified.excluded.length === 0
+        && classified.compatible.length <= MAX_PHOTOS_PER_DELIVERY
+        && classified.compatible.every((file) => file.mediaType === "image")
+        && classified.compatible.reduce((sum, file) => sum + file.size, 0)
+            <= MAX_DELIVERY_SIZE_BYTES;
+}
+
+function photoOnlyConversionError(res) {
+    return res.status(422).json({
+        error: "Solo se pueden convertir transferencias formadas completamente por fotografías compatibles.",
+        code: "TRANSFER_NOT_PHOTO_ONLY"
+    });
+}
+
 function publicConversionJob(job, req) {
     return {
         id: job.id,
@@ -3276,10 +3292,15 @@ app.get("/transfers", requireAuth, (req, res) => {
         const conversion = deliveryStore.getLatestTransferConversion(
             transfer.id, req.auth.userId
         );
+        const expired = Date.parse(transfer.expiresAt) <= Date.now();
+        const galleryEligible = transfer.status === "ready" && !expired
+            ? isPhotoOnlyGalleryTransfer(classifyTransferFilesForGallery(transfer))
+            : false;
         return {
             ...transfer,
-            expired: Date.parse(transfer.expiresAt) <= Date.now(),
+            expired,
             link: `${baseUrl}/t/${transfer.id}`,
+            galleryEligible,
             conversion: conversion ? publicConversionJob(conversion, req) : null
         };
     });
@@ -3387,6 +3408,9 @@ app.get("/transfers/:transferId/conversion-options", requireAuth, (req, res) => 
         return res.status(410).json({ error: "La transferencia ha caducado" });
     }
     const files = classifyTransferFilesForGallery(transfer);
+    if (!isPhotoOnlyGalleryTransfer(files)) {
+        return photoOnlyConversionError(res);
+    }
     const account = userForCurrentBillingEnvironment(
         deliveryStore.getUserById(req.auth.userId)
     );
@@ -3443,6 +3467,9 @@ app.post("/transfers/:transferId/conversions", requireAuth, requireSameOrigin,
             });
         }
         const classified = classifyTransferFilesForGallery(transfer);
+        if (!isPhotoOnlyGalleryTransfer(classified)) {
+            return photoOnlyConversionError(res);
+        }
         const compatibleById = new Map(
             classified.compatible.map((file) => [file.sourceId, file])
         );

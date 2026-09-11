@@ -4,7 +4,56 @@ let selectedFiles = [];
 let senderVerifiedEmail = "";
 let authenticated = false;
 let latestTransferId = "";
+let conversionPreviewUrls = [];
 const PENDING_TRANSFER_CLAIM_KEY = "straclase-pending-transfer-claim";
+const GALLERY_PHOTO_EXTENSIONS = new Set([
+    "jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif"
+]);
+
+function isGalleryPhotoFile(file) {
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    return GALLERY_PHOTO_EXTENSIONS.has(extension);
+}
+
+function isPhotoOnlyGallerySelection(files) {
+    return files.length > 0
+        && files.length <= 500
+        && files.every((file) => isGalleryPhotoFile(file)
+            && file.size <= 50 * 1024 * 1024)
+        && files.reduce((sum, file) => sum + file.size, 0)
+            <= 10 * 1024 * 1024 * 1024;
+}
+
+function renderConversionPreview(files) {
+    for (const url of conversionPreviewUrls) URL.revokeObjectURL(url);
+    conversionPreviewUrls = [];
+    const preview = byId("conversionPreview");
+    preview.replaceChildren();
+    if (!isPhotoOnlyGallerySelection(files)) return false;
+    for (const file of files.slice(0, 4)) {
+        const tile = document.createElement("span");
+        tile.className = "conversion-preview-tile";
+        const image = document.createElement("img");
+        const url = URL.createObjectURL(file);
+        conversionPreviewUrls.push(url);
+        image.src = url;
+        image.alt = "";
+        image.addEventListener("error", () => {
+            image.remove();
+            tile.classList.add("is-fallback");
+            tile.textContent = "FOTO";
+        }, { once: true });
+        tile.appendChild(image);
+        preview.appendChild(tile);
+    }
+    if (files.length > 4) {
+        const more = document.createElement("span");
+        more.className = "conversion-preview-more";
+        more.textContent = `+${files.length - 4}`;
+        preview.appendChild(more);
+    }
+    return true;
+}
 
 function shareMethod() {
     return document.querySelector('input[name="shareMethod"]:checked')?.value || "link";
@@ -332,6 +381,8 @@ function showResult(data, deliveryStatus = null) {
         "warning", Boolean(deliveryStatus?.warning)
     );
     latestTransferId = data.transferId;
+    const canConvert = renderConversionPreview(selectedFiles);
+    byId("conversionOffer").hidden = !canConvert;
     byId("convertGuestTransfer").textContent = authenticated
         ? "Convertir en galería"
         : "Crear cuenta y convertir en galería";

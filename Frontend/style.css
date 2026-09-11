@@ -685,6 +685,22 @@ input:focus, textarea:focus, select:focus { border-color: #756443; }
 #result h2, #transferResult h2 { margin: 0; }
 #photoCount { color: #8f8d88; }
 #linkInput, #transferLinkInput { color: #c9aa70; text-align: center; }
+.transfer-gallery-preview {
+    position: relative;
+    min-height: 112px;
+    margin-top: 14px;
+    padding: 7px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    border: 1px solid #38352f;
+    border-radius: 14px;
+    background: #0c0b0a;
+    overflow: hidden;
+}
+.transfer-gallery-preview-tile { min-width: 0; min-height: 96px; display: grid; place-items: center; overflow: hidden; border-radius: 8px; background: #24211d; color: #8f8d88; font-size: 9px; letter-spacing: .12em; }
+.transfer-gallery-preview-tile img { width: 100%; height: 100%; object-fit: cover; }
+.transfer-gallery-preview-more { position: absolute; right: 12px; bottom: 12px; padding: 5px 8px; border-radius: 99px; background: rgba(0,0,0,.72); color: #fff; font-size: 11px; font-weight: 700; }
 .actions { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 
 #deliveriesPanel {
