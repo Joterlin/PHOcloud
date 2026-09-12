@@ -201,3 +201,31 @@ test("la analítica es consentida, privada y muestra únicamente datos reales", 
     assert.match(privacy, /Cookies y analítica/);
     assert.match(privacy, /No se envían contraseñas, tokens, datos de pago, imágenes, archivos ni contenido privado/);
 });
+
+test("el SEO indexa la portada sin exponer entregas ni paneles privados", () => {
+    const server = read("Backend/server.js");
+    const send = read("public/send.html");
+    const privatePages = [
+        "Frontend/index.html",
+        "Frontend/login.html",
+        "public/gallery.html",
+        "public/transfer.html"
+    ];
+    assert.match(server, /app\.get\("\/sitemap\.xml"/);
+    assert.match(server, /Sitemap: \$\{publicBaseUrl\(req\)\}\/sitemap\.xml/);
+    const robotsRoute = server.slice(
+        server.indexOf('app.get("/robots.txt"'),
+        server.indexOf('app.get("/sitemap.xml"')
+    );
+    assert.match(robotsRoute, /"Allow: \/"/);
+    assert.doesNotMatch(robotsRoute, /"Disallow: \/"/);
+    assert.match(robotsRoute, /Disallow: \/app/);
+    assert.match(robotsRoute, /Disallow: \/gallery\//);
+    assert.match(send, /rel="canonical" href="https:\/\/straclase\.com\/"/);
+    assert.match(send, /property="og:title"/);
+    assert.match(send, /"@type": "WebSite"/);
+    assert.match(send, /name="robots" content="index,follow,max-image-preview:large"/);
+    for (const page of privatePages) {
+        assert.match(read(page), /name="robots" content="noindex,nofollow/);
+    }
+});

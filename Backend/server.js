@@ -2361,9 +2361,37 @@ app.get("/operations/economics", (req, res) => {
 });
 
 app.get("/robots.txt", (req, res) => {
+    res.set("Cache-Control", "public, max-age=3600");
     res.type("text/plain").send([
         "User-agent: *",
-        "Disallow: /",
+        "Allow: /",
+        "Disallow: /app",
+        "Disallow: /account",
+        "Disallow: /brand",
+        "Disallow: /deliveries",
+        "Disallow: /transfers",
+        "Disallow: /operations/",
+        "Disallow: /analytics/",
+        "Disallow: /auth/",
+        "Disallow: /gallery/",
+        "Disallow: /transfer/",
+        `Sitemap: ${publicBaseUrl(req)}/sitemap.xml`,
+        ""
+    ].join("\n"));
+});
+
+app.get("/sitemap.xml", (req, res) => {
+    const baseUrl = publicBaseUrl(req);
+    res.set("Cache-Control", "public, max-age=3600");
+    res.type("application/xml").send([
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">",
+        "  <url>",
+        `    <loc>${baseUrl}/</loc>`,
+        "    <changefreq>weekly</changefreq>",
+        "    <priority>1.0</priority>",
+        "  </url>",
+        "</urlset>",
         ""
     ].join("\n"));
 });
@@ -2412,6 +2440,7 @@ app.get("/terms.html", (req, res) => res.redirect(301, "/terminos"));
 
 app.get("/login", (req, res) => {
     res.set("Cache-Control", "no-store");
+    res.set("X-Robots-Tag", "noindex, nofollow");
     res.sendFile(path.join(frontendDirectory, "login.html"));
 });
 
@@ -5663,6 +5692,7 @@ app.get("/t/:transferId", (req, res) => {
     if (!transfer || !storageAvailable) {
         return res.status(404).send("Transferencia no encontrada");
     }
+    res.set("X-Robots-Tag", "noindex, nofollow");
     res.sendFile(path.join(publicDirectory, "transfer.html"));
 });
 
@@ -5679,6 +5709,7 @@ app.get("/s/:folderId", (req, res) => {
         return res.status(404).send("Galería no encontrada");
     }
 
+    res.set("X-Robots-Tag", "noindex, nofollow");
     res.sendFile(path.join(publicDirectory, "gallery.html"));
 });
 

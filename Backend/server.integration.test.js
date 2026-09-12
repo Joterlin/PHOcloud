@@ -66,6 +66,22 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
     try {
         await waitForServer(baseUrl, child);
 
+        const robots = await fetch(`${baseUrl}/robots.txt`);
+        const robotsText = await robots.text();
+        assert.equal(robots.status, 200);
+        assert.match(robotsText, /Allow: \/\n/);
+        assert.doesNotMatch(robotsText, /Disallow: \/\n/);
+        assert.match(robotsText, new RegExp(
+            `Sitemap: ${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\/sitemap\\.xml`
+        ));
+        const sitemap = await fetch(`${baseUrl}/sitemap.xml`);
+        const sitemapText = await sitemap.text();
+        assert.equal(sitemap.status, 200);
+        assert.match(sitemap.headers.get("content-type"), /application\/xml/);
+        assert.match(sitemapText, new RegExp(
+            `<loc>${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\/<\\/loc>`
+        ));
+
         const registration = {
             displayName: "Estudio Beta",
             email: "estudio@example.com",
