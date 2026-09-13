@@ -57,6 +57,7 @@ let currentEditDelivery = null;
 let editPreviewDevice = "desktop";
 let editResponsiveDesign = { desktop: {}, mobile: {} };
 let editLivePhotosSignature = "";
+let editSelectedTheme = "";
 let pendingDeletion = null;
 let deletionInProgress = false;
 let accountData = null;
@@ -136,6 +137,67 @@ function elementFromHtml(markup) {
     const template = document.createElement("template");
     template.innerHTML = markup.trim();
     return template.content.firstElementChild;
+}
+
+const galleryThemePresets = {
+    natural: {
+        label: "Natural",
+        backgroundMode: "solid", backgroundColor: "#f7f4ee",
+        backgroundColor2: "#f7f4ee", textColor: "#24211d",
+        buttonColor: "#9b7442", gradientAngle: 135,
+        desktop: { galleryStyle: "masonry", coverStyle: "immersive" },
+        mobile: { galleryStyle: "masonry", coverStyle: "immersive" }
+    },
+    editorial: {
+        label: "Editorial",
+        backgroundMode: "gradient", backgroundColor: "#f3efe7",
+        backgroundColor2: "#d8cec0", textColor: "#211e19",
+        buttonColor: "#765235", gradientAngle: 145,
+        desktop: { galleryStyle: "editorial", coverStyle: "split" },
+        mobile: { galleryStyle: "editorial", coverStyle: "immersive" }
+    },
+    nocturnal: {
+        label: "Nocturna",
+        backgroundMode: "gradient", backgroundColor: "#151515",
+        backgroundColor2: "#302b25", textColor: "#f7f2e9",
+        buttonColor: "#d4b477", gradientAngle: 150,
+        desktop: { galleryStyle: "masonry", coverStyle: "minimal" },
+        mobile: { galleryStyle: "grid", coverStyle: "minimal" }
+    },
+    modern: {
+        label: "Moderna",
+        backgroundMode: "solid", backgroundColor: "#f4f5f7",
+        backgroundColor2: "#f4f5f7", textColor: "#111827",
+        buttonColor: "#315bd6", gradientAngle: 90,
+        desktop: { galleryStyle: "grid", coverStyle: "frame" },
+        mobile: { galleryStyle: "grid", coverStyle: "frame" }
+    }
+};
+
+function applyGalleryThemePreset(name) {
+    const preset = galleryThemePresets[name];
+    if (!preset) return;
+    storeEditDeviceControls();
+    for (const [id, value] of [
+        ["editBackgroundMode", preset.backgroundMode],
+        ["editBackgroundColor", preset.backgroundColor],
+        ["editBackgroundColor2", preset.backgroundColor2],
+        ["editTextColor", preset.textColor],
+        ["editAccentColor", preset.buttonColor],
+        ["editGradientAngle", preset.gradientAngle]
+    ]) byId(id).value = String(value);
+
+    for (const device of ["desktop", "mobile"]) {
+        const existing = editResponsiveDesign[device] || {};
+        editResponsiveDesign[device] = {
+            ...existing,
+            ...preset[device]
+        };
+    }
+    editSelectedTheme = name;
+    loadEditDeviceControls(editPreviewDevice);
+    updateEditGalleryPreview();
+    setEditSaveState(true);
 }
 
 function enhanceGalleryEditor() {
@@ -233,7 +295,16 @@ function enhanceGalleryEditor() {
     const stylePicker = designGrid.querySelector(".style-picker");
     stylePicker.classList.remove("field-wide");
     stylePicker.classList.add("editor-style-picker");
-    designPanel.appendChild(stylePicker);
+    const themePicker = elementFromHtml(`<section class="gallery-theme-picker" aria-labelledby="galleryThemeTitle">
+        <div class="gallery-theme-heading"><strong id="galleryThemeTitle">Estilos iniciales</strong><small>Aplica una combinación completa y personalízala después.</small></div>
+        <div class="gallery-theme-grid">
+            <button type="button" data-gallery-theme="natural" style="--theme-a:#f7f4ee;--theme-b:#9b7442"><i></i><span><strong>Natural</strong><small>Luminosa y atemporal</small></span></button>
+            <button type="button" data-gallery-theme="editorial" style="--theme-a:#f3efe7;--theme-b:#765235"><i></i><span><strong>Editorial</strong><small>Elegante y narrativa</small></span></button>
+            <button type="button" data-gallery-theme="nocturnal" style="--theme-a:#151515;--theme-b:#d4b477"><i></i><span><strong>Nocturna</strong><small>Oscura y cinematográfica</small></span></button>
+            <button type="button" data-gallery-theme="modern" style="--theme-a:#f4f5f7;--theme-b:#315bd6"><i></i><span><strong>Moderna</strong><small>Limpia y geométrica</small></span></button>
+        </div>
+    </section>`);
+    designPanel.append(themePicker, elementFromHtml('<div class="editor-section-divider"><span>PERSONALIZAR</span></div>'), stylePicker);
     const colorGrid = document.createElement("div");
     colorGrid.className = "editor-color-grid";
     const colorOutputs = {
@@ -318,6 +389,7 @@ function enhanceGalleryEditor() {
     collection.appendChild(elementFromHtml('<p class="edit-preview-footer">Entrega privada creada con Straclase</p>'));
 
     layout.appendChild(previewStage);
+    layout.insertBefore(previewStage, controls);
     error.classList.add("gallery-editor-error");
     form.appendChild(error);
     brandSection.remove();
@@ -332,6 +404,11 @@ function enhanceGalleryEditor() {
     }
     openGallery.addEventListener("click", () => {
         if (currentEditDelivery) window.open(`/s/${encodeURIComponent(currentEditDelivery.id)}`, "_blank", "noopener");
+    });
+    themePicker.querySelectorAll("[data-gallery-theme]").forEach((button) => {
+        button.addEventListener("click", () => {
+            applyGalleryThemePreset(button.dataset.galleryTheme);
+        });
     });
 }
 
@@ -1611,6 +1688,7 @@ function fillEditForm() {
         }
     };
     editPreviewDevice = "desktop";
+    editSelectedTheme = "";
     loadEditDeviceControls("desktop");
     editLivePhotosSignature = "";
     byId("editLogoScale").value = delivery.logoScale ?? 100;
@@ -2005,6 +2083,9 @@ function updateEditGalleryPreview() {
     byId("editContrastStatus").textContent = adjusted
         ? "Contraste protegido: la vista pública ajustará automáticamente los elementos que no sean legibles."
         : "Buena legibilidad: el texto y los botones mantienen suficiente contraste.";
+    document.querySelectorAll("[data-gallery-theme]").forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.galleryTheme === editSelectedTheme);
+    });
     syncProfilePositionButtons();
     renderEditLivePhotos();
 }
@@ -2021,10 +2102,16 @@ for (const id of [
     "removeEditLogo", "editViewingEnabled",
     "editAllowOriginalDownload", "editAllowWebDownload", "editFavoritesEnabled"
 ]) {
-    byId(id).addEventListener("input", updateEditGalleryPreview);
+    byId(id).addEventListener("input", (event) => {
+        if (event.isTrusted) editSelectedTheme = "";
+        updateEditGalleryPreview();
+    });
 }
 for (const option of document.querySelectorAll('input[name="editGalleryStyle"]')) {
-    option.addEventListener("change", updateEditGalleryPreview);
+    option.addEventListener("change", (event) => {
+        if (event.isTrusted) editSelectedTheme = "";
+        updateEditGalleryPreview();
+    });
 }
 
 function setEditSaveState(dirty) {

@@ -25,6 +25,10 @@ test("la personalización muestra una galería viva y no expone el valor mágico
     assert.match(script, /function selectEditPreviewDevice/);
     assert.match(script, /editResponsiveDesign/);
     assert.match(script, /editLivePhotosSignature/);
+    assert.match(script, /galleryThemePresets/);
+    assert.match(script, /applyGalleryThemePreset/);
+    assert.match(script, /data-gallery-theme="editorial"/);
+    assert.match(script, /layout\.insertBefore\(previewStage, controls\)/);
     assert.match(script, /data-edit-cover-style="immersive"/);
     assert.match(script, /editPreviewOriginalAction/);
     assert.match(script, /editPreviewFavoriteNotice/);
@@ -35,6 +39,8 @@ test("la personalización muestra una galería viva y no expone el valor mágico
     assert.match(css, /\.gallery-preview-viewport\[data-preview-device=mobile\]/);
     assert.match(css, /#editCoverPreviewImage\.is-draggable/);
     assert.match(css, /\.cover-transform-controls/);
+    assert.match(css, /\.gallery-theme-grid/);
+    assert.match(css, /grid-template-columns:108px minmax\(520px,1fr\) 350px/);
     assert.match(html, /id="editBackgroundMode"/);
     assert.match(html, /id="editBackgroundColor2"/);
     assert.match(html, /id="editTextColor"/);
