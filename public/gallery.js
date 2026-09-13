@@ -65,6 +65,8 @@ let current = 0;
 let favoritesOnly = false;
 let selection = { selectionLimit: 0, status: "open" };
 let selectionComments = new Map();
+let responsiveBrandData = null;
+const galleryMobileMedia = window.matchMedia("(max-width: 760px)");
 
 function rgbFromHex(hex) {
     const value = String(hex || "").replace("#", "");
@@ -111,6 +113,63 @@ function foregroundFor(color) {
         ? "#111111"
         : "#ffffff";
 }
+
+function readableAcrossColors(color, backgrounds, minimum = 4.5) {
+    const valid = backgrounds.filter(Boolean);
+    if (valid.every((background) => contrastRatio(color, background) >= minimum)) {
+        return color;
+    }
+    const candidates = ["#111111", "#ffffff"];
+    return candidates.sort((first, second) => {
+        const firstScore = Math.min(...valid.map((background) => contrastRatio(first, background)));
+        const secondScore = Math.min(...valid.map((background) => contrastRatio(second, background)));
+        return secondScore - firstScore;
+    })[0];
+}
+
+function galleryBackgroundCss(mode, first, second, angle) {
+    return mode === "gradient"
+        ? `linear-gradient(${angle}deg, ${first}, ${second})`
+        : first;
+}
+
+function applyResponsiveGalleryLayout() {
+    if (!responsiveBrandData) return;
+    const data = responsiveBrandData;
+    const mobile = galleryMobileMedia.matches;
+    const galleryStyle = mobile
+        ? data.mobileGalleryStyle || data.galleryStyle
+        : data.galleryStyle;
+    const coverStyle = mobile
+        ? data.mobileCoverStyle || data.coverStyle
+        : data.coverStyle;
+    const coverX = mobile
+        ? data.mobileCoverPositionX ?? data.coverPositionX
+        : data.coverPositionX;
+    const coverY = mobile
+        ? data.mobileCoverPositionY ?? data.coverPositionY
+        : data.coverPositionY;
+    const coverZoom = mobile
+        ? data.mobileCoverZoom ?? data.coverZoom
+        : data.coverZoom;
+    const hasCover = Boolean(data.coverFilename && coverStyle !== "none");
+
+    document.body.dataset.galleryStyle = galleryStyle || "masonry";
+    document.body.dataset.coverStyle = coverStyle || "immersive";
+    document.body.dataset.hasCover = String(hasCover);
+    document.documentElement.style.setProperty("--cover-x", `${coverX ?? 50}%`);
+    document.documentElement.style.setProperty("--cover-y", `${coverY ?? 50}%`);
+    document.documentElement.style.setProperty(
+        "--cover-zoom", String((Number(coverZoom) || 100) / 100)
+    );
+    coverHero.hidden = !hasCover;
+    const tone = document.body.dataset.tone;
+    systemBrandLogo.style.filter = hasCover || tone === "dark"
+        ? "invert(1) brightness(1.2)"
+        : "none";
+}
+
+galleryMobileMedia.addEventListener?.("change", applyResponsiveGalleryLayout);
 
 function applyGalleryView(view) {
     const selected = ["compact", "standard", "large"].includes(view)
@@ -217,41 +276,42 @@ async function loadGallery() {
 
 function applyBrand(data) {
     const background = data.backgroundColor || "#ffffff";
-    const accent = data.accentColor || "#c9aa70";
-    const backgroundText = relativeLuminance(background) > .36 ? "#171717" : "#f5f3ef";
+    const background2 = data.backgroundColor2 || background;
+    const backgroundMode = data.backgroundMode || "solid";
+    const gradientAngle = Number(data.gradientAngle) || 0;
+    const accent = data.buttonColor || data.accentColor || "#c9aa70";
+    const requestedText = data.textColor
+        || (relativeLuminance(background) > .36 ? "#171717" : "#f5f3ef");
+    const backgrounds = backgroundMode === "gradient"
+        ? [background, background2]
+        : [background];
+    const backgroundText = readableAcrossColors(requestedText, backgrounds);
+    const renderedBackground = galleryBackgroundCss(
+        backgroundMode, background, background2, gradientAngle
+    );
     document.documentElement.style.setProperty("--accent", accent);
     document.documentElement.style.setProperty("--accent-foreground", foregroundFor(accent));
-    document.documentElement.style.setProperty("--accent-readable", readableAccent(accent, background));
-    document.documentElement.style.setProperty("--accent-on-cover", readableAccent(accent, "#202020"));
     document.documentElement.style.setProperty(
-        "--gallery-bg",
-        background
+        "--accent-readable", readableAcrossColors(accent, backgrounds)
     );
-    document.documentElement.style.backgroundColor = background;
+    document.documentElement.style.setProperty("--accent-on-cover", readableAccent(accent, "#202020"));
+    document.documentElement.style.setProperty("--gallery-bg", background);
+    document.documentElement.style.setProperty("--gallery-background", renderedBackground);
+    document.documentElement.style.background = renderedBackground;
     document.body.style.setProperty("--gallery-bg", background);
-    document.body.style.backgroundColor = background;
-    const tone = relativeLuminance(background) > .36 ? "light" : "dark";
+    document.body.style.setProperty("--gallery-background", renderedBackground);
+    document.body.style.background = renderedBackground;
+    const averageLuminance = (relativeLuminance(background) + relativeLuminance(background2)) / 2;
+    const tone = averageLuminance > .36 ? "light" : "dark";
     document.body.dataset.tone = tone;
     document.documentElement.style.colorScheme = tone;
-    document.documentElement.style.setProperty(
-        "--gallery-text", backgroundText
-    );
-    document.body.dataset.galleryStyle = data.galleryStyle || "masonry";
-    const hasCover = Boolean(data.coverFilename && data.coverStyle !== "none");
-    document.body.dataset.coverStyle = data.coverStyle || "immersive";
-    document.body.dataset.hasCover = String(hasCover);
-    document.documentElement.style.setProperty(
-        "--cover-x", `${data.coverPositionX ?? 50}%`
-    );
-    document.documentElement.style.setProperty(
-        "--cover-y", `${data.coverPositionY ?? 50}%`
-    );
+    document.documentElement.style.setProperty("--gallery-text", backgroundText);
+    responsiveBrandData = data;
+    applyResponsiveGalleryLayout();
+    const hasCover = document.body.dataset.hasCover === "true";
     const brandName = data.brandName?.trim() || "";
     const usesSystemBrand = !data.logoUrl && (!brandName || brandName.toLowerCase() === "straclase");
     systemBrandLogo.hidden = !usesSystemBrand;
-    systemBrandLogo.style.filter = hasCover || tone === "dark"
-        ? "invert(1) brightness(1.2)"
-        : "none";
     brandText.textContent = brandName || (data.logoUrl ? "" : "Straclase");
     brandText.hidden = Boolean(data.logoUrl && !brandName);
     footerBrand.textContent = brandName || "Straclase";
@@ -276,8 +336,7 @@ function applyBrand(data) {
         ? `Abrir ${links[0].label}`
         : "Marca del fotógrafo");
 
-    coverHero.hidden = !hasCover;
-    if (hasCover) {
+    if (data.coverFilename) {
         coverImage.src = previewUrl(data.coverFilename);
         coverImage.alt = `Portada de ${data.clientName}`;
     }

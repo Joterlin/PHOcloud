@@ -47,7 +47,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'published', 'archived')),
             published_at TEXT,
             last_sent_at TEXT,
-            updated_at TEXT
+            updated_at TEXT,
+            gallery_design TEXT
         ) STRICT;
 
         CREATE TABLE IF NOT EXISTS users (
@@ -164,7 +165,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         ["status", "ALTER TABLE deliveries ADD COLUMN status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'published', 'archived'))"],
         ["published_at", "ALTER TABLE deliveries ADD COLUMN published_at TEXT"],
         ["last_sent_at", "ALTER TABLE deliveries ADD COLUMN last_sent_at TEXT"],
-        ["updated_at", "ALTER TABLE deliveries ADD COLUMN updated_at TEXT"]
+        ["updated_at", "ALTER TABLE deliveries ADD COLUMN updated_at TEXT"],
+        ["gallery_design", "ALTER TABLE deliveries ADD COLUMN gallery_design TEXT"]
     ];
 
     for (const [column, statement] of migrations) {
@@ -599,6 +601,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         brand_name AS brandName,
         accent_color AS accentColor,
         background_color AS backgroundColor,
+        gallery_design AS galleryDesign,
         website_url AS websiteUrl,
         instagram_url AS instagramUrl,
         facebook_url AS facebookUrl,
@@ -628,8 +631,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             facebook_url, tiktok_url, social_links, gallery_style, cover_filename,
             cover_style, cover_position_x, cover_position_y, logo_scale,
             logo_position_x, logo_position_y, client_email,
-            status, published_at, last_sent_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            status, published_at, last_sent_at, updated_at, gallery_design
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insertLegacyDelivery = database.prepare(`
         INSERT OR IGNORE INTO deliveries (id, client_name, created_at, photo_count)
@@ -666,7 +669,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
             cover_filename = ?, cover_style = ?, cover_position_x = ?,
             cover_position_y = ?, logo_scale = ?, logo_position_x = ?,
             logo_position_y = ?, client_email = ?, status = ?,
-            published_at = ?, last_sent_at = ?, updated_at = ?
+            published_at = ?, last_sent_at = ?, updated_at = ?,
+            gallery_design = ?
         WHERE id = ?
     `);
     const updatePhotoCountStatement = database.prepare(`
@@ -1380,12 +1384,76 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
         return legacySocialLinks(row);
     }
 
+    function defaultGalleryText(background) {
+        const value = String(background || "").replace("#", "");
+        if (!/^[0-9a-f]{6}$/i.test(value)) return "#171717";
+        const [red, green, blue] = [0, 2, 4]
+            .map((offset) => parseInt(value.slice(offset, offset + 2), 16));
+        return red * .2126 + green * .7152 + blue * .0722 > 125
+            ? "#171717"
+            : "#f6f3ed";
+    }
+
+    function parseGalleryDesign(row) {
+        const fallback = {
+            backgroundMode: "solid",
+            backgroundColor2: row.backgroundColor || "#ffffff",
+            gradientAngle: 135,
+            textColor: defaultGalleryText(row.backgroundColor),
+            buttonColor: row.accentColor || "#c9aa70",
+            mobileGalleryStyle: row.galleryStyle || "masonry",
+            mobileCoverStyle: row.coverStyle || "immersive",
+            mobileCoverPositionX: Number(row.coverPositionX) || 50,
+            mobileCoverPositionY: Number(row.coverPositionY) || 50,
+            coverZoom: 100,
+            mobileCoverZoom: 100
+        };
+        if (!row.galleryDesign) return fallback;
+        try {
+            const parsed = JSON.parse(row.galleryDesign);
+            return parsed && typeof parsed === "object"
+                ? { ...fallback, ...parsed }
+                : fallback;
+        } catch {
+            return fallback;
+        }
+    }
+
+    function serializeGalleryDesign(delivery) {
+        return JSON.stringify({
+            backgroundMode: delivery.backgroundMode || "solid",
+            backgroundColor2: delivery.backgroundColor2
+                || delivery.backgroundColor || "#ffffff",
+            gradientAngle: Number.isFinite(delivery.gradientAngle)
+                ? delivery.gradientAngle : 135,
+            textColor: delivery.textColor
+                || defaultGalleryText(delivery.backgroundColor),
+            buttonColor: delivery.buttonColor
+                || delivery.accentColor || "#c9aa70",
+            mobileGalleryStyle: delivery.mobileGalleryStyle
+                || delivery.galleryStyle || "masonry",
+            mobileCoverStyle: delivery.mobileCoverStyle
+                || delivery.coverStyle || "immersive",
+            mobileCoverPositionX: Number.isFinite(delivery.mobileCoverPositionX)
+                ? delivery.mobileCoverPositionX : delivery.coverPositionX ?? 50,
+            mobileCoverPositionY: Number.isFinite(delivery.mobileCoverPositionY)
+                ? delivery.mobileCoverPositionY : delivery.coverPositionY ?? 50,
+            coverZoom: Number.isFinite(delivery.coverZoom) ? delivery.coverZoom : 100,
+            mobileCoverZoom: Number.isFinite(delivery.mobileCoverZoom)
+                ? delivery.mobileCoverZoom : delivery.coverZoom ?? 100
+        });
+    }
+
     function normalize(row) {
         if (!row) return null;
         const allowOriginalDownload = Boolean(row.allowIndividualDownload);
         const allowWebDownload = Boolean(row.allowZipDownload);
+        const design = parseGalleryDesign(row);
+        const normalizedRow = { ...row };
+        delete normalizedRow.galleryDesign;
         return {
-            ...row,
+            ...normalizedRow,
+            ...design,
             socialLinks: parseSocialLinks(row),
             photoCount: Number(row.photoCount),
             hasPassword: Boolean(row.hasPassword),
@@ -1558,7 +1626,8 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 delivery.status || "published",
                 delivery.publishedAt || null,
                 delivery.lastSentAt || null,
-                delivery.updatedAt || delivery.createdAt
+                delivery.updatedAt || delivery.createdAt,
+                serializeGalleryDesign(delivery)
             );
         },
         updateDelivery(delivery) {
@@ -1590,7 +1659,7 @@ function createDeliveryStore({ databasePath, uploadsDirectory }) {
                 delivery.status || "published",
                 delivery.publishedAt || null,
                 delivery.lastSentAt || null,
-                delivery.updatedAt, delivery.id
+                delivery.updatedAt, serializeGalleryDesign(delivery), delivery.id
             ).changes > 0;
         },
         updatePhotoCount(id, photoCount, updatedAt) {

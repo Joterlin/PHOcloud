@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-2"></script>
-    <link rel="stylesheet" href="/style.css?v=20260913-gallery1">
+    <link rel="stylesheet" href="/style.css?v=20260913-customizer2">
     <link rel="stylesheet" href="/analytics.css?v=1">
 </head>
 <body>
@@ -756,11 +756,29 @@
                     <label class="field range-field" for="editCoverPositionX">Encuadre horizontal
                         <input id="editCoverPositionX" type="range" min="0" max="100" value="50">
                     </label>
-                    <label class="field color-field" for="editAccentColor">Color de textos y botones
+                    <label class="field range-field" for="editCoverZoom">Zoom de portada
+                        <input id="editCoverZoom" type="range" min="100" max="220" value="100">
+                    </label>
+                    <label class="field" for="editBackgroundMode">Tipo de fondo
+                        <select id="editBackgroundMode">
+                            <option value="solid">Color uniforme</option>
+                            <option value="gradient">Degradado</option>
+                        </select>
+                    </label>
+                    <label class="field color-field" for="editAccentColor">Color de botones
                         <input id="editAccentColor" type="color">
                     </label>
                     <label class="field color-field" for="editBackgroundColor">Color de fondo de la galería
                         <input id="editBackgroundColor" type="color">
+                    </label>
+                    <label class="field color-field" for="editBackgroundColor2">Segundo color del degradado
+                        <input id="editBackgroundColor2" type="color" value="#eee7da">
+                    </label>
+                    <label class="field color-field" for="editTextColor">Color del texto
+                        <input id="editTextColor" type="color" value="#171717">
+                    </label>
+                    <label class="field range-field" for="editGradientAngle">Dirección del degradado
+                        <input id="editGradientAngle" type="range" min="0" max="360" step="15" value="135">
                     </label>
                     <section class="field field-wide link-editor" aria-labelledby="editLinksTitle">
                         <div class="link-editor-heading">
@@ -822,6 +840,6 @@
     </dialog>
 
     <script src="/analytics.js?v=1"></script>
-    <script src="/script.js?v=20260913-gallery1"></script>
+    <script src="/script.js?v=20260913-customizer2"></script>
 </body>
 </html>

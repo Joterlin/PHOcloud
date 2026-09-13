@@ -54,6 +54,9 @@ let coverFile = null;
 let currentLink = "";
 let brandProfile = null;
 let currentEditDelivery = null;
+let editPreviewDevice = "desktop";
+let editResponsiveDesign = { desktop: {}, mobile: {} };
+let editLivePhotosSignature = "";
 let pendingDeletion = null;
 let deletionInProgress = false;
 let accountData = null;
@@ -183,7 +186,7 @@ function enhanceGalleryEditor() {
     };
     const contentPanel = panel("content", "CONTENIDO", "Los datos de la entrega", "Cambia el título, el mensaje y las fotografías que verá tu cliente.");
     const coverPanel = panel("cover", "PORTADA", "La primera impresión", "Elige una composición y encuadra la imagen directamente sobre la vista previa.");
-    const designPanel = panel("design", "DISEÑO", "Ritmo y color", "Escoge cómo se ordenan las fotografías y la atmósfera de la página.");
+    const designPanel = panel("design", "DISEÑO", "Distribución y colores", "Elige una composición clara y personaliza el fondo, los textos y los botones.");
     const brandPanel = panel("brand", "MARCA", "Hazla reconocible", "Combina el nombre de tu estudio, tu imagen y tus enlaces.");
     const accessPanel = panel("access", "ACCESO", "Privacidad y entrega", "Decide qué puede ver, descargar y seleccionar tu cliente.");
     layout.append(nav, controls);
@@ -211,32 +214,42 @@ function enhanceGalleryEditor() {
     coverPanel.appendChild(coverPicker);
     const coverPositionX = byId("editCoverPositionX");
     const coverPositionY = byId("editCoverPositionY");
+    const coverZoom = byId("editCoverZoom");
     coverPositionX.closest(".field").hidden = true;
     coverPositionY.closest(".field").hidden = true;
-    coverPanel.append(coverPositionX.closest(".field"), coverPositionY.closest(".field"));
-    const focalControls = elementFromHtml(`<div id="editCoverFocusControls" class="focal-controls">
-        <div><strong>Encuadre de la portada</strong><small>Arrastra el punto sobre la imagen o elige una posición.</small></div>
-        <div class="focal-presets" data-cover-focal-presets>
-            <button type="button" data-cover-x="25" data-cover-y="25" aria-label="Arriba izquierda"></button><button type="button" data-cover-x="50" data-cover-y="25" aria-label="Arriba centro"></button><button type="button" data-cover-x="75" data-cover-y="25" aria-label="Arriba derecha"></button>
-            <button type="button" data-cover-x="25" data-cover-y="50" aria-label="Centro izquierda"></button><button type="button" data-cover-x="50" data-cover-y="50" aria-label="Centro"></button><button type="button" data-cover-x="75" data-cover-y="50" aria-label="Centro derecha"></button>
-            <button type="button" data-cover-x="25" data-cover-y="75" aria-label="Abajo izquierda"></button><button type="button" data-cover-x="50" data-cover-y="75" aria-label="Abajo centro"></button><button type="button" data-cover-x="75" data-cover-y="75" aria-label="Abajo derecha"></button>
-        </div>
+    coverZoom.closest(".field").hidden = true;
+    coverPanel.append(
+        coverPositionX.closest(".field"),
+        coverPositionY.closest(".field"),
+        coverZoom.closest(".field")
+    );
+    const focalControls = elementFromHtml(`<div id="editCoverFocusControls" class="cover-transform-controls">
+        <div class="cover-transform-heading"><div><strong>Encuadre para <span id="editDeviceEditingLabel">escritorio</span></strong><small>Arrastra directamente la fotografía para colocarla.</small></div><button type="button" class="secondary small-button" data-reset-cover>Restablecer</button></div>
+        <label class="cover-zoom-control" for="editCoverZoom"><span>Zoom</span><span data-cover-zoom-slot></span><output id="editCoverZoomValue">100 %</output></label>
     </div>`);
+    focalControls.querySelector("[data-cover-zoom-slot]").replaceWith(coverZoom);
     coverPanel.appendChild(focalControls);
 
     const stylePicker = designGrid.querySelector(".style-picker");
     stylePicker.classList.remove("field-wide");
+    stylePicker.classList.add("editor-style-picker");
     designPanel.appendChild(stylePicker);
     const colorGrid = document.createElement("div");
     colorGrid.className = "editor-color-grid";
-    for (const id of ["editBackgroundColor", "editAccentColor"]) {
+    const colorOutputs = {
+        editBackgroundColor: "editBackgroundValue",
+        editBackgroundColor2: "editBackgroundValue2",
+        editTextColor: "editTextValue",
+        editAccentColor: "editAccentValue"
+    };
+    for (const id of Object.keys(colorOutputs)) {
         const label = byId(id).closest(".field");
         label.className = "color-control";
         const title = label.firstChild.textContent.trim();
         label.firstChild.remove();
         const wrapper = document.createElement("div");
         const output = document.createElement("output");
-        output.id = id === "editBackgroundColor" ? "editBackgroundValue" : "editAccentValue";
+        output.id = colorOutputs[id];
         const caption = document.createElement("label");
         caption.htmlFor = id;
         caption.textContent = title;
@@ -245,7 +258,16 @@ function enhanceGalleryEditor() {
         label.appendChild(wrapper);
         colorGrid.appendChild(label);
     }
-    designPanel.append(colorGrid, elementFromHtml('<p id="editContrastStatus" class="contrast-status"></p>'));
+    const backgroundModeField = byId("editBackgroundMode").closest(".field");
+    const gradientAngleField = byId("editGradientAngle").closest(".field");
+    backgroundModeField.classList.add("background-mode-field");
+    gradientAngleField.classList.add("gradient-angle-field");
+    designPanel.append(
+        backgroundModeField,
+        colorGrid,
+        gradientAngleField,
+        elementFromHtml('<p id="editContrastStatus" class="contrast-status"></p>')
+    );
 
     const brandNameField = byId("editBrandName").closest(".field");
     const logoField = byId("editLogo").closest(".field");
@@ -281,13 +303,13 @@ function enhanceGalleryEditor() {
     });
 
     const previewStage = elementFromHtml(`<section class="gallery-editor-preview-stage" aria-label="Vista previa de la galería">
-        <div class="preview-toolbar"><div><span class="live-dot"></span><strong>Vista previa en tiempo real</strong><small>Los cambios aún no se han publicado</small></div><div class="preview-device-switch" role="group" aria-label="Tamaño de vista previa"><button type="button" data-edit-preview-device="desktop" class="is-active" aria-pressed="true">Escritorio</button><button type="button" data-edit-preview-device="mobile" aria-pressed="false">Móvil</button></div></div>
+        <div class="preview-toolbar"><div><span class="live-dot"></span><strong>Vista previa en tiempo real</strong><small id="editPreviewDeviceHelp">Editando el diseño de escritorio</small></div><div class="preview-device-switch" role="group" aria-label="Diseño por dispositivo"><button type="button" data-edit-preview-device="desktop" class="is-active" aria-pressed="true">Escritorio</button><button type="button" data-edit-preview-device="mobile" aria-pressed="false">Móvil</button></div></div>
         <div class="gallery-preview-viewport" data-preview-device="desktop"></div>
     </section>`);
     previewStage.querySelector(".gallery-preview-viewport").appendChild(livePreview);
     livePreview.querySelector(".live-preview-label")?.remove();
     const cover = livePreview.querySelector("#editCoverPreview");
-    cover.querySelector("#editCoverPreviewImage").after(elementFromHtml('<button id="editCoverFocalPoint" type="button" aria-label="Punto de enfoque. Arrastra para cambiar el encuadre"><span></span></button>'));
+    cover.querySelector("#editCoverPreviewImage").classList.add("is-draggable");
     cover.prepend(elementFromHtml('<div id="editPreviewVisibilityNotice" class="edit-preview-disabled" hidden><strong>Galería desactivada</strong><span>El cliente verá un aviso hasta que permitas la visualización.</span></div>'));
     livePreview.querySelector("#editLiveMessage").after(elementFromHtml('<div class="edit-preview-actions"><span id="editPreviewOriginalAction">Descargar originales</span><span id="editPreviewWebAction">Calidad reducida</span><span id="editPreviewFavoriteAction">♡ Seleccionar</span></div>'));
     const collection = livePreview.querySelector(".edit-preview-collection");
@@ -1488,6 +1510,52 @@ async function openEditDelivery(deliveryId) {
     }
 }
 
+function readEditDeviceControls() {
+    return {
+        galleryStyle: document.querySelector(
+            'input[name="editGalleryStyle"]:checked'
+        )?.value || "masonry",
+        coverStyle: byId("editCoverStyle").value || "immersive",
+        coverPositionX: Number(byId("editCoverPositionX").value) || 50,
+        coverPositionY: Number(byId("editCoverPositionY").value) || 50,
+        coverZoom: Number(byId("editCoverZoom").value) || 100
+    };
+}
+
+function storeEditDeviceControls() {
+    editResponsiveDesign[editPreviewDevice] = readEditDeviceControls();
+}
+
+function loadEditDeviceControls(device) {
+    const settings = editResponsiveDesign[device] || editResponsiveDesign.desktop;
+    const styleOption = document.querySelector(
+        `input[name="editGalleryStyle"][value="${settings.galleryStyle || "masonry"}"]`
+    );
+    if (styleOption) styleOption.checked = true;
+    byId("editCoverStyle").value = settings.coverStyle || "immersive";
+    byId("editCoverPositionX").value = settings.coverPositionX ?? 50;
+    byId("editCoverPositionY").value = settings.coverPositionY ?? 50;
+    byId("editCoverZoom").value = settings.coverZoom ?? 100;
+}
+
+function selectEditPreviewDevice(device, captureCurrent = true) {
+    if (!["desktop", "mobile"].includes(device)) return;
+    if (captureCurrent) storeEditDeviceControls();
+    editPreviewDevice = device;
+    loadEditDeviceControls(device);
+    document.querySelector(".gallery-preview-viewport").dataset.previewDevice = device;
+    byId("editDeviceEditingLabel").textContent = device === "mobile" ? "móvil" : "escritorio";
+    byId("editPreviewDeviceHelp").textContent = device === "mobile"
+        ? "Editando un diseño independiente para móvil"
+        : "Editando el diseño de escritorio";
+    document.querySelectorAll("[data-edit-preview-device]").forEach((item) => {
+        const active = item.dataset.editPreviewDevice === device;
+        item.classList.toggle("is-active", active);
+        item.setAttribute("aria-pressed", String(active));
+    });
+    updateEditGalleryPreview();
+}
+
 function fillEditForm() {
     const delivery = currentEditDelivery;
     byId("editDeliveryId").value = delivery.id;
@@ -1509,17 +1577,42 @@ function fillEditForm() {
         || Math.max(1, Math.min(500, delivery.files?.length || 20));
     syncSelectionLimit("editFavoritesEnabled", "editSelectionLimit");
     byId("editBrandName").value = delivery.brandName || "";
-    byId("editAccentColor").value = delivery.accentColor || "#c9aa70";
+    byId("editAccentColor").value = delivery.buttonColor
+        || delivery.accentColor || "#c9aa70";
     byId("editBackgroundColor").value = delivery.backgroundColor || "#ffffff";
+    byId("editBackgroundColor2").value = delivery.backgroundColor2
+        || delivery.backgroundColor || "#eee7da";
+    byId("editBackgroundMode").value = delivery.backgroundMode || "solid";
+    byId("editGradientAngle").value = delivery.gradientAngle ?? 135;
+    byId("editTextColor").value = delivery.textColor
+        || (colorTone(delivery.backgroundColor || "#ffffff") === "light"
+            ? "#171717"
+            : "#f6f3ed");
     renderLinkRows("edit", delivery.socialLinks || []);
-    const galleryStyle = delivery.galleryStyle || "masonry";
-    const galleryStyleOption = document.querySelector(
-        `input[name="editGalleryStyle"][value="${galleryStyle}"]`
-    );
-    if (galleryStyleOption) galleryStyleOption.checked = true;
-    byId("editCoverStyle").value = delivery.coverStyle || "immersive";
-    byId("editCoverPositionX").value = delivery.coverPositionX ?? 50;
-    byId("editCoverPositionY").value = delivery.coverPositionY ?? 50;
+    editResponsiveDesign = {
+        desktop: {
+            galleryStyle: delivery.galleryStyle || "masonry",
+            coverStyle: delivery.coverStyle || "immersive",
+            coverPositionX: delivery.coverPositionX ?? 50,
+            coverPositionY: delivery.coverPositionY ?? 50,
+            coverZoom: delivery.coverZoom ?? 100
+        },
+        mobile: {
+            galleryStyle: delivery.mobileGalleryStyle
+                || delivery.galleryStyle || "masonry",
+            coverStyle: delivery.mobileCoverStyle
+                || delivery.coverStyle || "immersive",
+            coverPositionX: delivery.mobileCoverPositionX
+                ?? delivery.coverPositionX ?? 50,
+            coverPositionY: delivery.mobileCoverPositionY
+                ?? delivery.coverPositionY ?? 50,
+            coverZoom: delivery.mobileCoverZoom
+                ?? delivery.coverZoom ?? 100
+        }
+    };
+    editPreviewDevice = "desktop";
+    loadEditDeviceControls("desktop");
+    editLivePhotosSignature = "";
     byId("editLogoScale").value = delivery.logoScale ?? 100;
     byId("editLogoPositionX").value = delivery.logoPositionX ?? 50;
     byId("editLogoPositionY").value = delivery.logoPositionY ?? 50;
@@ -1533,7 +1626,7 @@ function fillEditForm() {
         byId("editLogoImage").removeAttribute("src");
     }
     updateLogoPreview("edit");
-    updateEditGalleryPreview();
+    selectEditPreviewDevice("desktop", false);
     renderSelectionAdmin();
     renderSections();
     setEditSaveState(false);
@@ -1704,11 +1797,31 @@ function colorTone(hex) {
     return relativeLuminance(hex) > .36 ? "light" : "dark";
 }
 
-function brandPalette(accent, background) {
+function readableAcrossColors(color, backgrounds, minimum = 4.5) {
+    if (backgrounds.every((background) => contrastRatio(color, background) >= minimum)) {
+        return color;
+    }
+    const candidates = ["#171717", "#f6f3ed"];
+    return candidates.sort((first, second) => (
+        Math.min(...backgrounds.map((background) => contrastRatio(second, background)))
+        - Math.min(...backgrounds.map((background) => contrastRatio(first, background)))
+    ))[0];
+}
+
+function galleryBackgroundCss(mode, first, second, angle) {
+    return mode === "gradient"
+        ? `linear-gradient(${Number(angle) || 0}deg, ${first}, ${second})`
+        : first;
+}
+
+function brandPalette(accent, background, textColor, secondaryBackground = background) {
+    const requestedText = textColor
+        || (colorTone(background) === "light" ? "#171717" : "#f6f3ed");
     return {
-        text: colorTone(background) === "light" ? "#171717" : "#f6f3ed",
+        text: readableAcrossColors(requestedText, [background, secondaryBackground]),
+        requestedText,
         accentText: foregroundFor(accent),
-        readable: readableAccent(accent, background),
+        readable: readableAcrossColors(accent, [background, secondaryBackground]),
         onCover: readableAccent(accent, "#202020")
     };
 }
@@ -1770,11 +1883,18 @@ function updateProfileBrandPreview() {
         : "Buena legibilidad: esta combinación mantiene visibles los textos y botones.";
 }
 
-function renderEditLivePhotos() {
+function renderEditLivePhotos(force = false) {
     const container = byId("editLivePhotoGrid");
     if (!currentEditDelivery || !container) return;
-    container.replaceChildren();
     const files = (currentEditDelivery.files || []).slice(0, 9);
+    const signature = [
+        currentEditDelivery.id,
+        byId("editFavoritesEnabled").checked,
+        ...files
+    ].join("|");
+    if (!force && signature === editLivePhotosSignature) return;
+    editLivePhotosSignature = signature;
+    container.replaceChildren();
     for (const filename of files) {
         if (currentEditDelivery.mediaTypes?.[filename] === "video") {
             const video = document.createElement("span");
@@ -1800,15 +1920,24 @@ function renderEditLivePhotos() {
 
 function updateEditGalleryPreview() {
     if (!currentEditDelivery) return;
+    storeEditDeviceControls();
     const preview = byId("editGalleryLivePreview");
     const image = byId("editCoverPreviewImage");
     const cover = currentEditDelivery.coverFilename
         || currentEditDelivery.files?.find((filename) => currentEditDelivery.mediaTypes?.[filename] !== "video");
     const background = byId("editBackgroundColor").value || "#ffffff";
+    const background2 = byId("editBackgroundColor2").value || background;
+    const backgroundMode = byId("editBackgroundMode").value || "solid";
+    const gradientAngle = Number(byId("editGradientAngle").value) || 0;
     const accent = byId("editAccentColor").value || "#c9aa70";
+    const textColor = byId("editTextColor").value || "#171717";
+    const palette = brandPalette(accent, background, textColor, background2);
     preview.style.setProperty("--preview-bg", background);
+    preview.style.setProperty(
+        "--preview-background",
+        galleryBackgroundCss(backgroundMode, background, background2, gradientAngle)
+    );
     preview.style.setProperty("--preview-accent", accent);
-    const palette = brandPalette(accent, background);
     preview.style.setProperty("--preview-accent-readable", palette.readable);
     preview.style.setProperty("--preview-accent-text", palette.accentText);
     preview.style.setProperty("--preview-accent-on-cover", palette.onCover);
@@ -1826,11 +1955,9 @@ function updateEditGalleryPreview() {
     if (cover) {
         image.src = `/gallery/${encodeURIComponent(currentEditDelivery.id)}/previews/${encodeURIComponent(cover)}`;
         image.style.objectPosition = `${byId("editCoverPositionX").value}% ${byId("editCoverPositionY").value}%`;
+        image.style.transform = `scale(${Number(byId("editCoverZoom").value) / 100})`;
+        image.style.transformOrigin = `${byId("editCoverPositionX").value}% ${byId("editCoverPositionY").value}%`;
     }
-    const focal = byId("editCoverFocalPoint");
-    focal.style.left = `${byId("editCoverPositionX").value}%`;
-    focal.style.top = `${byId("editCoverPositionY").value}%`;
-    focal.hidden = !cover || byId("editCoverStyle").value === "none";
     byId("editCoverFocusControls").hidden = !cover || byId("editCoverStyle").value === "none";
     for (const button of document.querySelectorAll("[data-edit-cover-style]")) {
         const active = button.dataset.editCoverStyle === byId("editCoverStyle").value;
@@ -1867,10 +1994,17 @@ function updateEditGalleryPreview() {
     byId("editPreviewFavoriteNotice").hidden = !byId("editFavoritesEnabled").checked;
     byId("editAccentValue").textContent = accent.toUpperCase();
     byId("editBackgroundValue").textContent = background.toUpperCase();
-    const adjusted = palette.readable.toLowerCase() !== accent.toLowerCase();
+    byId("editBackgroundValue2").textContent = background2.toUpperCase();
+    byId("editTextValue").textContent = textColor.toUpperCase();
+    byId("editCoverZoomValue").textContent = `${byId("editCoverZoom").value} %`;
+    const usesGradient = backgroundMode === "gradient";
+    byId("editBackgroundColor2").closest(".color-control").hidden = !usesGradient;
+    byId("editGradientAngle").closest(".gradient-angle-field").hidden = !usesGradient;
+    const adjusted = palette.text.toLowerCase() !== textColor.toLowerCase()
+        || palette.readable.toLowerCase() !== accent.toLowerCase();
     byId("editContrastStatus").textContent = adjusted
-        ? "Contraste protegido: usaremos una variante legible de tu color en textos pequeños."
-        : "Buena legibilidad: textos y botones mantienen suficiente contraste.";
+        ? "Contraste protegido: la vista pública ajustará automáticamente los elementos que no sean legibles."
+        : "Buena legibilidad: el texto y los botones mantienen suficiente contraste.";
     syncProfilePositionButtons();
     renderEditLivePhotos();
 }
@@ -1881,8 +2015,10 @@ function updateEditCoverPreview() {
 
 for (const id of [
     "editCoverStyle", "editCoverPositionX", "editCoverPositionY",
-    "editClientName", "editMessage", "editBrandName", "editAccentColor",
-    "editBackgroundColor", "removeEditLogo", "editViewingEnabled",
+    "editCoverZoom", "editClientName", "editMessage", "editBrandName",
+    "editAccentColor", "editBackgroundColor", "editBackgroundColor2",
+    "editBackgroundMode", "editGradientAngle", "editTextColor",
+    "removeEditLogo", "editViewingEnabled",
     "editAllowOriginalDownload", "editAllowWebDownload", "editFavoritesEnabled"
 ]) {
     byId(id).addEventListener("input", updateEditGalleryPreview);
@@ -1910,49 +2046,54 @@ for (const button of document.querySelectorAll("[data-edit-cover-style]")) {
     });
 }
 
-for (const button of document.querySelectorAll("[data-cover-focal-presets] button")) {
-    button.addEventListener("click", () => {
-        byId("editCoverPositionX").value = button.dataset.coverX;
-        byId("editCoverPositionY").value = button.dataset.coverY;
-        byId("editCoverPositionX").dispatchEvent(new Event("input", { bubbles: true }));
-    });
-}
-
 for (const button of document.querySelectorAll("[data-edit-preview-device]")) {
     button.addEventListener("click", () => {
-        const device = button.dataset.editPreviewDevice;
-        document.querySelector(".gallery-preview-viewport").dataset.previewDevice = device;
-        document.querySelectorAll("[data-edit-preview-device]").forEach((item) => {
-            const active = item === button;
-            item.classList.toggle("is-active", active);
-            item.setAttribute("aria-pressed", String(active));
-        });
+        selectEditPreviewDevice(button.dataset.editPreviewDevice);
     });
 }
 
-let coverFocalDrag = null;
-function moveCoverFocalPoint(event) {
+let coverImageDrag = null;
+function moveCoverImage(event) {
+    if (!coverImageDrag || coverImageDrag.pointerId !== event.pointerId) return;
     const cover = byId("editCoverPreview");
     const bounds = cover.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, (event.clientX - bounds.left) * 100 / bounds.width));
-    const y = Math.max(0, Math.min(100, (event.clientY - bounds.top) * 100 / bounds.height));
+    const x = Math.max(0, Math.min(100,
+        coverImageDrag.originX - (event.clientX - coverImageDrag.startX) * 100 / bounds.width
+    ));
+    const y = Math.max(0, Math.min(100,
+        coverImageDrag.originY - (event.clientY - coverImageDrag.startY) * 100 / bounds.height
+    ));
     byId("editCoverPositionX").value = String(Math.round(x));
     byId("editCoverPositionY").value = String(Math.round(y));
     byId("editCoverPositionX").dispatchEvent(new Event("input", { bubbles: true }));
 }
-byId("editCoverFocalPoint").addEventListener("pointerdown", (event) => {
-    coverFocalDrag = event.pointerId;
-    byId("editCoverFocalPoint").setPointerCapture(event.pointerId);
-    moveCoverFocalPoint(event);
+byId("editCoverPreviewImage").addEventListener("pointerdown", (event) => {
+    if (byId("editCoverPreviewImage").hidden) return;
+    coverImageDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: Number(byId("editCoverPositionX").value),
+        originY: Number(byId("editCoverPositionY").value)
+    };
+    byId("editCoverPreviewImage").setPointerCapture(event.pointerId);
+    byId("editCoverPreviewImage").classList.add("is-dragging");
 });
-byId("editCoverFocalPoint").addEventListener("pointermove", (event) => {
-    if (coverFocalDrag === event.pointerId) moveCoverFocalPoint(event);
-});
+byId("editCoverPreviewImage").addEventListener("pointermove", moveCoverImage);
 for (const eventName of ["pointerup", "pointercancel"]) {
-    byId("editCoverFocalPoint").addEventListener(eventName, (event) => {
-        if (coverFocalDrag === event.pointerId) coverFocalDrag = null;
+    byId("editCoverPreviewImage").addEventListener(eventName, (event) => {
+        if (coverImageDrag?.pointerId === event.pointerId) {
+            coverImageDrag = null;
+            byId("editCoverPreviewImage").classList.remove("is-dragging");
+        }
     });
 }
+document.querySelector("[data-reset-cover]").addEventListener("click", () => {
+    byId("editCoverPositionX").value = "50";
+    byId("editCoverPositionY").value = "50";
+    byId("editCoverZoom").value = "100";
+    byId("editCoverPositionX").dispatchEvent(new Event("input", { bubbles: true }));
+});
 
 document.querySelector("[data-reset-edit-logo]").addEventListener("click", () => {
     byId("editLogoScale").value = "100";
@@ -2150,6 +2291,9 @@ editDeliveryForm.addEventListener("submit", async (event) => {
         return;
     }
 
+    storeEditDeviceControls();
+    const desktopDesign = editResponsiveDesign.desktop;
+    const mobileDesign = editResponsiveDesign.mobile;
     const settings = {
         clientName: byId("editClientName").value.trim(),
         clientEmail: byId("editClientEmail").value.trim(),
@@ -2164,13 +2308,24 @@ editDeliveryForm.addEventListener("submit", async (event) => {
         selectionLimit: byId("editFavoritesEnabled").checked
             ? byId("editSelectionLimit").value
             : 0,
-        galleryStyle: document.querySelector(
-            'input[name="editGalleryStyle"]:checked'
-        )?.value || "masonry",
+        galleryStyle: desktopDesign.galleryStyle || "masonry",
+        mobileGalleryStyle: mobileDesign.galleryStyle
+            || desktopDesign.galleryStyle || "masonry",
         coverFilename: currentEditDelivery.coverFilename,
-        coverStyle: byId("editCoverStyle").value,
-        coverPositionX: byId("editCoverPositionX").value,
-        coverPositionY: byId("editCoverPositionY").value,
+        coverStyle: desktopDesign.coverStyle || "immersive",
+        mobileCoverStyle: mobileDesign.coverStyle
+            || desktopDesign.coverStyle || "immersive",
+        coverPositionX: desktopDesign.coverPositionX,
+        coverPositionY: desktopDesign.coverPositionY,
+        coverZoom: desktopDesign.coverZoom,
+        mobileCoverPositionX: mobileDesign.coverPositionX,
+        mobileCoverPositionY: mobileDesign.coverPositionY,
+        mobileCoverZoom: mobileDesign.coverZoom,
+        backgroundMode: byId("editBackgroundMode").value,
+        backgroundColor2: byId("editBackgroundColor2").value,
+        gradientAngle: byId("editGradientAngle").value,
+        textColor: byId("editTextColor").value,
+        buttonColor: byId("editAccentColor").value,
         ...createBrandValues("edit")
     };
 

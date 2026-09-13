@@ -872,11 +872,34 @@ function validateBrandSettings(input) {
         return { error: "El nombre de marca no puede superar 80 caracteres" };
     }
 
-    const accentColor = input.accentColor || "#c9aa70";
+    const accentColor = input.buttonColor || input.accentColor || "#c9aa70";
     const backgroundColor = input.backgroundColor || "#ffffff";
+    const backgroundColor2 = input.backgroundColor2 || backgroundColor;
+    const defaultTextColor = (() => {
+        const value = String(backgroundColor).replace("#", "");
+        if (!/^[0-9a-f]{6}$/i.test(value)) return "#171717";
+        const [red, green, blue] = [0, 2, 4]
+            .map((offset) => parseInt(value.slice(offset, offset + 2), 16));
+        return red * .2126 + green * .7152 + blue * .0722 > 125
+            ? "#171717"
+            : "#f6f3ed";
+    })();
+    const textColor = input.textColor || defaultTextColor;
     if (!/^#[0-9a-f]{6}$/i.test(accentColor)
-        || !/^#[0-9a-f]{6}$/i.test(backgroundColor)) {
+        || !/^#[0-9a-f]{6}$/i.test(backgroundColor)
+        || !/^#[0-9a-f]{6}$/i.test(backgroundColor2)
+        || !/^#[0-9a-f]{6}$/i.test(textColor)) {
         return { error: "Los colores seleccionados no son válidos" };
+    }
+
+    const backgroundMode = ["solid", "gradient"].includes(input.backgroundMode)
+        ? input.backgroundMode
+        : "solid";
+    const gradientAngle = Math.max(0, Math.min(360,
+        Number(input.gradientAngle ?? 135)
+    ));
+    if (!Number.isFinite(gradientAngle)) {
+        return { error: "La dirección del degradado no es válida" };
     }
 
     const urlFields = [
@@ -898,6 +921,10 @@ function validateBrandSettings(input) {
         .includes(input.galleryStyle)
         ? input.galleryStyle
         : "masonry";
+    const mobileGalleryStyle = ["masonry", "grid", "editorial"]
+        .includes(input.mobileGalleryStyle)
+        ? input.mobileGalleryStyle
+        : galleryStyle;
     const logoScale = Math.max(50, Math.min(160, Number(input.logoScale ?? 100)));
     const logoPositionX = Math.max(0, Math.min(100, Number(input.logoPositionX ?? 50)));
     const logoPositionY = Math.max(0, Math.min(100, Number(input.logoPositionY ?? 50)));
@@ -909,8 +936,14 @@ function validateBrandSettings(input) {
         value: {
             brandName,
             accentColor: accentColor.toLowerCase(),
+            buttonColor: accentColor.toLowerCase(),
             backgroundColor: backgroundColor.toLowerCase(),
+            backgroundColor2: backgroundColor2.toLowerCase(),
+            backgroundMode,
+            gradientAngle: Math.round(gradientAngle),
+            textColor: textColor.toLowerCase(),
             galleryStyle,
+            mobileGalleryStyle,
             logoScale: Math.round(logoScale),
             logoPositionX: Math.round(logoPositionX),
             logoPositionY: Math.round(logoPositionY),
@@ -977,8 +1010,25 @@ function validateDeliverySettings(input, options = {}) {
     const coverPositionY = Math.max(0, Math.min(100,
         Number(input.coverPositionY ?? 50)
     ));
-    if (!Number.isFinite(coverPositionX) || !Number.isFinite(coverPositionY)) {
-        return { error: "El punto focal de la portada no es válido" };
+    const coverZoom = Math.max(100, Math.min(220,
+        Number(input.coverZoom ?? 100)
+    ));
+    const mobileCoverStyle = ["immersive", "split", "frame", "minimal", "none"]
+        .includes(input.mobileCoverStyle)
+        ? input.mobileCoverStyle
+        : coverStyle;
+    const mobileCoverPositionX = Math.max(0, Math.min(100,
+        Number(input.mobileCoverPositionX ?? coverPositionX)
+    ));
+    const mobileCoverPositionY = Math.max(0, Math.min(100,
+        Number(input.mobileCoverPositionY ?? coverPositionY)
+    ));
+    const mobileCoverZoom = Math.max(100, Math.min(220,
+        Number(input.mobileCoverZoom ?? coverZoom)
+    ));
+    if (![coverPositionX, coverPositionY, coverZoom, mobileCoverPositionX,
+        mobileCoverPositionY, mobileCoverZoom].every(Number.isFinite)) {
+        return { error: "El encuadre de la portada no es válido" };
     }
     const selectionLimit = Math.max(0, Math.min(
         MAX_PHOTOS_PER_DELIVERY,
@@ -1025,6 +1075,11 @@ function validateDeliverySettings(input, options = {}) {
             coverStyle,
             coverPositionX: Math.round(coverPositionX),
             coverPositionY: Math.round(coverPositionY),
+            coverZoom: Math.round(coverZoom),
+            mobileCoverStyle,
+            mobileCoverPositionX: Math.round(mobileCoverPositionX),
+            mobileCoverPositionY: Math.round(mobileCoverPositionY),
+            mobileCoverZoom: Math.round(mobileCoverZoom),
             ...brandValidation.value
         }
     };
@@ -1033,8 +1088,11 @@ function validateDeliverySettings(input, options = {}) {
 const TEMPLATE_SETTING_KEYS = [
     "message", "expiresAt", "viewingEnabled", "allowOriginalDownload",
     "allowWebDownload", "favoritesEnabled", "selectionLimit", "brandName",
-    "accentColor", "backgroundColor", "galleryStyle", "coverStyle",
-    "coverPositionX", "coverPositionY", "logoScale", "logoPositionX",
+    "accentColor", "buttonColor", "backgroundColor", "backgroundColor2",
+    "backgroundMode", "gradientAngle", "textColor", "galleryStyle",
+    "mobileGalleryStyle", "coverStyle", "mobileCoverStyle", "coverZoom",
+    "mobileCoverZoom", "coverPositionX", "coverPositionY",
+    "mobileCoverPositionX", "mobileCoverPositionY", "logoScale", "logoPositionX",
     "logoPositionY", "socialLinks"
 ];
 
@@ -5113,19 +5171,30 @@ app.get("/gallery/:folderId", (req, res) => {
         mediaSections: deliveryStore.listMediaSections(context.delivery.id),
         brandName: context.delivery.brandName,
         accentColor: context.delivery.accentColor,
+        buttonColor: context.delivery.buttonColor,
         backgroundColor: context.delivery.backgroundColor,
+        backgroundColor2: context.delivery.backgroundColor2,
+        backgroundMode: context.delivery.backgroundMode,
+        gradientAngle: context.delivery.gradientAngle,
+        textColor: context.delivery.textColor,
         websiteUrl: context.delivery.websiteUrl,
         instagramUrl: context.delivery.instagramUrl,
         facebookUrl: context.delivery.facebookUrl,
         tiktokUrl: context.delivery.tiktokUrl,
         socialLinks: context.delivery.socialLinks,
         galleryStyle: context.delivery.galleryStyle,
+        mobileGalleryStyle: context.delivery.mobileGalleryStyle,
         coverFilename: context.delivery.coverFilename
             || files.find((filename) => !isVideoFilename(filename))
             || null,
         coverStyle: context.delivery.coverStyle,
         coverPositionX: context.delivery.coverPositionX,
         coverPositionY: context.delivery.coverPositionY,
+        coverZoom: context.delivery.coverZoom,
+        mobileCoverStyle: context.delivery.mobileCoverStyle,
+        mobileCoverPositionX: context.delivery.mobileCoverPositionX,
+        mobileCoverPositionY: context.delivery.mobileCoverPositionY,
+        mobileCoverZoom: context.delivery.mobileCoverZoom,
         logoScale: context.delivery.logoScale,
         logoPositionX: context.delivery.logoPositionX,
         logoPositionY: context.delivery.logoPositionY,

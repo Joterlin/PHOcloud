@@ -587,7 +587,23 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
                     ...detail.data.delivery,
                     viewingEnabled: true,
                     password: "",
-                    removePassword: false
+                    removePassword: false,
+                    backgroundMode: "gradient",
+                    backgroundColor: "#f8f1e4",
+                    backgroundColor2: "#27364a",
+                    gradientAngle: 120,
+                    textColor: "#ffffff",
+                    buttonColor: "#b97a36",
+                    galleryStyle: "editorial",
+                    mobileGalleryStyle: "grid",
+                    coverStyle: "frame",
+                    mobileCoverStyle: "immersive",
+                    coverPositionX: 34,
+                    coverPositionY: 62,
+                    coverZoom: 145,
+                    mobileCoverPositionX: 71,
+                    mobileCoverPositionY: 28,
+                    mobileCoverZoom: 180
                 }
             }
         );
@@ -596,6 +612,17 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         const publicGallery = await (await fetch(galleryUrl)).json();
         assert.equal(publicGallery.allowOriginalDownload, true);
         assert.equal(publicGallery.allowWebDownload, true);
+        assert.equal(publicGallery.backgroundMode, "gradient");
+        assert.equal(publicGallery.backgroundColor2, "#27364a");
+        assert.equal(publicGallery.gradientAngle, 120);
+        assert.equal(publicGallery.textColor, "#ffffff");
+        assert.equal(publicGallery.buttonColor, "#b97a36");
+        assert.equal(publicGallery.galleryStyle, "editorial");
+        assert.equal(publicGallery.mobileGalleryStyle, "grid");
+        assert.equal(publicGallery.coverStyle, "frame");
+        assert.equal(publicGallery.mobileCoverStyle, "immersive");
+        assert.equal(publicGallery.coverZoom, 145);
+        assert.equal(publicGallery.mobileCoverZoom, 180);
 
         const template = await jsonRequest(`${baseUrl}/templates`, {
             method: "POST",

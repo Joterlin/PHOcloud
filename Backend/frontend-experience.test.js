@@ -20,7 +20,11 @@ test("la personalización muestra una galería viva y no expone el valor mágico
     assert.match(script, /function enhanceGalleryEditor\(\)/);
     assert.match(script, /data-edit-panel-target="cover"/);
     assert.match(script, /data-edit-preview-device="mobile"/);
-    assert.match(script, /id="editCoverFocalPoint"/);
+    assert.match(script, /id="editCoverZoomValue"/);
+    assert.match(script, /editCoverPreviewImage"\)\.addEventListener\("pointerdown"/);
+    assert.match(script, /function selectEditPreviewDevice/);
+    assert.match(script, /editResponsiveDesign/);
+    assert.match(script, /editLivePhotosSignature/);
     assert.match(script, /data-edit-cover-style="immersive"/);
     assert.match(script, /editPreviewOriginalAction/);
     assert.match(script, /editPreviewFavoriteNotice/);
@@ -29,7 +33,12 @@ test("la personalización muestra una galería viva y no expone el valor mágico
     assert.match(script, /setEditSaveState\(true\)/);
     assert.match(css, /\.gallery-editor-layout/);
     assert.match(css, /\.gallery-preview-viewport\[data-preview-device=mobile\]/);
-    assert.match(css, /#editCoverFocalPoint/);
+    assert.match(css, /#editCoverPreviewImage\.is-draggable/);
+    assert.match(css, /\.cover-transform-controls/);
+    assert.match(html, /id="editBackgroundMode"/);
+    assert.match(html, /id="editBackgroundColor2"/);
+    assert.match(html, /id="editTextColor"/);
+    assert.doesNotMatch(script, /id="editCoverFocalPoint"/);
     assert.match(html, /<option value="1">Durante 1 día<\/option>[\s\S]*<option value="7">Durante 7 días<\/option>/);
     assert.match(html, /id="upgradeGalleryDuration"/);
     assert.match(script, /\{ plan: "professional" \}/);
@@ -184,7 +193,11 @@ test("Mi marca ofrece una vista previa útil y protege el contraste público", (
     assert.match(dashboardCss, /--brand-preview-accent-text/);
     assert.match(galleryScript, /--accent-foreground/);
     assert.match(galleryScript, /--accent-readable/);
+    assert.match(galleryScript, /--gallery-background/);
+    assert.match(galleryScript, /mobileGalleryStyle/);
+    assert.match(galleryScript, /mobileCoverZoom/);
     assert.match(galleryCss, /color: var\(--accent-foreground\)/);
+    assert.match(galleryCss, /transform: scale\(var\(--cover-zoom\)\)/);
     assert.match(transferScript, /--accent-foreground/);
 });
 
