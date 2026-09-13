@@ -400,6 +400,17 @@ function dateDaysFromNow(days) {
     ].join("-");
 }
 
+function expiryChoiceForDate(value) {
+    if (!value) return "";
+    const target = new Date(value);
+    if (Number.isNaN(target.getTime())) return "custom";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    target.setHours(0, 0, 0, 0);
+    const days = Math.max(0, Math.round((target.getTime() - today.getTime()) / 86400000));
+    return days >= 1 && days <= 7 ? String(days) : "custom";
+}
+
 function updateExpiryChoice() {
     const choice = byId("editExpiryChoice").value;
     const exactField = byId("editExpiresAtField");
@@ -430,12 +441,16 @@ function applyGalleryExpiryPolicy() {
         option.hidden = Boolean(maxDays);
         option.disabled = Boolean(maxDays);
     }
+    byId("upgradeGalleryDuration").hidden = !maxDays;
     if (maxDays) {
         if (!createInput.value || createInput.value > maximumDate) createInput.value = maximumDate;
         byId("createExpiryHelp").textContent = `El plan gratuito mantiene cada galería un máximo de ${maxDays} días.`;
-        byId("editExpiryHelp").textContent = `En el plan gratuito la galería puede estar disponible un máximo de ${maxDays} días.`;
+        byId("editExpiryHelp").textContent = `Elige entre 1 y ${maxDays} días. Para 8 días o más necesitas el Plan Creador.`;
         const choice = byId("editExpiryChoice");
-        if (!choice.value || Number(choice.value) > maxDays) choice.value = String(maxDays);
+        const selectedDays = Number(choice.value);
+        if (!Number.isFinite(selectedDays) || selectedDays < 1 || selectedDays > maxDays) {
+            choice.value = String(maxDays);
+        }
         if (!editInput.value || editInput.value > maximumDate) editInput.value = maximumDate;
         updateExpiryChoice();
     } else {
@@ -934,12 +949,12 @@ function planLabel(plan) {
         || "Plan gratuito";
 }
 
-async function openBillingDestination(path, body, button) {
+async function openBillingDestination(path, body, button, statusElement = byId("billingMessage")) {
     const previousText = button.textContent;
-    const billingMessage = byId("billingMessage");
     button.disabled = true;
     button.textContent = "Abriendo Stripe…";
-    billingMessage.textContent = "Preparando una conexión segura con Stripe…";
+    statusElement.textContent = "Preparando una conexión segura con Stripe…";
+    statusElement.hidden = false;
     try {
         const response = await fetch(path, {
             method: "POST",
@@ -950,7 +965,8 @@ async function openBillingDestination(path, body, button) {
         if (!data.url) throw new Error("Stripe no devolvió un enlace válido");
         window.location.assign(data.url);
     } catch (error) {
-        billingMessage.textContent = error.message;
+        statusElement.textContent = error.message;
+        statusElement.hidden = false;
         button.disabled = false;
         button.textContent = previousText;
     }
@@ -969,6 +985,16 @@ for (const button of document.querySelectorAll("[data-billing-plan]")) {
 
 byId("manageBillingButton").addEventListener("click", (event) => {
     openBillingDestination("/billing/portal-session", {}, event.currentTarget);
+});
+
+byId("upgradeGalleryDuration").addEventListener("click", (event) => {
+    const hasSubscription = Boolean(accountData?.billing?.portalAvailable);
+    openBillingDestination(
+        hasSubscription ? "/billing/portal-session" : "/billing/checkout-session",
+        hasSubscription ? {} : { plan: "professional" },
+        event.currentTarget,
+        editDialogError
+    );
 });
 
 async function loadAccount() {
@@ -1469,7 +1495,7 @@ function fillEditForm() {
     byId("editClientEmail").value = delivery.clientEmail || "";
     byId("editMessage").value = delivery.message || "";
     byId("editExpiresAt").value = isoToDateInput(delivery.expiresAt);
-    byId("editExpiryChoice").value = delivery.expiresAt ? "custom" : "";
+    byId("editExpiryChoice").value = expiryChoiceForDate(delivery.expiresAt);
     updateExpiryChoice();
     applyGalleryExpiryPolicy();
     byId("editPassword").value = "";
@@ -1748,7 +1774,7 @@ function renderEditLivePhotos() {
     const container = byId("editLivePhotoGrid");
     if (!currentEditDelivery || !container) return;
     container.replaceChildren();
-    const files = (currentEditDelivery.files || []).slice(0, 6);
+    const files = (currentEditDelivery.files || []).slice(0, 9);
     for (const filename of files) {
         if (currentEditDelivery.mediaTypes?.[filename] === "video") {
             const video = document.createElement("span");

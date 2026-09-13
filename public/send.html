@@ -14,21 +14,50 @@
     <meta property="og:title" content="Straclase · Transferencias y galerías para fotógrafos">
     <meta property="og:description" content="Envía archivos grandes durante 24 horas y crea galerías privadas para clientes.">
     <meta property="og:url" content="https://straclase.com/">
-    <meta name="twitter:card" content="summary">
+    <meta property="og:image" content="https://straclase.com/assets/straclase-social.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Símbolo y nombre de Straclase">
+    <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Straclase · Transferencias y galerías">
     <meta name="twitter:description" content="Envía archivos grandes y crea galerías privadas para clientes.">
+    <meta name="twitter:image" content="https://straclase.com/assets/straclase-social.png">
+    <link rel="icon" href="/assets/straclase-icon-96.png" sizes="96x96" type="image/png">
     <link rel="icon" href="/assets/straclase-favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
+    <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-4"></script>
     <link rel="stylesheet" href="/send.css?v=20260911-1">
     <link rel="stylesheet" href="/analytics.css?v=1">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "Straclase",
-        "url": "https://straclase.com/",
-        "description": "Transferencias temporales de archivos y galerías privadas para fotógrafos y profesionales creativos.",
-        "inLanguage": "es"
+        "@graph": [
+            {
+                "@type": "Organization",
+                "@id": "https://straclase.com/#organization",
+                "name": "Straclase",
+                "url": "https://straclase.com/",
+                "logo": {
+                    "@type": "ImageObject",
+                    "url": "https://straclase.com/assets/straclase-icon-512.png",
+                    "contentUrl": "https://straclase.com/assets/straclase-icon-512.png",
+                    "width": 512,
+                    "height": 512
+                }
+            },
+            {
+                "@type": "WebSite",
+                "@id": "https://straclase.com/#website",
+                "name": "Straclase",
+                "url": "https://straclase.com/",
+                "description": "Transferencias temporales de archivos y galerías privadas para fotógrafos y profesionales creativos.",
+                "inLanguage": "es",
+                "publisher": {
+                    "@id": "https://straclase.com/#organization"
+                }
+            }
+        ]
     }
     </script>
 </head>

@@ -30,6 +30,12 @@ test("la personalización muestra una galería viva y no expone el valor mágico
     assert.match(css, /\.gallery-editor-layout/);
     assert.match(css, /\.gallery-preview-viewport\[data-preview-device=mobile\]/);
     assert.match(css, /#editCoverFocalPoint/);
+    assert.match(html, /<option value="1">Durante 1 día<\/option>[\s\S]*<option value="7">Durante 7 días<\/option>/);
+    assert.match(html, /id="upgradeGalleryDuration"/);
+    assert.match(script, /\{ plan: "professional" \}/);
+    assert.match(script, /function expiryChoiceForDate\(value\)/);
+    assert.match(css, /\.edit-live-photo img\{width:100%;height:auto;[^}]*object-fit:contain/);
+    assert.match(css, /data-gallery-style=grid[^}]+[\s\S]*?\.edit-live-photo img\{width:100%;height:100%;object-fit:cover/);
 });
 
 test("el aviso de transferencia se oculta solo y la marca pública no usa una placa", () => {
@@ -133,12 +139,21 @@ test("la identidad Straclase usa la figura desplazada sin invadir marcas de clie
     ];
     for (const page of pages) {
         const html = read(page);
+        assert.match(html, /\/assets\/straclase-icon-96\.png/);
         assert.match(html, /\/assets\/straclase-favicon\.svg/);
         assert.match(html, /\/assets\/straclase-mark\.png/);
     }
     const favicon = read("public/assets/straclase-favicon.svg");
     assert.match(favicon, /M44 24l7-7 7 7-7 7z/);
     assert.equal(fs.statSync(path.join(root, "public/assets/straclase-mark.png")).size > 0, true);
+    for (const asset of [
+        "public/assets/straclase-icon-96.png",
+        "public/assets/straclase-icon-192.png",
+        "public/assets/straclase-icon-512.png",
+        "public/assets/straclase-social.png"
+    ]) {
+        assert.equal(fs.statSync(path.join(root, asset)).size > 0, true);
+    }
     const galleryScript = read("public/gallery.js");
     const transferScript = read("public/transfer.js");
     assert.match(galleryScript, /usesSystemBrand = !data\.logoUrl/);
@@ -223,6 +238,10 @@ test("el SEO indexa la portada sin exponer entregas ni paneles privados", () => 
     assert.match(robotsRoute, /Disallow: \/gallery\//);
     assert.match(send, /rel="canonical" href="https:\/\/straclase\.com\/"/);
     assert.match(send, /property="og:title"/);
+    assert.match(send, /property="og:image" content="https:\/\/straclase\.com\/assets\/straclase-social\.png"/);
+    assert.match(send, /"@type": "Organization"/);
+    assert.match(send, /"logo": \{/);
+    assert.match(send, /straclase-icon-512\.png/);
     assert.match(send, /"@type": "WebSite"/);
     assert.match(send, /name="robots" content="index,follow,max-image-preview:large"/);
     for (const page of privatePages) {

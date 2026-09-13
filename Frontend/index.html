@@ -6,10 +6,12 @@
     <meta name="robots" content="noindex,nofollow">
     <meta name="theme-color" content="#171715">
     <title>Straclase · Panel</title>
+    <link rel="icon" href="/assets/straclase-icon-96.png" sizes="96x96" type="image/png">
     <link rel="icon" href="/assets/straclase-favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-2"></script>
-    <link rel="stylesheet" href="/style.css?v=20260911-conversion1">
+    <link rel="stylesheet" href="/style.css?v=20260913-gallery1">
     <link rel="stylesheet" href="/analytics.css?v=1">
 </head>
 <body>
@@ -623,14 +625,23 @@
                 </label>
                 <label class="field" for="editExpiryChoice">¿Cuánto tiempo estará disponible?
                     <select id="editExpiryChoice">
-                        <option value="" data-paid-expiry>Sin fecha límite</option>
+                        <option value="1">Durante 1 día</option>
+                        <option value="2">Durante 2 días</option>
+                        <option value="3">Durante 3 días</option>
+                        <option value="4">Durante 4 días</option>
+                        <option value="5">Durante 5 días</option>
+                        <option value="6">Durante 6 días</option>
                         <option value="7">Durante 7 días</option>
+                        <option value="" data-paid-expiry>Sin fecha límite</option>
                         <option value="30" data-paid-expiry>Durante 30 días</option>
                         <option value="90" data-paid-expiry>Durante 90 días</option>
-                        <option value="custom">Elegir una fecha</option>
+                        <option value="custom" data-paid-expiry>Elegir una fecha</option>
                     </select>
                     <small id="editExpiryHelp">Cuando caduque, el enlace dejará de mostrar la galería.</small>
                 </label>
+                <button id="upgradeGalleryDuration" class="expiry-upgrade-button" type="button" hidden>
+                    8 días o más · Ampliar al Plan Creador →
+                </button>
                 <label id="editExpiresAtField" class="field" for="editExpiresAt" hidden>Fecha exacta
                     <input id="editExpiresAt" type="date">
                 </label>
@@ -811,6 +822,6 @@
     </dialog>
 
     <script src="/analytics.js?v=1"></script>
-    <script src="/script.js?v=20260911-conversion1"></script>
+    <script src="/script.js?v=20260913-gallery1"></script>
 </body>
 </html>
