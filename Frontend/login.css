@@ -197,12 +197,3 @@ html[data-theme="light"] .google-auth-button { border-color: #d8d4cc; box-shadow
 html[data-theme="light"] .google-auth-button:hover { border-color: #aaa49a; box-shadow: 0 10px 28px rgba(53, 48, 39, .1); }
 html[data-theme="light"] .google-legal, html[data-theme="light"] .auth-divider { color: #77736b; }
 html[data-theme="light"] .auth-divider::before, html[data-theme="light"] .auth-divider::after { background: #dedad2; }
-
-/* Interfaz visual y compacta. */
-.auth-story h1 em { color: #d5b577; font-weight: inherit; }
-.story-points { margin-top: clamp(30px, 6vh, 66px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.story-points span { min-height: 86px; padding: 15px 12px; display: grid; align-content: space-between; border: 1px solid rgba(255,255,255,.16); border-radius: 18px; background: rgba(255,255,255,.055); color: rgba(255,255,255,.9); font-size: 12px; font-weight: 700; backdrop-filter: blur(10px); }
-.auth-tabs { margin-top: 30px; }
-.auth-card .intro { margin-bottom: 28px; }
-.guest-link { font-weight: 750; }
-@media (max-width: 720px) { .story-points { margin-top: 24px; } .story-points span { min-height: 66px; border-radius: 14px; } }

@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-2"></script>
-    <link rel="stylesheet" href="/style.css?v=20261115-visual1">
+    <link rel="stylesheet" href="/style.css?v=20261115-copy1">
     <link rel="stylesheet" href="/analytics.css?v=1">
 </head>
 <body>
@@ -26,9 +26,9 @@
                 <span id="accountName">Mi cuenta</span>
                 <small id="accountPlan">Plan gratuito</small>
             </button>
-            <button id="analyticsButton" type="button" title="Estadísticas" hidden><span aria-hidden="true">⌁</span> Datos</button>
-            <button id="brandSettingsButton" type="button" title="Mi marca"><span aria-hidden="true">◇</span> Marca</button>
-            <button id="logoutButton" type="button" title="Cerrar sesión"><span aria-hidden="true">↗</span> Salir</button>
+            <button id="analyticsButton" type="button" hidden>Estadísticas</button>
+            <button id="brandSettingsButton" type="button">Mi marca</button>
+            <button id="logoutButton" type="button">Cerrar sesión</button>
         </nav>
 
         <nav class="product-switch" aria-label="Espacio de trabajo">
@@ -39,7 +39,7 @@
         <section id="galleryCreator" class="creator-card" hidden aria-labelledby="newDeliveryTitle">
             <div class="section-heading">
                 <div>
-                    <p class="step-label">＋</p>
+                    <p class="step-label">NUEVA GALERÍA</p>
                     <h2 id="newDeliveryTitle">Nueva galería</h2>
                 </div>
             </div>
@@ -75,7 +75,7 @@
 
                 <div class="builder-workspace">
                     <section id="builderDetails" class="builder-panel" data-builder-panel="details">
-                        <div class="builder-panel-heading"><p>01</p><h3>Detalles</h3></div>
+                        <div class="builder-panel-heading"><p>PASO 01</p><h3>Detalles</h3></div>
                         <div class="options-grid create-identity-grid">
                             <label class="field" for="clientName">Cliente, empresa, evento…
                                 <input id="clientName" type="text"
@@ -91,7 +91,7 @@
                     </section>
 
                     <section id="builderPhotos" class="builder-panel" data-builder-panel="photos">
-                        <div class="builder-panel-heading"><p>02</p><h3>Fotografías</h3></div>
+                        <div class="builder-panel-heading"><p>PASO 02</p><h3>Fotografías</h3></div>
                         <input id="fileInput" type="file"
                             accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.mp4,.mov,.m4v,.webm"
                             hidden multiple>
@@ -117,7 +117,7 @@
                     </section>
 
                     <section id="builderAccess" class="builder-panel" data-builder-panel="access" hidden>
-                        <div class="builder-panel-heading"><p>03</p><h3>Acceso</h3></div>
+                        <div class="builder-panel-heading"><p>PASO 03</p><h3>Acceso</h3></div>
                         <div class="permission-list">
                             <label class="permission-option"><input id="viewingEnabled" type="checkbox" checked>
                                 <span><strong>Visible</strong></span></label>
@@ -149,7 +149,7 @@
                     </section>
 
                     <section id="builderDesign" class="builder-panel" data-builder-panel="design" hidden>
-                        <div class="builder-panel-heading"><p>04</p><h3>Diseño</h3></div>
+                        <div class="builder-panel-heading"><p>PASO 04</p><h3>Diseño</h3></div>
                         <div class="options-grid sidebar-grid">
                     <label class="field" for="brandName">
                         Nombre de tu marca
@@ -228,7 +228,7 @@
 
         <section id="transferCreator" class="creator-card transfer-creator" aria-labelledby="newTransferTitle">
             <div class="section-heading transfer-title-row">
-                <div><p class="step-label">↗</p><h2 id="newTransferTitle">Nueva transferencia</h2></div>
+                <div><p class="step-label">TRANSFERENCIA</p><h2 id="newTransferTitle">Nueva transferencia</h2></div>
                 <span>Envía archivos de trabajo sin crear una galería.</span>
             </div>
             <div class="transfer-form-grid">
@@ -298,7 +298,7 @@
         <section id="deliveriesPanel" hidden>
             <div class="deliveries-heading">
                 <div>
-                    <p class="step-label">▦</p>
+                    <p class="step-label">GALERÍAS</p>
                     <h2>Mis galerías</h2>
                 </div>
                 <button id="deleteAllDeliveries" type="button" disabled>Eliminar todas</button>
@@ -309,7 +309,7 @@
 
         <section id="transfersPanel">
             <div class="deliveries-heading">
-                <div><p class="step-label">↗</p><h2>Mis transferencias</h2></div>
+                <div><p class="step-label">TRANSFERENCIAS</p><h2>Mis transferencias</h2></div>
             </div>
             <p id="transfersEmpty" hidden>Sin transferencias.</p>
             <div id="transfersList" aria-live="polite"></div>
@@ -829,6 +829,6 @@
     </dialog>
 
     <script src="/analytics.js?v=1"></script>
-    <script src="/script.js?v=20261115-visual1"></script>
+    <script src="/script.js?v=20261115-copy1"></script>
 </body>
 </html>
