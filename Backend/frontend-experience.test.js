@@ -90,7 +90,8 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(conversionSubmit, /Content-Type": "application\/json"/);
     assert.doesNotMatch(conversionSubmit, /FormData|append\("files"/);
     assert.match(send, /id="guestFiles"/);
-    assert.match(send, /No necesitas registrarte ni iniciar sesión/);
+    assert.match(send, /SIN REGISTRO · 24 HORAS/);
+    assert.match(send, /Envía\.<br><em>Comparte\.<\/em>/);
     assert.match(sendScript, /\/transfers\/multipart/);
     assert.match(sendScript, /retryPart/);
     assert.match(send, /name="shareMethod" value="link"/);

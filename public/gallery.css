@@ -241,3 +241,6 @@ footer p { margin: 5px 0; }
     *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
 footer a{color:inherit;text-underline-offset:3px}
+
+/* Galería pública: fotografía primero. */
+.gallery-content{padding-top:clamp(42px,7vw,76px)}.collection-heading{margin-bottom:clamp(34px,6vw,58px)}.collection-heading .eyebrow{margin-bottom:10px}.gallery-toolbar{padding:10px 12px}.gallery-toolbar-summary strong{font-size:12px}.gallery-toolbar-summary span{display:none}.favorite-notice{padding-block:11px}.favorite-notice p{margin:0}.client-dialog form>p:not(.eyebrow):not(.dialog-error):empty{display:none}

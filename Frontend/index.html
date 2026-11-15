@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-2"></script>
-    <link rel="stylesheet" href="/style.css?v=20260913-designstudio1">
+    <link rel="stylesheet" href="/style.css?v=20261115-visual1">
     <link rel="stylesheet" href="/analytics.css?v=1">
 </head>
 <body>
@@ -26,9 +26,9 @@
                 <span id="accountName">Mi cuenta</span>
                 <small id="accountPlan">Plan gratuito</small>
             </button>
-            <button id="analyticsButton" type="button" hidden>Estadísticas</button>
-            <button id="brandSettingsButton" type="button">Mi marca</button>
-            <button id="logoutButton" type="button">Cerrar sesión</button>
+            <button id="analyticsButton" type="button" title="Estadísticas" hidden><span aria-hidden="true">⌁</span> Datos</button>
+            <button id="brandSettingsButton" type="button" title="Mi marca"><span aria-hidden="true">◇</span> Marca</button>
+            <button id="logoutButton" type="button" title="Cerrar sesión"><span aria-hidden="true">↗</span> Salir</button>
         </nav>
 
         <nav class="product-switch" aria-label="Espacio de trabajo">
@@ -39,16 +39,15 @@
         <section id="galleryCreator" class="creator-card" hidden aria-labelledby="newDeliveryTitle">
             <div class="section-heading">
                 <div>
-                    <p class="step-label">NUEVA GALERÍA</p>
-                    <h2 id="newDeliveryTitle">Sube tu trabajo</h2>
-                    <p class="section-description">Añade el nombre, el correo si quieres enviarla y tus fotografías. Personalizarás el resultado justo después.</p>
+                    <p class="step-label">＋</p>
+                    <h2 id="newDeliveryTitle">Nueva galería</h2>
                 </div>
             </div>
 
             <div id="planLimitNotice" class="plan-limit-notice" hidden>
                 <div>
                     <strong>Has alcanzado el límite de galerías</strong>
-                    <p>Elimina una de tus galerías para poder crear una nueva.</p>
+                    <p>Elimina una para continuar.</p>
                 </div>
                 <button id="viewPlansFromLimit" type="button">Ver mis galerías</button>
             </div>
@@ -58,33 +57,32 @@
                     <p class="settings-title">NUEVA ENTREGA</p>
                     <button class="builder-nav-item is-active" type="button"
                         data-builder-target="details" aria-controls="builderDetails" aria-current="step">
-                        <span>01</span><strong>Detalles</strong><small>Nombre y contacto</small>
+                        <span>01</span><strong>Detalles</strong>
                     </button>
                     <button class="builder-nav-item" type="button"
                         data-builder-target="photos" aria-controls="builderPhotos">
-                        <span>02</span><strong>Fotografías</strong><small>Archivos y portada</small>
+                        <span>02</span><strong>Fotos</strong>
                     </button>
                     <button class="builder-nav-item" type="button"
                         data-builder-target="access" aria-controls="builderAccess">
-                        <span>03</span><strong>Acceso</strong><small>Privacidad y descargas</small>
+                        <span>03</span><strong>Acceso</strong>
                     </button>
                     <button class="builder-nav-item" type="button"
                         data-builder-target="design" aria-controls="builderDesign">
-                        <span>04</span><strong>Diseño</strong><small>Marca y apariencia</small>
+                        <span>04</span><strong>Diseño</strong>
                     </button>
                 </nav>
 
                 <div class="builder-workspace">
                     <section id="builderDetails" class="builder-panel" data-builder-panel="details">
-                        <div class="builder-panel-heading"><p>DESTINATARIO</p><h3>¿Para quién es esta galería?</h3>
-                            <span>Este nombre aparecerá en la portada. El correo solo se usará cuando decidas enviarla.</span></div>
+                        <div class="builder-panel-heading"><p>01</p><h3>Detalles</h3></div>
                         <div class="options-grid create-identity-grid">
                             <label class="field" for="clientName">Cliente, empresa, evento…
                                 <input id="clientName" type="text"
                                     placeholder="Ej. Boda de Laura y Daniel"
                                     maxlength="80" required>
                             </label>
-                            <label class="field" for="clientEmail">Correo para enviar la galería (opcional)
+                            <label class="field" for="clientEmail">Correo
                                 <input id="clientEmail" type="email" maxlength="254"
                                     placeholder="contacto@correo.com">
                             </label>
@@ -93,18 +91,17 @@
                     </section>
 
                     <section id="builderPhotos" class="builder-panel" data-builder-panel="photos">
-                        <div class="builder-panel-heading"><p>ARCHIVOS</p><h3>Añade las fotografías</h3>
-                            <span>La primera fotografía será la portada inicial. Podrás cambiarla y organizarlo todo después.</span></div>
+                        <div class="builder-panel-heading"><p>02</p><h3>Fotografías</h3></div>
                         <input id="fileInput" type="file"
                             accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.heic,.heif,.mp4,.mov,.m4v,.webm"
                             hidden multiple>
                         <button id="uploadButton" class="primary select-photos" type="button">
-                            <span>＋</span> Seleccionar fotos o vídeos
+                            <span>＋</span> Añadir fotos
                         </button>
                         <p id="selectionHint">Hasta 500 archivos · 50 MB por foto · 500 MB por vídeo · 10 GB por entrega</p>
                         <section id="selectionPanel" class="selection-panel" hidden>
                             <div class="selection-heading">
-                                <div><h3>Fotografías seleccionadas</h3><p id="selectionSummary"></p></div>
+                                <div><h3>Selección</h3><p id="selectionSummary"></p></div>
                                 <div class="selection-actions">
                                     <button id="addMorePhotos" type="button" class="secondary small-button">Añadir más</button>
                                     <button id="clearSelection" type="button" class="danger-quiet small-button">Vaciar</button>
@@ -120,15 +117,14 @@
                     </section>
 
                     <section id="builderAccess" class="builder-panel" data-builder-panel="access" hidden>
-                        <div class="builder-panel-heading"><p>PASO 03</p><h3>Acceso y descargas</h3>
-                            <span>Decide cómo podrán entrar e interactuar con la entrega.</span></div>
+                        <div class="builder-panel-heading"><p>03</p><h3>Acceso</h3></div>
                         <div class="permission-list">
                             <label class="permission-option"><input id="viewingEnabled" type="checkbox" checked>
-                                <span><strong>Permitir visualización</strong><small>El enlace abre la galería.</small></span></label>
+                                <span><strong>Visible</strong></span></label>
                             <label class="permission-option"><input id="allowOriginalDownload" type="checkbox" checked>
-                                <span><strong>Calidad original</strong><small>Descarga los archivos a máxima calidad.</small></span></label>
+                                <span><strong>Originales</strong></span></label>
                             <label class="permission-option"><input id="allowWebDownload" type="checkbox" checked>
-                                <span><strong>Calidad reducida</strong><small>Ocupa menos espacio y se descarga más rápido.</small></span></label>
+                                <span><strong>Calidad reducida</strong></span></label>
                         </div>
                         <div class="sidebar-fields">
                             <label class="field" for="deliveryMessage">Mensaje
@@ -142,20 +138,18 @@
                             </label>
                             <label class="field" for="expiresAt">Fecha de caducidad
                                 <input id="expiresAt" type="date">
-                                <small id="createExpiryHelp">La galería dejará de estar disponible al finalizar ese día.</small>
+                                <small id="createExpiryHelp">Disponible hasta ese día.</small>
                             </label>
                             <label class="permission-option compact"><input id="favoritesEnabled" type="checkbox" checked>
                                 <span><strong>Selección de favoritas</strong></span></label>
-                            <label class="field" for="selectionLimit">Máximo de fotografías seleccionables
+                            <label class="field" for="selectionLimit">Límite de favoritas
                                 <input id="selectionLimit" type="number" min="1" max="500" value="20">
-                                <small>Escribe cuántas fotografías puede elegir el cliente.</small>
                             </label>
                         </div>
                     </section>
 
                     <section id="builderDesign" class="builder-panel" data-builder-panel="design" hidden>
-                        <div class="builder-panel-heading"><p>PASO 04</p><h3>Diseño de la galería</h3>
-                            <span>Parte de “Mi marca” y personaliza únicamente esta entrega.</span></div>
+                        <div class="builder-panel-heading"><p>04</p><h3>Diseño</h3></div>
                         <div class="options-grid sidebar-grid">
                     <label class="field" for="brandName">
                         Nombre de tu marca
@@ -199,13 +193,13 @@
                     <section class="field field-wide link-editor" aria-labelledby="brandLinksTitle">
                         <div class="link-editor-heading">
                             <div><strong id="brandLinksTitle">Enlaces y redes</strong>
-                                <small>Añade cualquier web o perfil y ordénalos como quieras.</small></div>
+                                </div>
                             <button id="addBrandLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
                         </div>
                         <div id="brandLinksList" class="link-list" aria-live="polite"></div>
                     </section>
                     <label class="field field-wide" for="brandLogo">
-                        Imagen de marca específica (opcional)
+                        Imagen de marca
                         <input id="brandLogo" type="file"
                             accept=".jpg,.jpeg,.png,.gif">
                     </label>
@@ -225,8 +219,8 @@
                     </section>
 
                     <footer class="builder-footer">
-                        <span>Al terminar la subida se abrirá el editor con tus fotografías reales.</span>
-                        <button id="createDeliveryButton" type="button" class="primary create-button">Crear y personalizar</button>
+                        <span></span>
+                        <button id="createDeliveryButton" type="button" class="primary create-button">Crear galería</button>
                     </footer>
                 </div>
             </div>
@@ -234,7 +228,7 @@
 
         <section id="transferCreator" class="creator-card transfer-creator" aria-labelledby="newTransferTitle">
             <div class="section-heading transfer-title-row">
-                <div><p class="step-label">STRACLASE TRANSFER</p><h2 id="newTransferTitle">Nueva transferencia</h2></div>
+                <div><p class="step-label">↗</p><h2 id="newTransferTitle">Nueva transferencia</h2></div>
                 <span>Envía archivos de trabajo sin crear una galería.</span>
             </div>
             <div class="transfer-form-grid">
@@ -254,17 +248,17 @@
                     </div>
                 </div>
                 <div class="transfer-fields">
-                    <label class="field" for="transferTitle">Título (opcional)
+                    <label class="field" for="transferTitle">Título
                         <input id="transferTitle" type="text" maxlength="100" placeholder="Si lo dejas vacío, lo creamos por ti">
                     </label>
-                    <label class="field" for="transferRecipient">Correo del destinatario (opcional)
+                    <label class="field" for="transferRecipient">Destinatario
                         <input id="transferRecipient" type="email" maxlength="254" placeholder="persona@correo.com">
                     </label>
-                    <label class="field" for="transferMessage">Mensaje (opcional)
+                    <label class="field" for="transferMessage">Mensaje
                         <textarea id="transferMessage" maxlength="500" placeholder="Información sobre los archivos"></textarea>
                     </label>
                     <div class="transfer-retention"><strong>24 horas</strong><span>Después se eliminarán automáticamente los archivos.</span></div>
-                    <label class="field" for="transferPassword">Contraseña opcional
+                    <label class="field" for="transferPassword">Contraseña
                         <input id="transferPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password">
                     </label>
                     <button id="createTransfer" type="button" class="primary create-button">Crear transferencia</button>
@@ -304,20 +298,20 @@
         <section id="deliveriesPanel" hidden>
             <div class="deliveries-heading">
                 <div>
-                    <p class="step-label">TU ESPACIO</p>
+                    <p class="step-label">▦</p>
                     <h2>Mis galerías</h2>
                 </div>
                 <button id="deleteAllDeliveries" type="button" disabled>Eliminar todas</button>
             </div>
-            <p id="deliveriesEmpty" hidden>Todavía no has creado ninguna galería.</p>
+            <p id="deliveriesEmpty" hidden>Sin galerías.</p>
             <div id="deliveriesList" aria-live="polite"></div>
         </section>
 
         <section id="transfersPanel">
             <div class="deliveries-heading">
-                <div><p class="step-label">ARCHIVOS ENVIADOS</p><h2>Mis transferencias</h2></div>
+                <div><p class="step-label">↗</p><h2>Mis transferencias</h2></div>
             </div>
-            <p id="transfersEmpty" hidden>Todavía no has creado ninguna transferencia.</p>
+            <p id="transfersEmpty" hidden>Sin transferencias.</p>
             <div id="transfersList" aria-live="polite"></div>
         </section>
 
@@ -443,7 +437,7 @@
                 </div>
                 <button id="closeBrandDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
             </div>
-            <p class="dialog-intro">Configura el punto de partida de tus próximas galerías. Puedes ver cada cambio antes de guardarlo.</p>
+            <p class="dialog-intro">Tu estilo predeterminado.</p>
             <div class="brand-editor-layout">
                 <aside id="profileBrandLivePreview" class="brand-live-preview" data-tone="light"
                     aria-label="Vista previa de tu marca">
@@ -477,19 +471,19 @@
                         <img id="profileLogoImage" alt="Imagen de marca actual">
                     </div>
                     <div class="options-grid">
-                        <label class="field" for="profileBrandName">Nombre de tu marca (opcional)
+                        <label class="field" for="profileBrandName">Nombre de marca
                             <input id="profileBrandName" type="text" maxlength="80" placeholder="Ej. Marta Studio">
                         </label>
-                        <label class="field" for="profileLogo">Imagen de marca (opcional)
+                        <label class="field" for="profileLogo">Imagen de marca
                             <input id="profileLogo" type="file" accept=".jpg,.jpeg,.png,.gif">
-                            <small>PNG transparente recomendado. Puedes usar imagen, nombre o ambos.</small>
+                            <small>PNG recomendado.</small>
                         </label>
 
                         <section id="profileLogoControls" class="field field-wide logo-adjuster" hidden
                             aria-labelledby="profileLogoControlsTitle">
                             <div class="logo-adjuster-heading">
                                 <div><strong id="profileLogoControlsTitle">Ajustar imagen de marca</strong>
-                                    <small>Arrastra la imagen en la vista previa o utiliza estos controles.</small></div>
+                                    <small>Arrastra para colocar.</small></div>
                                 <button class="secondary small-button" type="button" data-reset-profile-logo>Restablecer</button>
                             </div>
                             <div class="logo-adjuster-grid">
@@ -527,18 +521,16 @@
                             <label for="profileAccentColor">Color principal</label>
                             <div><input id="profileAccentColor" type="color" value="#c9aa70">
                                 <output id="profileAccentValue" for="profileAccentColor">#C9AA70</output></div>
-                            <small>Se aplica a botones y detalles. El contraste se corrige automáticamente.</small>
                         </div>
                         <div class="field color-control">
                             <label for="profileBackgroundColor">Fondo de la galería</label>
                             <div><input id="profileBackgroundColor" type="color" value="#ffffff">
                                 <output id="profileBackgroundValue" for="profileBackgroundColor">#FFFFFF</output></div>
-                            <small>Los textos cambian entre claro y oscuro para seguir siendo legibles.</small>
                         </div>
                         <section class="field field-wide link-editor" aria-labelledby="profileLinksTitle">
                             <div class="link-editor-heading">
                                 <div><strong id="profileLinksTitle">Enlaces predeterminados</strong>
-                                    <small>Se copiarán a cada galería nueva en este orden.</small></div>
+                                    </div>
                                 <button id="addProfileLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
                             </div>
                             <div id="profileLinksList" class="link-list" aria-live="polite"></div>
@@ -579,15 +571,15 @@
                 </div>
                 <button id="closeConvertDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
             </div>
-            <p class="dialog-intro">Elige las fotografías compatibles. Conservaremos la transferencia original y crearemos una galería independiente.</p>
+            <p class="dialog-intro">Elige las fotografías.</p>
             <div class="options-grid">
                 <label class="field" for="convertClientName">Nombre del cliente, empresa o evento
                     <input id="convertClientName" type="text" maxlength="80" required>
                 </label>
-                <label class="field" for="convertClientEmail">Correo del cliente (opcional)
+                <label class="field" for="convertClientEmail">Correo
                     <input id="convertClientEmail" type="email" maxlength="254">
                 </label>
-                <label class="field field-wide" for="convertMessage">Mensaje (opcional)
+                <label class="field field-wide" for="convertMessage">Mensaje
                     <textarea id="convertMessage" maxlength="300" placeholder="Un mensaje para quien reciba la galería"></textarea>
                 </label>
             </div>
@@ -610,7 +602,7 @@
         <form id="editDeliveryForm" class="edit-dialog-content">
             <div class="edit-dialog-heading">
                 <div>
-                    <p class="edit-dialog-eyebrow">CONFIGURAR ENTREGA</p>
+                    <p class="edit-dialog-eyebrow">GALERÍA</p>
                     <h2 id="editDialogTitle">Personalizar galería</h2>
                 </div>
                 <button id="closeEditDialog" class="icon-button" type="button" aria-label="Cerrar">×</button>
@@ -637,7 +629,7 @@
                         <option value="90" data-paid-expiry>Durante 90 días</option>
                         <option value="custom" data-paid-expiry>Elegir una fecha</option>
                     </select>
-                    <small id="editExpiryHelp">Cuando caduque, el enlace dejará de mostrar la galería.</small>
+                    <small id="editExpiryHelp">Disponible hasta ese día.</small>
                 </label>
                 <button id="upgradeGalleryDuration" class="expiry-upgrade-button" type="button" hidden>
                     8 días o más · Ampliar al Plan Creador →
@@ -659,11 +651,11 @@
             </label>
             <div class="permission-list edit-permission-list">
                 <label class="permission-option"><input id="editViewingEnabled" type="checkbox">
-                    <span><strong>Permitir visualización</strong><small>El enlace abre la galería.</small></span></label>
+                    <span><strong>Visible</strong></span></label>
                 <label class="permission-option"><input id="editAllowOriginalDownload" type="checkbox">
-                    <span><strong>Calidad original</strong><small>Archivos a máxima calidad.</small></span></label>
+                    <span><strong>Originales</strong></span></label>
                 <label class="permission-option"><input id="editAllowWebDownload" type="checkbox">
-                    <span><strong>Calidad reducida (ahorra espacio)</strong><small>Archivos ligeros que se descargan más rápido.</small></span></label>
+                    <span><strong>Calidad reducida</strong></span></label>
                 <label class="permission-option"><input id="editFavoritesEnabled" type="checkbox">
                     <span><strong>Selección de favoritas</strong></span></label>
             </div>
@@ -675,7 +667,6 @@
                 </div>
                 <label class="field selection-limit-field" for="editSelectionLimit">¿Cuántas fotografías puede elegir?
                     <input id="editSelectionLimit" type="number" min="1" max="500" value="20">
-                    <small>Escribe el número exacto. Puedes cambiarlo mientras la selección esté abierta.</small>
                 </label>
                 <p id="editSelectionSummary" class="selection-admin-summary"></p>
                 <div class="selection-insights">
@@ -685,8 +676,7 @@
             </section>
 
             <section class="edit-brand-section">
-                <h3>Diseño y marca de esta galería</h3>
-                <p class="section-description">Cada ajuste aparece al momento en la vista previa. Solo se publicará cuando pulses guardar.</p>
+                <h3>Diseño</h3>
                 <div class="gallery-customizer-layout">
                     <aside id="editGalleryLivePreview" class="gallery-live-preview" aria-label="Vista previa en tiempo real">
                         <p class="live-preview-label"><span></span> VISTA PREVIA EN TIEMPO REAL</p>
@@ -715,7 +705,7 @@
                         <img id="editLogoImage" alt="Imagen de marca de la galería">
                     </div>
                     <div class="options-grid">
-                    <label class="field" for="editBrandName">Nombre de tu marca (opcional)
+                    <label class="field" for="editBrandName">Nombre de marca
                         <input id="editBrandName" type="text" maxlength="80" placeholder="Ej. Marta Studio">
                     </label>
                     <fieldset class="field field-wide style-picker">
@@ -725,19 +715,19 @@
                                 <input type="radio" name="editGalleryStyle" value="masonry">
                                 <span class="style-icon masonry-icon" aria-hidden="true"><i></i><i></i><i></i></span>
                                 <strong>Mosaico natural</strong>
-                                <small>Respeta la proporción de cada fotografía.</small>
+                                <small>Proporción original</small>
                             </label>
                             <label class="style-choice">
                                 <input type="radio" name="editGalleryStyle" value="grid">
                                 <span class="style-icon grid-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
                                 <strong>Cuadrícula uniforme</strong>
-                                <small>Orden simétrico y limpio.</small>
+                                <small>Formato uniforme</small>
                             </label>
                             <label class="style-choice">
                                 <input type="radio" name="editGalleryStyle" value="editorial">
                                 <span class="style-icon editorial-icon" aria-hidden="true"><i></i><i></i></span>
                                 <strong>Editorial</strong>
-                                <small>Imágenes grandes con más espacio.</small>
+                                <small>Imágenes grandes</small>
                             </label>
                         </div>
                     </fieldset>
@@ -783,15 +773,14 @@
                     <section class="field field-wide link-editor" aria-labelledby="editLinksTitle">
                         <div class="link-editor-heading">
                             <div><strong id="editLinksTitle">Enlaces de esta galería</strong>
-                                <small>El primero también será el destino al pulsar tu marca.</small></div>
+                                </div>
                             <button id="addEditLink" class="secondary small-button" type="button">＋ Añadir enlace</button>
                         </div>
                         <div id="editLinksList" class="link-list" aria-live="polite"></div>
                     </section>
-                    <label class="field field-wide" for="editLogo">Imagen de tu marca (opcional)
+                    <label class="field field-wide" for="editLogo">Imagen de marca
                         <input id="editLogo" type="file"
                             accept=".jpg,.jpeg,.png,.gif">
-                        <small>Puedes combinarla con el nombre de tu marca o usarla sola.</small>
                     </label>
                     <label class="field range-field" for="editLogoScale">Tamaño de la imagen
                         <input id="editLogoScale" type="range" min="50" max="160" value="100">
@@ -821,7 +810,7 @@
                 <div class="section-manager">
                     <div>
                         <strong>Secciones de la galería</strong>
-                        <small>Agrupa las fotografías, por ejemplo Preparativos, Ceremonia o Fiesta.</small>
+                        <small>Agrupa la historia.</small>
                     </div>
                     <div class="section-create">
                         <input id="newSectionName" type="text" maxlength="60" placeholder="Nombre de la sección">
@@ -840,6 +829,6 @@
     </dialog>
 
     <script src="/analytics.js?v=1"></script>
-    <script src="/script.js?v=20260913-designstudio1"></script>
+    <script src="/script.js?v=20261115-visual1"></script>
 </body>
 </html>

@@ -27,7 +27,7 @@
     <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-4"></script>
-    <link rel="stylesheet" href="/send.css?v=20260911-1">
+    <link rel="stylesheet" href="/send.css?v=20261115-visual1">
     <link rel="stylesheet" href="/analytics.css?v=1">
     <script type="application/ld+json">
     {
@@ -72,18 +72,16 @@
     </header>
     <main>
         <section class="send-copy">
-            <p class="eyebrow">TRANSFERENCIAS DURANTE 24 HORAS</p>
-            <h1>Envía archivos grandes.<br><em>Sin complicaciones.</em></h1>
-            <p class="lead">Selecciona tus archivos, crea un enlace privado o envíalo directamente por correo. No necesitas registrarte ni iniciar sesión.</p>
-            <div class="trust-row"><span>Enlace privado</span><span>Caduca automáticamente</span><span>Descarga individual o ZIP</span></div>
+            <p class="eyebrow">SIN REGISTRO · 24 HORAS</p>
+            <h1>Envía.<br><em>Comparte.</em></h1>
+            <div class="trust-row"><span>⌁ Privado</span><span>◷ 24 h</span><span>↓ ZIP</span></div>
         </section>
         <section class="send-card" aria-labelledby="sendTitle">
-            <div class="step"><span>01</span><div><p class="eyebrow">NUEVO ENVÍO</p><h2 id="sendTitle">Enviar archivos</h2></div></div>
+            <div class="step"><span>＋</span><div><h2 id="sendTitle">Nueva transferencia</h2></div></div>
             <label id="dropZone" class="drop-zone" for="guestFiles">
                 <input id="guestFiles" type="file" multiple>
                 <span class="drop-icon">＋</span>
-                <strong>Seleccionar archivos</strong>
-                <small>o arrástralos aquí</small>
+                <strong>Añadir archivos</strong>
             </label>
             <div id="selection" class="selection" hidden>
                 <div class="selection-head"><strong id="selectionCount"></strong><span id="selectionSize"></span></div>
@@ -92,21 +90,20 @@
             </div>
             <div id="sendOptions" class="send-options" hidden>
                 <fieldset class="share-choice">
-                    <legend>¿Cómo quieres compartirlo?</legend>
+                    <legend>Compartir</legend>
                     <label class="share-option">
                         <input type="radio" name="shareMethod" value="link" checked>
-                        <span><strong>Crear un enlace</strong><small>Cópialo y compártelo donde quieras</small></span>
+                        <span><i aria-hidden="true">⌁</i><strong>Enlace</strong></span>
                     </label>
                     <label class="share-option">
                         <input type="radio" name="shareMethod" value="email">
-                        <span><strong>Enviar por correo</strong><small>Straclase avisará al destinatario</small></span>
+                        <span><i aria-hidden="true">✉</i><strong>Correo</strong></span>
                     </label>
                 </fieldset>
                 <label id="recipientEmailGroup" hidden>Correo del destinatario
                     <input id="recipientEmail" type="email" maxlength="254" autocomplete="email" placeholder="persona@correo.com">
                 </label>
                 <label id="senderEmailGroup" hidden>Tu correo
-                    <span>Lo confirmaremos para que nadie pueda enviar archivos en tu nombre.</span>
                     <div class="email-verify-row">
                         <input id="senderEmail" type="email" maxlength="254" autocomplete="email" placeholder="tu@correo.com">
                         <button id="requestSenderCode" class="secondary-button" type="button">Verificar correo</button>
@@ -119,13 +116,13 @@
                     <button id="verifySenderCode" class="secondary-button" type="button">Confirmar código</button>
                 </div>
                 <p id="senderVerificationStatus" class="verification-status" aria-live="polite" hidden></p>
-                <label>Título <span>(opcional)</span>
+                <label>Título
                     <input id="sendTitleInput" type="text" maxlength="100" placeholder="Ej. Material de la sesión">
                 </label>
-                <label>Mensaje <span>(opcional)</span>
+                <label>Mensaje
                     <textarea id="sendMessage" maxlength="500" placeholder="Añade una nota para quien reciba el enlace"></textarea>
                 </label>
-                <label>Contraseña <span>(opcional)</span>
+                <label>Contraseña
                     <input id="sendPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="Protege el acceso al enlace">
                 </label>
             </div>
@@ -135,7 +132,7 @@
                 <div><span id="uploadProgress"></span></div><p id="uploadText">Preparando transferencia…</p>
             </div>
             <button id="continueButton" class="continue" type="button" disabled>Enviar archivos</button>
-            <p class="account-note">Al enviar aceptas los <a href="/terminos">términos</a>. Los archivos se eliminarán automáticamente después de 24 horas.</p>
+            <p class="account-note">24 h · <a href="/terminos">Términos</a></p>
             <div id="sendResult" class="send-result" hidden>
                 <span class="success-mark">✓</span>
                 <h3 id="resultTitle">Tu transferencia está lista</h3>
@@ -146,9 +143,9 @@
                 <div id="conversionOffer" class="conversion-offer" hidden>
                     <div id="conversionPreview" class="conversion-preview" aria-label="Vista previa de la galería"></div>
                     <div class="conversion-copy">
-                        <strong>Así podrían verse tus fotografías</strong>
-                        <span id="conversionOfferText">Crea una cuenta gratis y personaliza estas fotos sin volver a subirlas.</span>
-                        <button id="convertGuestTransfer" type="button" class="conversion-button">Crear cuenta y convertir en galería</button>
+                        <strong>Convierte en galería</strong>
+                        <span id="conversionOfferText">Sin volver a subir.</span>
+                        <button id="convertGuestTransfer" type="button" class="conversion-button">Crear galería</button>
                     </div>
                 </div>
             </div>
@@ -156,6 +153,6 @@
     </main>
     <footer><span>© Straclase</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>
     <script src="/analytics.js?v=1"></script>
-    <script src="/send.js?v=20260911-1"></script>
+    <script src="/send.js?v=20261115-visual1"></script>
 </body>
 </html>

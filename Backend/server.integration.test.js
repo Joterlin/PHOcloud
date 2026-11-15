@@ -281,7 +281,7 @@ test("recorrido de registro, permisos de visualización y envío", async () => {
         assert.match(await guestPage.text(), /id="guestFiles"/);
         const rootPage = await fetch(`${baseUrl}/`);
         assert.equal(rootPage.status, 200);
-        assert.match(await rootPage.text(), /No necesitas registrarte/);
+        assert.match(await rootPage.text(), /SIN REGISTRO · 24 HORAS/);
 
         const senderVerification = await jsonRequest(
             `${baseUrl}/transfer-sender-verification/request`,

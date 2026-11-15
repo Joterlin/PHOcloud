@@ -238,19 +238,19 @@ function enhanceGalleryEditor() {
     </nav>`);
     const controls = document.createElement("div");
     controls.className = "gallery-editor-controls";
-    const panel = (name, eyebrow, title, description) => {
+    const panel = (name, eyebrow, title, description = "") => {
         const section = elementFromHtml(`<section class="gallery-editor-panel" data-edit-panel="${name}">
-            <div class="editor-panel-heading"><span>${eyebrow}</span><h3>${title}</h3><p>${description}</p></div>
+            <div class="editor-panel-heading"><span>${eyebrow}</span><h3>${title}</h3>${description ? `<p>${description}</p>` : ""}</div>
         </section>`);
         if (name !== "content") section.hidden = true;
         controls.appendChild(section);
         return section;
     };
-    const contentPanel = panel("content", "CONTENIDO", "Los datos de la entrega", "Cambia el título, el mensaje y las fotografías que verá tu cliente.");
-    const coverPanel = panel("cover", "PORTADA", "La primera impresión", "Elige una composición y encuadra la imagen directamente sobre la vista previa.");
-    const designPanel = panel("design", "DISEÑO", "Distribución y colores", "Elige una composición clara y personaliza el fondo, los textos y los botones.");
-    const brandPanel = panel("brand", "MARCA", "Hazla reconocible", "Combina el nombre de tu estudio, tu imagen y tus enlaces.");
-    const accessPanel = panel("access", "ACCESO", "Privacidad y entrega", "Decide qué puede ver, descargar y seleccionar tu cliente.");
+    const contentPanel = panel("content", "01", "Contenido");
+    const coverPanel = panel("cover", "02", "Portada");
+    const designPanel = panel("design", "03", "Diseño");
+    const brandPanel = panel("brand", "04", "Marca");
+    const accessPanel = panel("access", "05", "Acceso");
     layout.append(nav, controls);
     heading.after(form.querySelector("#editDeliveryId"), layout);
 
@@ -260,18 +260,18 @@ function enhanceGalleryEditor() {
     photoManager.classList.add("editor-photo-manager");
     const intro = document.createElement("p");
     intro.className = "editor-help";
-    intro.textContent = "Pulsa «Portada» sobre una fotografía para cambiar la imagen principal.";
+    intro.textContent = "Elige «Portada» sobre una foto.";
     byId("editPhotos").before(intro);
 
     const coverSelectLabel = byId("editCoverStyle").closest(".field");
     coverSelectLabel.hidden = true;
     coverPanel.appendChild(coverSelectLabel);
     const coverPicker = elementFromHtml(`<div class="cover-style-grid" role="group" aria-label="Diseño de portada">
-        <button type="button" data-edit-cover-style="immersive"><i class="cover-style-sample immersive"></i><strong>Inmersiva</strong><small>Imagen a pantalla completa</small></button>
-        <button type="button" data-edit-cover-style="split"><i class="cover-style-sample split"></i><strong>Editorial</strong><small>Texto e imagen divididos</small></button>
-        <button type="button" data-edit-cover-style="frame"><i class="cover-style-sample frame"></i><strong>Enmarcada</strong><small>Imagen con aire alrededor</small></button>
-        <button type="button" data-edit-cover-style="minimal"><i class="cover-style-sample minimal"></i><strong>Sutil</strong><small>Una portada más suave</small></button>
-        <button type="button" data-edit-cover-style="none"><i class="cover-style-sample none"></i><strong>Solo texto</strong><small>Sin fotografía</small></button>
+        <button type="button" data-edit-cover-style="immersive"><i class="cover-style-sample immersive"></i><strong>Inmersiva</strong></button>
+        <button type="button" data-edit-cover-style="split"><i class="cover-style-sample split"></i><strong>Editorial</strong></button>
+        <button type="button" data-edit-cover-style="frame"><i class="cover-style-sample frame"></i><strong>Enmarcada</strong></button>
+        <button type="button" data-edit-cover-style="minimal"><i class="cover-style-sample minimal"></i><strong>Sutil</strong></button>
+        <button type="button" data-edit-cover-style="none"><i class="cover-style-sample none"></i><strong>Solo texto</strong></button>
     </div>`);
     coverPanel.appendChild(coverPicker);
     const coverPositionX = byId("editCoverPositionX");
@@ -286,7 +286,7 @@ function enhanceGalleryEditor() {
         coverZoom.closest(".field")
     );
     const focalControls = elementFromHtml(`<div id="editCoverFocusControls" class="cover-transform-controls">
-        <div class="cover-transform-heading"><div><strong>Encuadre para <span id="editDeviceEditingLabel">escritorio</span></strong><small>Arrastra directamente la fotografía para colocarla.</small></div><button type="button" class="secondary small-button" data-reset-cover>Restablecer</button></div>
+        <div class="cover-transform-heading"><div><strong>Encuadre · <span id="editDeviceEditingLabel">escritorio</span></strong><small>Arrastra la foto.</small></div><button type="button" class="secondary small-button" data-reset-cover>Restablecer</button></div>
         <label class="cover-zoom-control" for="editCoverZoom"><span>Zoom</span><span data-cover-zoom-slot></span><output id="editCoverZoomValue">100 %</output></label>
     </div>`);
     focalControls.querySelector("[data-cover-zoom-slot]").replaceWith(coverZoom);
@@ -296,12 +296,12 @@ function enhanceGalleryEditor() {
     stylePicker.classList.remove("field-wide");
     stylePicker.classList.add("editor-style-picker");
     const themePicker = elementFromHtml(`<section class="gallery-theme-picker" aria-labelledby="galleryThemeTitle">
-        <div class="gallery-theme-heading"><strong id="galleryThemeTitle">Estilos iniciales</strong><small>Aplica una combinación completa y personalízala después.</small></div>
+        <div class="gallery-theme-heading"><strong id="galleryThemeTitle">Estilos</strong></div>
         <div class="gallery-theme-grid">
-            <button type="button" data-gallery-theme="natural" style="--theme-a:#f7f4ee;--theme-b:#9b7442"><i></i><span><strong>Natural</strong><small>Luminosa y atemporal</small></span></button>
-            <button type="button" data-gallery-theme="editorial" style="--theme-a:#f3efe7;--theme-b:#765235"><i></i><span><strong>Editorial</strong><small>Elegante y narrativa</small></span></button>
-            <button type="button" data-gallery-theme="nocturnal" style="--theme-a:#151515;--theme-b:#d4b477"><i></i><span><strong>Nocturna</strong><small>Oscura y cinematográfica</small></span></button>
-            <button type="button" data-gallery-theme="modern" style="--theme-a:#f4f5f7;--theme-b:#315bd6"><i></i><span><strong>Moderna</strong><small>Limpia y geométrica</small></span></button>
+            <button type="button" data-gallery-theme="natural" style="--theme-a:#f7f4ee;--theme-b:#9b7442"><i></i><span><strong>Natural</strong></span></button>
+            <button type="button" data-gallery-theme="editorial" style="--theme-a:#f3efe7;--theme-b:#765235"><i></i><span><strong>Editorial</strong></span></button>
+            <button type="button" data-gallery-theme="nocturnal" style="--theme-a:#151515;--theme-b:#d4b477"><i></i><span><strong>Nocturna</strong></span></button>
+            <button type="button" data-gallery-theme="modern" style="--theme-a:#f4f5f7;--theme-b:#315bd6"><i></i><span><strong>Moderna</strong></span></button>
         </div>
     </section>`);
     designPanel.append(themePicker, elementFromHtml('<div class="editor-section-divider"><span>PERSONALIZAR</span></div>'), stylePicker);
@@ -355,7 +355,7 @@ function enhanceGalleryEditor() {
     xInput.type = "hidden";
     yInput.type = "hidden";
     const logoAdjuster = elementFromHtml(`<div id="editLogoControls" class="logo-adjuster" hidden>
-        <div class="logo-adjuster-heading"><div><strong>Ajustar imagen</strong><small>También puedes arrastrarla en la portada.</small></div><button type="button" class="secondary small-button" data-reset-edit-logo>Restablecer</button></div>
+        <div class="logo-adjuster-heading"><div><strong>Ajustar imagen</strong><small>Arrastra para colocar.</small></div><button type="button" class="secondary small-button" data-reset-edit-logo>Restablecer</button></div>
         <div class="logo-adjuster-grid">
             <div class="logo-size-control"><label for="editLogoScale">Tamaño</label><div class="number-stepper"><button type="button" data-adjust-target="editLogoScale" data-delta="-5" aria-label="Reducir tamaño">−</button><span data-logo-scale-slot></span><span>%</span><button type="button" data-adjust-target="editLogoScale" data-delta="5" aria-label="Aumentar tamaño">＋</button></div></div>
             <div class="position-control"><span>Posición horizontal</span><div class="position-buttons" data-position-group="editLogoPositionX"><button type="button" data-position-value="20">Izquierda</button><button type="button" data-position-value="50">Centro</button><button type="button" data-position-value="80">Derecha</button></div><span data-logo-x-slot></span></div>

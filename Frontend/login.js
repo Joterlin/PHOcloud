@@ -128,13 +128,13 @@ function configureMode(nextMode) {
     passwordInput.autocomplete = mode === "login" ? "current-password" : "new-password";
 
     const content = {
-        login: ["TU ESPACIO STRACLASE", "Bienvenido de nuevo", "Envía archivos grandes y gestiona tus galerías profesionales.", "Entrar"],
-        register: ["EMPIEZA GRATIS", "Crea tu cuenta", "Transfiere hasta 5 GiB durante 24 horas y crea hasta tres galerías.", "Crear cuenta"],
-        setup: ["PRIMERA CONFIGURACIÓN", "Crea la cuenta inicial", "Administra transferencias, galerías y marca desde un único espacio.", "Crear cuenta"],
-        forgot: ["RECUPERAR ACCESO", "¿Olvidaste tu contraseña?", "Te enviaremos un enlace seguro para crear una nueva.", "Enviar enlace"],
-        resend: ["CONFIRMAR CORREO", "Solicita otro enlace", "Escribe el correo con el que creaste tu cuenta.", "Reenviar verificación"],
-        reset: ["NUEVA CONTRASEÑA", "Recupera tu cuenta", "Elige una contraseña nueva de al menos 10 caracteres.", "Guardar contraseña"],
-        verify: ["CONFIRMANDO CUENTA", "Estamos verificando tu correo", "Solo tardará un momento.", "Verificando…"]
+        login: ["STRACLASE", "Entrar", "Tu espacio de trabajo.", "Entrar"],
+        register: ["GRATIS", "Crear cuenta", "3 galerías incluidas.", "Crear cuenta"],
+        setup: ["INICIO", "Crear cuenta", "Configura tu espacio.", "Crear cuenta"],
+        forgot: ["ACCESO", "Recuperar contraseña", "Recibirás un enlace.", "Enviar enlace"],
+        resend: ["CORREO", "Reenviar verificación", "Escribe tu correo.", "Reenviar"],
+        reset: ["ACCESO", "Nueva contraseña", "Mínimo 10 caracteres.", "Guardar"],
+        verify: ["CORREO", "Verificando…", "", "Verificando…"]
     }[mode] || null;
     if (!content) return configureMode("login");
     [authEyebrow.textContent, authTitle.textContent, authIntro.textContent, authButton.textContent] = content;
