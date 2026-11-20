@@ -5,6 +5,7 @@ let senderVerifiedEmail = "";
 let authenticated = false;
 let latestTransferId = "";
 let conversionPreviewUrls = [];
+let automaticTitle = true;
 const PENDING_TRANSFER_CLAIM_KEY = "straclase-pending-transfer-claim";
 const GALLERY_PHOTO_EXTENSIONS = new Set([
     "jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif"
@@ -55,30 +56,6 @@ function renderConversionPreview(files) {
     return true;
 }
 
-function shareMethod() {
-    return document.querySelector('input[name="shareMethod"]:checked')?.value || "link";
-}
-
-function updateShareMethod() {
-    const byEmail = shareMethod() === "email";
-    byId("recipientEmailGroup").hidden = !byEmail;
-    byId("senderEmailGroup").hidden = !byEmail;
-    byId("recipientEmail").required = byEmail;
-    byId("senderEmail").required = byEmail;
-    if (!byEmail) {
-        byId("senderVerification").hidden = true;
-        byId("senderVerificationStatus").hidden = true;
-    } else if (senderVerifiedEmail === normalizedSenderEmail()) {
-        setVerificationStatus(
-            "Correo confirmado. El destinatario podrá responderte directamente.",
-            "success"
-        );
-    }
-    byId("continueButton").textContent = byEmail
-        ? "Subir y enviar por correo"
-        : "Crear enlace";
-}
-
 function normalizedSenderEmail() {
     return byId("senderEmail").value.trim().toLowerCase();
 }
@@ -95,12 +72,10 @@ function markSenderVerified(email) {
     byId("senderVerification").hidden = true;
     byId("requestSenderCode").textContent = "Verificado ✓";
     byId("requestSenderCode").disabled = true;
-    if (shareMethod() === "email") {
-        setVerificationStatus(
-            "Correo confirmado. El destinatario podrá responderte directamente.",
-            "success"
-        );
-    }
+    setVerificationStatus(
+        "Correo confirmado. El destinatario podrá responderte directamente.",
+        "success"
+    );
 }
 
 function invalidateSenderVerification() {
@@ -220,7 +195,6 @@ function renderSelection() {
     const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
     const hasFiles = selectedFiles.length > 0;
     byId("selection").hidden = !hasFiles;
-    byId("sendOptions").hidden = !hasFiles;
     byId("selectionCount").textContent = `${selectedFiles.length} archivo${selectedFiles.length === 1 ? "" : "s"}`;
     byId("selectionSize").textContent = formatBytes(total);
     byId("fileList").replaceChildren(...selectedFiles.slice(0, 30).map((file) => {
@@ -249,12 +223,17 @@ function selectFiles(files) {
         return showError(`La selección supera ${formatBytes(capabilities.maxTotalSize)}.`);
     }
     selectedFiles = next;
+    if (automaticTitle || !byId("sendTitleInput").value.trim()) {
+        byId("sendTitleInput").value = defaultTitle();
+        automaticTitle = true;
+    }
     renderSelection();
 }
 
 function defaultTitle() {
+    if (selectedFiles.length > 1) return `${selectedFiles.length} archivos`;
     const first = selectedFiles[0]?.name?.replace(/\.[^.]+$/, "").trim();
-    return first ? first.slice(0, 100) : "Transferencia";
+    return first ? first.slice(0, 100) : "Transferencia de Straclase";
 }
 
 async function retryPart(url, body, attempts = 3) {
@@ -384,8 +363,8 @@ function showResult(data, deliveryStatus = null) {
     const canConvert = renderConversionPreview(selectedFiles);
     byId("conversionOffer").hidden = !canConvert;
     byId("convertGuestTransfer").textContent = authenticated
-        ? "Convertir en galería"
-        : "Crear cuenta y convertir en galería";
+        ? "Personalizar como galería"
+        : "Crear cuenta y personalizar";
     byId("conversionOfferText").textContent = authenticated
         ? "Personaliza estas fotos como una galería sin volver a subirlas."
         : "Crea una cuenta gratis y personaliza estas fotos sin volver a subirlas.";
@@ -407,6 +386,7 @@ byId("guestFiles").addEventListener("change", (event) => selectFiles(event.targe
 byId("clearFiles").addEventListener("click", () => {
     selectedFiles = [];
     byId("guestFiles").value = "";
+    if (automaticTitle) byId("sendTitleInput").value = "";
     renderSelection();
 });
 for (const eventName of ["dragenter", "dragover"]) {
@@ -422,13 +402,12 @@ for (const eventName of ["dragleave", "drop"]) {
     });
 }
 byId("dropZone").addEventListener("drop", (event) => selectFiles(event.dataTransfer.files));
-for (const input of document.querySelectorAll('input[name="shareMethod"]')) {
-    input.addEventListener("change", updateShareMethod);
-}
+byId("sendTitleInput").addEventListener("input", () => {
+    automaticTitle = false;
+});
 byId("senderEmail").addEventListener("input", invalidateSenderVerification);
 byId("requestSenderCode").addEventListener("click", requestSenderVerification);
 byId("verifySenderCode").addEventListener("click", confirmSenderCode);
-updateShareMethod();
 
 byId("continueButton").addEventListener("click", async () => {
     if (!selectedFiles.length || !capabilities?.enabled) return;
@@ -436,30 +415,25 @@ byId("continueButton").addEventListener("click", async () => {
     button.disabled = true;
     button.textContent = "Enviando…";
     byId("sendError").hidden = true;
-    const selectedMethod = shareMethod();
-    const recipientEmail = selectedMethod === "email"
-        ? byId("recipientEmail").value.trim()
-        : "";
-    if (selectedMethod === "email" && !byId("recipientEmail").checkValidity()) {
+    const recipientEmail = byId("recipientEmail").value.trim();
+    if (!byId("recipientEmail").checkValidity()) {
         byId("recipientEmail").reportValidity();
         button.disabled = false;
-        updateShareMethod();
+        button.textContent = "Transferir";
         byId("uploadStatus").hidden = true;
         return;
     }
-    const senderEmail = selectedMethod === "email"
-        ? normalizedSenderEmail()
-        : "";
-    if (selectedMethod === "email" && !byId("senderEmail").checkValidity()) {
+    const senderEmail = normalizedSenderEmail();
+    if (!byId("senderEmail").checkValidity()) {
         byId("senderEmail").reportValidity();
         button.disabled = false;
-        updateShareMethod();
+        button.textContent = "Transferir";
         return;
     }
-    if (selectedMethod === "email" && senderVerifiedEmail !== senderEmail) {
+    if (senderVerifiedEmail !== senderEmail) {
         await requestSenderVerification();
         button.disabled = false;
-        updateShareMethod();
+        button.textContent = "Transferir";
         return;
     }
     const metadata = {
@@ -467,37 +441,33 @@ byId("continueButton").addEventListener("click", async () => {
         message: byId("sendMessage").value.trim(),
         recipientEmail,
         senderEmail,
-        password: byId("sendPassword").value
+        password: ""
     };
     try {
         setProgress(0, "Preparando transferencia…");
         const data = capabilities.uploadMode === "multipart"
             ? await createMultipartTransfer(metadata)
             : await createLocalTransfer(metadata);
-        if (selectedMethod === "email") {
-            setProgress(100, "Enviando el correo al destinatario…");
-            try {
-                const mail = await emailTransfer(data, recipientEmail);
-                showResult(data, {
-                    delivered: mail.delivered,
-                    warning: !mail.delivered,
-                    message: mail.message
-                });
-            } catch (emailError) {
-                showResult(data, {
-                    delivered: false,
-                    warning: true,
-                    message: "Los archivos están listos, pero el correo no pudo enviarse. Copia el enlace y compártelo manualmente."
-                });
-            }
-        } else {
-            showResult(data);
+        setProgress(100, "Enviando el correo al destinatario…");
+        try {
+            const mail = await emailTransfer(data, recipientEmail);
+            showResult(data, {
+                delivered: mail.delivered,
+                warning: !mail.delivered,
+                message: mail.message
+            });
+        } catch (emailError) {
+            showResult(data, {
+                delivered: false,
+                warning: true,
+                message: "Los archivos están listos, pero el correo no pudo enviarse. Copia el enlace y compártelo manualmente."
+            });
         }
     } catch (error) {
         showError(`${error.message || "No se pudo completar el envío"}. Puedes intentarlo de nuevo con los mismos archivos.`);
         byId("uploadStatus").hidden = true;
         button.disabled = false;
-        updateShareMethod();
+        button.textContent = "Transferir";
     }
 });
 
@@ -509,7 +479,6 @@ byId("copyLink").addEventListener("click", async () => {
         byId("resultLink").select();
     }
 });
-byId("newTransfer").addEventListener("click", () => window.location.reload());
 byId("convertGuestTransfer").addEventListener("click", () => {
     if (!latestTransferId) return;
     if (authenticated) {

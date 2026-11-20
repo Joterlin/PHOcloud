@@ -27,7 +27,7 @@
     <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-4"></script>
-    <link rel="stylesheet" href="/send.css?v=20261115-copy1">
+    <link rel="stylesheet" href="/send.css?v=20261120-transfer1">
     <link rel="stylesheet" href="/analytics.css?v=1">
     <script type="application/ld+json">
     {
@@ -71,42 +71,26 @@
         </nav>
     </header>
     <main>
-        <section class="send-copy">
-            <p class="eyebrow">SIN REGISTRO · 24 HORAS</p>
-            <h1>Envía archivos grandes.<br><em>Sin complicaciones.</em></h1>
-            <div class="trust-row"><span>Privado</span><span>24 horas</span><span>ZIP</span></div>
-        </section>
         <section class="send-card" aria-labelledby="sendTitle">
-            <div class="step"><span>01</span><div><p class="eyebrow">NUEVO ENVÍO</p><h2 id="sendTitle">Enviar archivos</h2></div></div>
+            <div class="step"><div><p class="eyebrow">NUEVA TRANSFERENCIA</p><h2 id="sendTitle">Enviar archivos</h2></div></div>
             <label id="dropZone" class="drop-zone" for="guestFiles">
                 <input id="guestFiles" type="file" multiple>
                 <span class="drop-icon">＋</span>
-                <strong>Seleccionar archivos</strong>
-                <small>Arrastra aquí</small>
+                <strong>Añadir archivos</strong>
+                <small>o arrástralos aquí</small>
             </label>
             <div id="selection" class="selection" hidden>
                 <div class="selection-head"><strong id="selectionCount"></strong><span id="selectionSize"></span></div>
                 <ul id="fileList"></ul>
                 <button id="clearFiles" class="text-button" type="button">Quitar selección</button>
             </div>
-            <div id="sendOptions" class="send-options" hidden>
-                <fieldset class="share-choice">
-                    <legend>Compartir</legend>
-                    <label class="share-option">
-                        <input type="radio" name="shareMethod" value="link" checked>
-                        <span><strong>Enlace</strong></span>
-                    </label>
-                    <label class="share-option">
-                        <input type="radio" name="shareMethod" value="email">
-                        <span><strong>Correo</strong></span>
-                    </label>
-                </fieldset>
-                <label id="recipientEmailGroup" hidden>Correo del destinatario
-                    <input id="recipientEmail" type="email" maxlength="254" autocomplete="email" placeholder="persona@correo.com">
+            <div id="sendOptions" class="send-options">
+                <label id="recipientEmailGroup">Enviar a
+                    <input id="recipientEmail" type="email" maxlength="254" autocomplete="email" placeholder="destinatario@correo.com" required>
                 </label>
-                <label id="senderEmailGroup" hidden>Tu correo
+                <label id="senderEmailGroup">Tu correo
                     <div class="email-verify-row">
-                        <input id="senderEmail" type="email" maxlength="254" autocomplete="email" placeholder="tu@correo.com">
+                        <input id="senderEmail" type="email" maxlength="254" autocomplete="email" placeholder="remitente@correo.com" required>
                         <button id="requestSenderCode" class="secondary-button" type="button">Verificar correo</button>
                     </div>
                 </label>
@@ -117,14 +101,11 @@
                     <button id="verifySenderCode" class="secondary-button" type="button">Confirmar código</button>
                 </div>
                 <p id="senderVerificationStatus" class="verification-status" aria-live="polite" hidden></p>
-                <label>Título
-                    <input id="sendTitleInput" type="text" maxlength="100" placeholder="Ej. Material de la sesión">
+                <label>Título <span>Se crea automáticamente</span>
+                    <input id="sendTitleInput" type="text" maxlength="100" placeholder="Añade archivos para generar el título">
                 </label>
-                <label>Mensaje
-                    <textarea id="sendMessage" maxlength="500" placeholder="Añade una nota para quien reciba el enlace"></textarea>
-                </label>
-                <label>Contraseña
-                    <input id="sendPassword" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="Protege el acceso al enlace">
+                <label>Mensaje <span>Opcional</span>
+                    <textarea id="sendMessage" maxlength="500" placeholder="Escribe una nota breve"></textarea>
                 </label>
             </div>
             <p id="limits" class="limits">Consultando límites actuales…</p>
@@ -132,7 +113,7 @@
             <div id="uploadStatus" class="upload-status" hidden>
                 <div><span id="uploadProgress"></span></div><p id="uploadText">Preparando transferencia…</p>
             </div>
-            <button id="continueButton" class="continue" type="button" disabled>Enviar archivos</button>
+            <button id="continueButton" class="continue" type="button" disabled>Transferir</button>
             <p class="account-note">24 h · <a href="/terminos">Términos</a></p>
             <div id="sendResult" class="send-result" hidden>
                 <span class="success-mark">✓</span>
@@ -140,20 +121,26 @@
                 <p id="resultSummary"></p>
                 <p id="resultDeliveryStatus" class="result-delivery-status" hidden></p>
                 <input id="resultLink" type="text" readonly aria-label="Enlace de la transferencia">
-                <div><button id="copyLink" type="button" class="continue">Copiar enlace</button><button id="newTransfer" type="button" class="text-button">Crear otra</button></div>
+                <div class="result-actions"><button id="copyLink" type="button" class="continue">Copiar enlace de transferencia</button></div>
                 <div id="conversionOffer" class="conversion-offer" hidden>
                     <div id="conversionPreview" class="conversion-preview" aria-label="Vista previa de la galería"></div>
                     <div class="conversion-copy">
-                        <strong>Convierte en galería</strong>
-                        <span id="conversionOfferText">Sin volver a subir.</span>
-                        <button id="convertGuestTransfer" type="button" class="conversion-button">Crear galería</button>
+                        <strong>Crear una galería personalizada</strong>
+                        <span id="conversionOfferText">Usa estas fotografías sin volver a subirlas.</span>
+                        <button id="convertGuestTransfer" type="button" class="conversion-button">Personalizar como galería</button>
                     </div>
                 </div>
             </div>
         </section>
+        <section class="send-copy">
+            <p class="eyebrow">SIN REGISTRO · 24 HORAS</p>
+            <h1>Comparte lo grande.<br><em>Entrega con clase.</em></h1>
+            <p class="send-lead">Envía hasta 3 GB y transforma tus fotografías en una galería cuando quieras.</p>
+            <div class="trust-row"><span>Privado</span><span>24 horas</span><span>Enlace directo</span></div>
+        </section>
     </main>
     <footer><span>© Straclase</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>
     <script src="/analytics.js?v=1"></script>
-    <script src="/send.js?v=20261115-copy1"></script>
+    <script src="/send.js?v=20261120-transfer1"></script>
 </body>
 </html>
