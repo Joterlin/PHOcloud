@@ -4,7 +4,11 @@
     const CONSENT_KEY = "straclase-analytics-consent";
     const VISITOR_KEY = "straclase-analytics-visitor";
     const ALLOWED_EVENTS = new Set([
-        "$pageview", "signup_started", "signup_completed", "login_completed"
+        "$pageview", "signup_started", "signup_completed", "login_completed",
+        "transfer_files_selected", "transfer_verification_started",
+        "transfer_email_verified", "transfer_upload_started",
+        "transfer_upload_resumed", "transfer_completed", "transfer_failed",
+        "transfer_gallery_clicked", "web_vital"
     ]);
     let posthogReady = false;
     let pendingIdentity = "";
@@ -125,14 +129,27 @@
         }).catch(() => {});
     }
 
+    function safeProperties(properties) {
+        const allowedKeys = new Set([
+            "file_count", "total_size_mb", "upload_mode", "delivered_by_email",
+            "authenticated", "stage", "resumable", "metric", "value", "rating"
+        ]);
+        return Object.fromEntries(Object.entries(properties || {}).filter(([key, value]) => (
+            allowedKeys.has(key)
+            && (["string", "number", "boolean"].includes(typeof value))
+        )));
+    }
+
     async function capture(eventName, properties = {}) {
         if (!ALLOWED_EVENTS.has(eventName) || consent() !== "granted") return false;
-        recordInternal(eventName, properties);
+        const safe = safeProperties(properties);
+        recordInternal(eventName, safe);
         await initialization.catch(() => {});
         try {
             if (posthogReady) window.posthog.capture(eventName, {
                 page_path: safePath(),
-                traffic_source: safeSource()
+                traffic_source: safeSource(),
+                ...safe
             });
         } catch {}
         return true;
@@ -174,6 +191,52 @@
             if (posthogReady) window.posthog.reset();
             localStorage.removeItem(VISITOR_KEY);
         } catch {}
+    }
+
+    function initWebVitals() {
+        if (!("PerformanceObserver" in window)) return;
+        const values = { LCP: null, CLS: 0, INP: null };
+        const sent = new Set();
+        const observe = (type, handler) => {
+            try {
+                const observer = new PerformanceObserver((list) => {
+                    for (const entry of list.getEntries()) handler(entry);
+                });
+                observer.observe({ type, buffered: true });
+            } catch {}
+        };
+        observe("largest-contentful-paint", (entry) => {
+            values.LCP = entry.startTime;
+        });
+        observe("layout-shift", (entry) => {
+            if (!entry.hadRecentInput) values.CLS += entry.value;
+        });
+        observe("event", (entry) => {
+            if (entry.interactionId && entry.duration > (values.INP || 0)) {
+                values.INP = entry.duration;
+            }
+        });
+        const rating = (metric, value) => {
+            const limits = {
+                LCP: [2500, 4000], CLS: [0.1, 0.25], INP: [200, 500]
+            }[metric];
+            if (!limits) return "unknown";
+            return value <= limits[0] ? "good" : value <= limits[1] ? "needs-improvement" : "poor";
+        };
+        const flush = () => {
+            for (const [metric, rawValue] of Object.entries(values)) {
+                if (rawValue === null || sent.has(metric)) continue;
+                const value = metric === "CLS"
+                    ? Math.round(rawValue * 1000) / 1000
+                    : Math.round(rawValue);
+                sent.add(metric);
+                capture("web_vital", { metric, value, rating: rating(metric, value) });
+            }
+        };
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") flush();
+        });
+        window.addEventListener("pagehide", flush);
     }
 
     function renderConsent() {
@@ -219,6 +282,7 @@
     };
 
     renderConsent();
+    initWebVitals();
     if (consent() === "granted") capturePageview();
     window.addEventListener("popstate", capturePageview);
 })();

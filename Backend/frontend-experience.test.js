@@ -95,6 +95,11 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(send, /Comparte lo grande\.<br><em>Entrega con clase\.<\/em>/);
     assert.match(sendScript, /\/transfers\/multipart/);
     assert.match(sendScript, /retryPart/);
+    assert.match(sendScript, /PENDING_MULTIPART_KEY/);
+    assert.match(sendScript, /uploadedPartNumbers/);
+    assert.match(sendScript, /transfer_upload_resumed/);
+    assert.match(sendScript, /requestSenderVerification\(\{ continueTransfer: true \}\)/);
+    assert.match(sendScript, /queueMicrotask\(\(\) => submitTransfer\(\)\)/);
     assert.doesNotMatch(send, /name="shareMethod"/);
     assert.match(send, /id="recipientEmail"/);
     assert.match(send, /id="senderEmail"/);
@@ -107,7 +112,10 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(sendScript, /async function emailTransfer/);
     assert.match(sendScript, /title: byId\("sendTitleInput"\)\.value\.trim\(\) \|\| defaultTitle\(\)/);
     assert.match(sendScript, /id="resultLink"|resultLink/);
-    assert.match(send, /Copiar enlace de transferencia/);
+    assert.match(send, /Copiar enlace/);
+    assert.match(send, /id="newTransfer"/);
+    assert.match(send, /id="recipientEmailError"/);
+    assert.match(send, /id="senderEmailError"/);
     assert.match(send, /id="convertGuestTransfer"/);
     assert.match(send, /id="conversionOffer"[^>]+hidden/);
     assert.match(send, /id="conversionPreview"/);
@@ -236,6 +244,9 @@ test("la analítica es consentida, privada y muestra únicamente datos reales", 
     assert.match(analytics, /disable_session_recording: true/);
     assert.match(analytics, /opt_out_capturing_by_default: true/);
     assert.match(analytics, /consent\(\) !== "granted"/);
+    assert.match(analytics, /transfer_completed/);
+    assert.match(analytics, /PerformanceObserver/);
+    assert.match(analytics, /largest-contentful-paint/);
     assert.doesNotMatch(read("public/gallery.html"), /analytics\.js/);
     assert.doesNotMatch(read("public/transfer.html"), /analytics\.js/);
     assert.match(privacy, /Cookies y analítica/);

@@ -169,6 +169,15 @@ main {
 .send-options input::placeholder,
 .send-options textarea::placeholder { color: color-mix(in srgb, var(--muted) 72%, transparent); }
 .send-options textarea { min-height: 29px; resize: none; }
+.send-options input[aria-invalid="true"] { color: #a13227; }
+.field-error {
+    display: block;
+    margin: 2px 0 0;
+    color: #a13227;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.25;
+}
 
 .email-verify-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
 .email-verify-row input { min-width: 0; }
@@ -253,7 +262,21 @@ main {
 .send-result h3 { margin: 0 0 6px; font: 400 23px/1.1 Georgia, serif; }
 .send-result > p { margin: 7px 8px; color: var(--muted); font-size: 10px; }
 .send-result > input { width: calc(100% - 16px); margin: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); font-size: 10px; }
-.result-actions { margin-top: 4px; }
+.result-actions { margin-top: 4px; display: grid; gap: 7px; }
+.result-secondary {
+    width: calc(100% - 20px);
+    margin: 0 10px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+}
+.result-secondary:hover { border-color: var(--ink); }
 
 .send-result .conversion-offer {
     margin: 16px 0 0;
@@ -280,13 +303,16 @@ footer { min-height: 54px; padding: 17px clamp(20px, 4vw, 54px); display: flex; 
 footer a { margin-left: 14px; }
 
 @media (max-width: 800px) {
-    main { grid-template-columns: 1fr; max-width: 580px; gap: 48px; padding-top: 22px; }
+    main { grid-template-columns: 1fr; max-width: 580px; gap: 36px; padding-top: 16px; }
     .send-card { justify-self: center; }
     .send-copy { text-align: center; }
     .send-copy h1 { font-size: clamp(44px, 12vw, 64px); }
     .send-lead { margin-right: auto; margin-left: auto; }
     .trust-row { justify-content: center; }
     .public-bar nav a:first-child { display: none; }
+    .send-options input,
+    .send-options textarea { font-size: 16px; }
+    .secondary-button { min-height: 32px; }
 }
 
 @media (max-width: 380px) {
@@ -295,4 +321,12 @@ footer a { margin-left: 14px; }
     .public-bar { padding-right: 14px; padding-left: 14px; }
     .wordmark span { display: none; }
     .send-result .conversion-offer { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+    .public-bar { height: 58px; }
+    main { min-height: auto; padding-bottom: 34px; }
+    .send-copy h1 { font-size: clamp(40px, 12vw, 54px); }
+    .send-lead { margin: 17px auto; font-size: 14px; }
+    footer { flex-wrap: wrap; gap: 8px; }
 }

@@ -3119,7 +3119,11 @@ app.post(
         const visitorId = req.body?.visitorId;
         const dedupeKey = req.body?.dedupeKey;
         const allowedEvents = new Set([
-            "$pageview", "signup_started", "signup_completed", "login_completed"
+            "$pageview", "signup_started", "signup_completed", "login_completed",
+            "transfer_files_selected", "transfer_verification_started",
+            "transfer_email_verified", "transfer_upload_started",
+            "transfer_upload_resumed", "transfer_completed", "transfer_failed",
+            "transfer_gallery_clicked", "web_vital"
         ]);
         if (!allowedEvents.has(eventName)
             || typeof visitorId !== "string"
@@ -3864,11 +3868,28 @@ app.post("/transfers/:transferId/files/:fileId/start", requireSameOrigin, requir
     }
     if (file.status === "ready") return res.json({ ready: true });
     if (file.status === "uploading" && file.objectKey && file.multipartUploadId) {
-        return res.json({
-            fileId: file.id,
-            partSize: objectStorage.partSize,
-            partCount: Math.max(1, Math.ceil(file.size / objectStorage.partSize))
-        });
+        try {
+            const uploadedParts = await objectStorage.listParts({
+                key: file.objectKey,
+                uploadId: file.multipartUploadId
+            });
+            deliveryStore.touchTransferUpload(
+                transfer.id, req.auth.userId,
+                new Date(Date.now() + economicConfig.uploadLeaseMs).toISOString()
+            );
+            return res.json({
+                fileId: file.id,
+                partSize: objectStorage.partSize,
+                partCount: Math.max(1, Math.ceil(file.size / objectStorage.partSize)),
+                uploadedPartNumbers: uploadedParts.map((part) => part.partNumber)
+            });
+        } catch (error) {
+            console.error(error);
+            recordUsage(req.auth.userId, "errors", 1);
+            return res.status(502).json({
+                error: "No se pudo reanudar la subida del archivo"
+            });
+        }
     }
     try {
         const upload = await objectStorage.startMultipart({
@@ -3887,7 +3908,8 @@ app.post("/transfers/:transferId/files/:fileId/start", requireSameOrigin, requir
         res.status(201).json({
             fileId: file.id,
             partSize: objectStorage.partSize,
-            partCount: Math.max(1, Math.ceil(file.size / objectStorage.partSize))
+            partCount: Math.max(1, Math.ceil(file.size / objectStorage.partSize)),
+            uploadedPartNumbers: []
         });
     } catch (error) {
         console.error(error);

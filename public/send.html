@@ -27,7 +27,7 @@
     <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-4"></script>
-    <link rel="stylesheet" href="/send.css?v=20261120-compact2">
+    <link rel="stylesheet" href="/send.css?v=20261120-flow1">
     <link rel="stylesheet" href="/analytics.css?v=1">
     <script type="application/ld+json">
     {
@@ -93,13 +93,15 @@
             </div>
             <div id="sendOptions" class="send-options">
                 <label id="recipientEmailGroup">Enviar a
-                    <input id="recipientEmail" type="email" maxlength="254" autocomplete="email" placeholder="destinatario@correo.com" required>
+                    <input id="recipientEmail" type="email" maxlength="254" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="destinatario@correo.com" aria-describedby="recipientEmailError" required>
+                    <small id="recipientEmailError" class="field-error" aria-live="polite" hidden></small>
                 </label>
                 <label id="senderEmailGroup">Tu correo
                     <div class="email-verify-row">
-                        <input id="senderEmail" type="email" maxlength="254" autocomplete="email" placeholder="remitente@correo.com" required>
+                        <input id="senderEmail" type="email" maxlength="254" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="remitente@correo.com" aria-describedby="senderEmailError" required>
                         <button id="requestSenderCode" class="secondary-button" type="button">Verificar correo</button>
                     </div>
+                    <small id="senderEmailError" class="field-error" aria-live="polite" hidden></small>
                 </label>
                 <div id="senderVerification" class="sender-verification" hidden>
                     <label>Código de 6 dígitos
@@ -128,7 +130,10 @@
                 <p id="resultSummary"></p>
                 <p id="resultDeliveryStatus" class="result-delivery-status" hidden></p>
                 <input id="resultLink" type="text" readonly aria-label="Enlace de la transferencia">
-                <div class="result-actions"><button id="copyLink" type="button" class="continue">Copiar enlace de transferencia</button></div>
+                <div class="result-actions">
+                    <button id="copyLink" type="button" class="continue">Copiar enlace</button>
+                    <button id="newTransfer" type="button" class="result-secondary">Nueva transferencia</button>
+                </div>
                 <div id="conversionOffer" class="conversion-offer" hidden>
                     <div id="conversionPreview" class="conversion-preview" aria-label="Vista previa de la galería"></div>
                     <div class="conversion-copy">
@@ -147,7 +152,7 @@
         </section>
     </main>
     <footer><span>© Straclase</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>
-    <script src="/analytics.js?v=1"></script>
-    <script src="/send.js?v=20261120-compact2"></script>
+    <script src="/analytics.js?v=20261120-vitals1"></script>
+    <script src="/send.js?v=20261120-flow1"></script>
 </body>
 </html>

@@ -6,7 +6,11 @@ let authenticated = false;
 let latestTransferId = "";
 let conversionPreviewUrls = [];
 let automaticTitle = true;
+let transferSubmitting = false;
+let continueAfterVerification = false;
 const PENDING_TRANSFER_CLAIM_KEY = "straclase-pending-transfer-claim";
+const PENDING_MULTIPART_KEY = "straclase-pending-multipart-v1";
+const PENDING_MULTIPART_MAX_AGE = 24 * 60 * 60 * 1000;
 const GALLERY_PHOTO_EXTENSIONS = new Set([
     "jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif"
 ]);
@@ -60,6 +64,40 @@ function normalizedSenderEmail() {
     return byId("senderEmail").value.trim().toLowerCase();
 }
 
+function captureEvent(eventName, properties = {}) {
+    try { window.straclaseAnalytics?.capture(eventName, properties); }
+    catch {}
+}
+
+function setFieldError(inputId, errorId, message) {
+    const input = byId(inputId);
+    const error = byId(errorId);
+    input.setAttribute("aria-invalid", "true");
+    error.textContent = message;
+    error.hidden = false;
+}
+
+function clearFieldError(inputId, errorId) {
+    byId(inputId).removeAttribute("aria-invalid");
+    byId(errorId).hidden = true;
+}
+
+function validateEmailField(inputId, errorId, emptyMessage) {
+    const input = byId(inputId);
+    clearFieldError(inputId, errorId);
+    if (!input.value.trim()) {
+        setFieldError(inputId, errorId, emptyMessage);
+        input.focus();
+        return false;
+    }
+    if (!input.checkValidity()) {
+        setFieldError(inputId, errorId, "Escribe un correo válido.");
+        input.focus();
+        return false;
+    }
+    return true;
+}
+
 function setVerificationStatus(message, state = "") {
     const status = byId("senderVerificationStatus");
     status.textContent = message;
@@ -69,6 +107,7 @@ function setVerificationStatus(message, state = "") {
 
 function markSenderVerified(email) {
     senderVerifiedEmail = email.toLowerCase();
+    clearFieldError("senderEmail", "senderEmailError");
     byId("senderVerification").hidden = true;
     byId("requestSenderCode").textContent = "Verificado ✓";
     byId("requestSenderCode").disabled = true;
@@ -87,10 +126,11 @@ function invalidateSenderVerification() {
     setVerificationStatus("");
 }
 
-async function requestSenderVerification() {
+async function requestSenderVerification({ continueTransfer = false } = {}) {
+    continueAfterVerification = continueTransfer || continueAfterVerification;
     const input = byId("senderEmail");
-    if (!input.checkValidity()) {
-        input.reportValidity();
+    if (!validateEmailField("senderEmail", "senderEmailError", "Escribe tu correo.")) {
+        continueAfterVerification = false;
         return false;
     }
     const button = byId("requestSenderCode");
@@ -108,8 +148,14 @@ async function requestSenderVerification() {
         ));
         if (data.verified) {
             markSenderVerified(data.email);
+            captureEvent("transfer_email_verified");
+            if (continueAfterVerification) {
+                continueAfterVerification = false;
+                queueMicrotask(() => submitTransfer());
+            }
             return true;
         }
+        captureEvent("transfer_verification_started");
         byId("senderVerification").hidden = false;
         byId("senderCode").value = data.devCode || "";
         byId("senderCode").focus();
@@ -157,6 +203,11 @@ async function confirmSenderCode() {
             }
         ));
         markSenderVerified(data.email);
+        captureEvent("transfer_email_verified");
+        if (continueAfterVerification) {
+            continueAfterVerification = false;
+            queueMicrotask(() => submitTransfer());
+        }
         return true;
     } catch (error) {
         showError(error.message || "No se pudo confirmar el código");
@@ -176,7 +227,12 @@ function formatBytes(bytes) {
 
 async function readResponse(response) {
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "No se pudo completar la operación");
+    if (!response.ok) {
+        const error = new Error(data.error || "No se pudo completar la operación");
+        error.status = response.status;
+        error.code = data.code || "";
+        throw error;
+    }
     return data;
 }
 
@@ -223,6 +279,10 @@ function selectFiles(files) {
         return showError(`La selección supera ${formatBytes(capabilities.maxTotalSize)}.`);
     }
     selectedFiles = next;
+    captureEvent("transfer_files_selected", {
+        file_count: next.length,
+        total_size_mb: Math.round(total / 1024 / 1024)
+    });
     if (automaticTitle || !byId("sendTitleInput").value.trim()) {
         byId("sendTitleInput").value = defaultTitle();
         automaticTitle = true;
@@ -265,21 +325,104 @@ async function runPool(items, concurrency, worker) {
     await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
 }
 
-async function createMultipartTransfer(metadata) {
+function stringHash(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+}
+
+function multipartSignature() {
+    return JSON.stringify(selectedFiles.map((file) => ({
+        nameHash: stringHash(file.name),
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+    })));
+}
+
+function metadataSignature(metadata) {
+    return stringHash(JSON.stringify(metadata));
+}
+
+function readPendingMultipart() {
+    try {
+        const pending = JSON.parse(sessionStorage.getItem(PENDING_MULTIPART_KEY) || "null");
+        if (!pending || Date.now() - pending.createdAt > PENDING_MULTIPART_MAX_AGE) {
+            sessionStorage.removeItem(PENDING_MULTIPART_KEY);
+            return null;
+        }
+        return pending;
+    } catch {
+        return null;
+    }
+}
+
+function storePendingMultipart(prepared, metadata) {
+    try {
+        sessionStorage.setItem(PENDING_MULTIPART_KEY, JSON.stringify({
+            createdAt: Date.now(),
+            signature: multipartSignature(),
+            metadataSignature: metadataSignature(metadata),
+            transferId: prepared.transferId,
+            totalBytes: prepared.totalBytes,
+            files: prepared.files.map((file) => ({ id: file.id, size: file.size }))
+        }));
+    } catch {}
+}
+
+function clearPendingMultipart() {
+    try { sessionStorage.removeItem(PENDING_MULTIPART_KEY); }
+    catch {}
+}
+
+async function discardPendingMultipart(pending) {
+    clearPendingMultipart();
+    if (!pending?.transferId) return;
+    await fetch(`/transfers/${encodeURIComponent(pending.transferId)}`, {
+        method: "DELETE"
+    }).catch(() => {});
+}
+
+async function prepareMultipartTransfer(metadata, allowResume) {
+    const pending = allowResume ? readPendingMultipart() : null;
+    if (pending?.signature === multipartSignature()
+        && pending.metadataSignature === metadataSignature(metadata)
+        && pending.files?.length === selectedFiles.length) {
+        captureEvent("transfer_upload_resumed", { file_count: selectedFiles.length });
+        return {
+            transferId: pending.transferId,
+            totalBytes: pending.totalBytes,
+            resumed: true,
+            files: pending.files.map((file, index) => ({
+                ...file,
+                name: selectedFiles[index].name
+            }))
+        };
+    }
+    if (pending) await discardPendingMultipart(pending);
+    const prepared = await readResponse(await fetch("/transfers/multipart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            ...metadata,
+            files: selectedFiles.map((file) => ({
+                name: file.name,
+                size: file.size,
+                type: file.type
+            }))
+        })
+    }));
+    storePendingMultipart(prepared, metadata);
+    return prepared;
+}
+
+async function createMultipartTransfer(metadata, allowResume = true) {
     let prepared;
     try {
-        prepared = await readResponse(await fetch("/transfers/multipart", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                ...metadata,
-                files: selectedFiles.map((file) => ({
-                    name: file.name,
-                    size: file.size,
-                    type: file.type
-                }))
-            })
-        }));
+        prepared = await prepareMultipartTransfer(metadata, allowResume);
         let uploadedBytes = 0;
         const totalBytes = prepared.totalBytes || 1;
         for (let fileIndex = 0; fileIndex < prepared.files.length; fileIndex += 1) {
@@ -287,8 +430,21 @@ async function createMultipartTransfer(metadata) {
             const sourceFile = selectedFiles[fileIndex];
             const endpoint = `/transfers/${encodeURIComponent(prepared.transferId)}/files/${encodeURIComponent(remoteFile.id)}`;
             const start = await readResponse(await fetch(`${endpoint}/start`, { method: "POST" }));
-            if (!start.ready) {
-                const partNumbers = Array.from({ length: start.partCount }, (_, index) => index + 1);
+            if (start.ready) {
+                uploadedBytes += sourceFile.size;
+                continue;
+            }
+            const uploadedParts = new Set(start.uploadedPartNumbers || []);
+            for (const partNumber of uploadedParts) {
+                const startByte = (partNumber - 1) * start.partSize;
+                uploadedBytes += Math.max(0, Math.min(
+                    sourceFile.size - startByte, start.partSize
+                ));
+            }
+            const partNumbers = Array.from(
+                { length: start.partCount }, (_, index) => index + 1
+            ).filter((partNumber) => !uploadedParts.has(partNumber));
+            if (partNumbers.length) {
                 for (let index = 0; index < partNumbers.length; index += 9) {
                     const batch = partNumbers.slice(index, index + 9);
                     const signed = await readResponse(await fetch(`${endpoint}/parts`, {
@@ -305,18 +461,19 @@ async function createMultipartTransfer(metadata) {
                         setProgress(percent, `Subiendo ${remoteFile.name}… ${percent}%`);
                     });
                 }
-                await readResponse(await fetch(`${endpoint}/complete`, { method: "POST" }));
             }
+            await readResponse(await fetch(`${endpoint}/complete`, { method: "POST" }));
         }
-        return await readResponse(await fetch(
+        const result = await readResponse(await fetch(
             `/transfers/${encodeURIComponent(prepared.transferId)}/complete`,
             { method: "POST" }
         ));
+        clearPendingMultipart();
+        return result;
     } catch (error) {
-        if (prepared?.transferId) {
-            await fetch(`/transfers/${encodeURIComponent(prepared.transferId)}`, {
-                method: "DELETE"
-            }).catch(() => {});
+        if (prepared?.resumed && (error.status === 404 || error.status === 410)) {
+            await discardPendingMultipart(prepared);
+            return createMultipartTransfer(metadata, false);
         }
         throw error;
     }
@@ -407,35 +564,50 @@ byId("dropZone").addEventListener("drop", (event) => selectFiles(event.dataTrans
 byId("sendTitleInput").addEventListener("input", () => {
     automaticTitle = false;
 });
-byId("senderEmail").addEventListener("input", invalidateSenderVerification);
-byId("requestSenderCode").addEventListener("click", requestSenderVerification);
+byId("recipientEmail").addEventListener("input", () => {
+    clearFieldError("recipientEmail", "recipientEmailError");
+});
+byId("senderEmail").addEventListener("input", () => {
+    clearFieldError("senderEmail", "senderEmailError");
+    continueAfterVerification = false;
+    invalidateSenderVerification();
+});
+byId("requestSenderCode").addEventListener("click", () => {
+    requestSenderVerification({ continueTransfer: false });
+});
 byId("verifySenderCode").addEventListener("click", confirmSenderCode);
 
-byId("continueButton").addEventListener("click", async () => {
-    if (!selectedFiles.length || !capabilities?.enabled) return;
+async function submitTransfer() {
+    if (!selectedFiles.length || !capabilities?.enabled || transferSubmitting) return;
+    transferSubmitting = true;
     const button = byId("continueButton");
     button.disabled = true;
     button.textContent = "Enviando…";
     byId("sendError").hidden = true;
     const recipientEmail = byId("recipientEmail").value.trim();
-    if (!byId("recipientEmail").checkValidity()) {
-        byId("recipientEmail").reportValidity();
+    if (!validateEmailField(
+        "recipientEmail", "recipientEmailError", "Escribe el correo del destinatario."
+    )) {
+        transferSubmitting = false;
         button.disabled = false;
         button.textContent = "Transferir";
         byId("uploadStatus").hidden = true;
         return;
     }
     const senderEmail = normalizedSenderEmail();
-    if (!byId("senderEmail").checkValidity()) {
-        byId("senderEmail").reportValidity();
+    if (!validateEmailField(
+        "senderEmail", "senderEmailError", "Escribe tu correo."
+    )) {
+        transferSubmitting = false;
         button.disabled = false;
         button.textContent = "Transferir";
         return;
     }
     if (senderVerifiedEmail !== senderEmail) {
-        await requestSenderVerification();
+        transferSubmitting = false;
         button.disabled = false;
         button.textContent = "Transferir";
+        await requestSenderVerification({ continueTransfer: true });
         return;
     }
     const metadata = {
@@ -446,17 +618,25 @@ byId("continueButton").addEventListener("click", async () => {
         password: ""
     };
     try {
+        captureEvent("transfer_upload_started", {
+            file_count: selectedFiles.length,
+            upload_mode: capabilities.uploadMode
+        });
         setProgress(0, "Preparando transferencia…");
         const data = capabilities.uploadMode === "multipart"
             ? await createMultipartTransfer(metadata)
             : await createLocalTransfer(metadata);
         setProgress(100, "Enviando el correo al destinatario…");
+        let deliveredByEmail = false;
         try {
             const mail = await emailTransfer(data, recipientEmail);
+            deliveredByEmail = Boolean(mail.delivered);
             showResult(data, {
                 delivered: mail.delivered,
                 warning: !mail.delivered,
-                message: mail.message
+                message: mail.delivered
+                    ? `Enviada a ${recipientEmail}`
+                    : mail.message
             });
         } catch (emailError) {
             showResult(data, {
@@ -465,13 +645,27 @@ byId("continueButton").addEventListener("click", async () => {
                 message: "Los archivos están listos, pero el correo no pudo enviarse. Copia el enlace y compártelo manualmente."
             });
         }
+        captureEvent("transfer_completed", {
+            file_count: data.fileCount,
+            delivered_by_email: deliveredByEmail
+        });
     } catch (error) {
+        captureEvent("transfer_failed", {
+            stage: "upload",
+            resumable: capabilities.uploadMode === "multipart"
+        });
         showError(`${error.message || "No se pudo completar el envío"}. Puedes intentarlo de nuevo con los mismos archivos.`);
         byId("uploadStatus").hidden = true;
         button.disabled = false;
-        button.textContent = "Transferir";
+        button.textContent = capabilities.uploadMode === "multipart"
+            ? "Reintentar transferencia"
+            : "Transferir";
+    } finally {
+        transferSubmitting = false;
     }
-});
+}
+
+byId("continueButton").addEventListener("click", submitTransfer);
 
 byId("copyLink").addEventListener("click", async () => {
     try {
@@ -483,6 +677,7 @@ byId("copyLink").addEventListener("click", async () => {
 });
 byId("convertGuestTransfer").addEventListener("click", () => {
     if (!latestTransferId) return;
+    captureEvent("transfer_gallery_clicked", { authenticated });
     if (authenticated) {
         window.location.assign(
             `/app?convertTransfer=${encodeURIComponent(latestTransferId)}`
@@ -496,6 +691,30 @@ byId("convertGuestTransfer").addEventListener("click", () => {
     window.location.assign(
         `/login?mode=register&next=${encodeURIComponent(next)}`
     );
+});
+
+byId("newTransfer").addEventListener("click", () => {
+    for (const url of conversionPreviewUrls) URL.revokeObjectURL(url);
+    conversionPreviewUrls = [];
+    selectedFiles = [];
+    latestTransferId = "";
+    automaticTitle = true;
+    byId("guestFiles").value = "";
+    byId("guestFolder").value = "";
+    byId("recipientEmail").value = "";
+    byId("sendTitleInput").value = "";
+    byId("sendMessage").value = "";
+    byId("copyLink").textContent = "Copiar enlace";
+    byId("sendResult").hidden = true;
+    byId("dropZone").hidden = false;
+    byId("sendOptions").hidden = false;
+    byId("limits").hidden = false;
+    byId("continueButton").hidden = false;
+    byId("continueButton").textContent = "Transferir";
+    byId("uploadStatus").hidden = true;
+    byId("sendError").hidden = true;
+    renderSelection();
+    byId("guestFiles").focus();
 });
 
 Promise.all([
