@@ -37,5 +37,9 @@
     "posthog-js": "^1.430.2",
     "stripe": "^22.6.0",
     "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "@railway/cli": "^5.75.0",
+    "railway": "^3.17.0"
   }
 }
