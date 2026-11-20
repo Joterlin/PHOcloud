@@ -90,6 +90,7 @@ test("separación de experiencias y conversión sin segunda subida", () => {
     assert.match(conversionSubmit, /Content-Type": "application\/json"/);
     assert.doesNotMatch(conversionSubmit, /FormData|append\("files"/);
     assert.match(send, /id="guestFiles"/);
+    assert.match(send, /id="guestFolder"[^>]+webkitdirectory/);
     assert.match(send, /SIN REGISTRO · 24 HORAS/);
     assert.match(send, /Comparte lo grande\.<br><em>Entrega con clase\.<\/em>/);
     assert.match(sendScript, /\/transfers\/multipart/);

@@ -383,9 +383,11 @@ async function emailTransfer(data, email) {
 }
 
 byId("guestFiles").addEventListener("change", (event) => selectFiles(event.target.files));
+byId("guestFolder").addEventListener("change", (event) => selectFiles(event.target.files));
 byId("clearFiles").addEventListener("click", () => {
     selectedFiles = [];
     byId("guestFiles").value = "";
+    byId("guestFolder").value = "";
     if (automaticTitle) byId("sendTitleInput").value = "";
     renderSelection();
 });

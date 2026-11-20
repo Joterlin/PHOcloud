@@ -27,7 +27,7 @@
     <link rel="apple-touch-icon" href="/assets/straclase-icon-192.png">
     <link rel="manifest" href="/site.webmanifest">
     <script src="/theme.js?v=20260910-4"></script>
-    <link rel="stylesheet" href="/send.css?v=20261120-transfer1">
+    <link rel="stylesheet" href="/send.css?v=20261120-compact2">
     <link rel="stylesheet" href="/analytics.css?v=1">
     <script type="application/ld+json">
     {
@@ -73,12 +73,19 @@
     <main>
         <section class="send-card" aria-labelledby="sendTitle">
             <div class="step"><div><p class="eyebrow">NUEVA TRANSFERENCIA</p><h2 id="sendTitle">Enviar archivos</h2></div></div>
-            <label id="dropZone" class="drop-zone" for="guestFiles">
-                <input id="guestFiles" type="file" multiple>
-                <span class="drop-icon">＋</span>
-                <strong>Añadir archivos</strong>
-                <small>o arrástralos aquí</small>
-            </label>
+            <div id="dropZone" class="file-pickers">
+                <label class="file-picker" for="guestFiles">
+                    <input id="guestFiles" type="file" multiple>
+                    <span class="picker-icon">＋</span>
+                    <strong>Añadir archivos</strong>
+                </label>
+                <label class="file-picker" for="guestFolder">
+                    <input id="guestFolder" type="file" webkitdirectory multiple>
+                    <span class="picker-icon picker-folder" aria-hidden="true">□</span>
+                    <strong>Añadir carpeta</strong>
+                </label>
+                <small>También puedes arrastrarlos aquí</small>
+            </div>
             <div id="selection" class="selection" hidden>
                 <div class="selection-head"><strong id="selectionCount"></strong><span id="selectionSize"></span></div>
                 <ul id="fileList"></ul>
@@ -108,13 +115,13 @@
                     <textarea id="sendMessage" maxlength="500" placeholder="Escribe una nota breve"></textarea>
                 </label>
             </div>
-            <p id="limits" class="limits">Consultando límites actuales…</p>
+            <p id="limits" class="limits">Consultando límites…</p>
             <p id="sendError" class="error" role="alert" hidden></p>
             <div id="uploadStatus" class="upload-status" hidden>
                 <div><span id="uploadProgress"></span></div><p id="uploadText">Preparando transferencia…</p>
             </div>
             <button id="continueButton" class="continue" type="button" disabled>Transferir</button>
-            <p class="account-note">24 h · <a href="/terminos">Términos</a></p>
+            <p class="account-note"><span>Disponibles 24 h</span><a href="/terminos">Términos</a></p>
             <div id="sendResult" class="send-result" hidden>
                 <span class="success-mark">✓</span>
                 <h3 id="resultTitle">Tu transferencia está lista</h3>
@@ -141,6 +148,6 @@
     </main>
     <footer><span>© Straclase</span><span><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></span></footer>
     <script src="/analytics.js?v=1"></script>
-    <script src="/send.js?v=20261120-transfer1"></script>
+    <script src="/send.js?v=20261120-compact2"></script>
 </body>
 </html>
